@@ -1,0 +1,146 @@
+import React, { useEffect, useRef } from 'react';
+import L from 'leaflet';
+import { SavedLocation, WeatherForecastResponse } from '../types';
+import { generateWindBarbSvg } from './WindBarb';
+
+interface MapViewProps {
+  locations: SavedLocation[];
+  selectedLocation: SavedLocation | null;
+  onSelectLocation: (loc: SavedLocation) => void;
+  weatherMap: Record<number, WeatherForecastResponse>;
+}
+
+export const MapView: React.FC<MapViewProps> = ({
+  locations,
+  selectedLocation,
+  onSelectLocation,
+  weatherMap,
+}) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<Record<number, L.Marker>>({});
+
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    // Default center: Oak Harbor, WA
+    const initialLat = selectedLocation ? selectedLocation.latitude : 48.2939;
+    const initialLon = selectedLocation ? selectedLocation.longitude : -122.6064;
+
+    const map = L.map(mapContainerRef.current, {
+      center: [initialLat, initialLon],
+      zoom: 8,
+      zoomControl: false,
+    });
+
+    // Minimalist Dark Matter CartoDB tiles
+    L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      }
+    ).addTo(map);
+
+    // Zoom controls positioned at top right
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Update Markers whenever locations or weather data changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Clear existing markers
+    Object.values(markersRef.current).forEach((marker) => marker.remove());
+    markersRef.current = {};
+
+    locations.forEach((loc) => {
+      const weather = weatherMap[loc.id];
+      const isSelected = selectedLocation?.id === loc.id;
+
+      // Extract current conditions or fallback
+      const speedKnots = weather?.current?.wind_speed_knots ?? 10;
+      const dirDeg = weather?.current?.wind_direction_deg ?? 180;
+      const tempF = weather?.current?.temperature_f ?? 50;
+      const tempDisplay = weather ? `${Math.round(tempF)}°F` : '--';
+      const speedDisplay = weather ? `${Math.round(speedKnots)} kt` : '--';
+
+      // SVG Wind Barb icon
+      const svgIconHtml = generateWindBarbSvg(
+        speedKnots,
+        dirDeg,
+        tempF,
+        isSelected ? 52 : 44,
+        true
+      );
+
+      const customIcon = L.divIcon({
+        className: 'wind-barb-marker',
+        html: `
+          <div class="relative cursor-pointer transition-transform duration-200 ${
+            isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : ''
+          }">
+            ${svgIconHtml}
+          </div>
+        `,
+        iconSize: [isSelected ? 52 : 44, isSelected ? 52 : 44],
+        iconAnchor: [isSelected ? 26 : 22, isSelected ? 26 : 22],
+      });
+
+      const marker = L.marker([loc.latitude, loc.longitude], {
+        icon: customIcon,
+      }).addTo(map);
+
+      // Popup
+      const popupContent = `
+        <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
+          <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${loc.name}</div>
+          <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">
+            ${[loc.admin1, loc.country].filter(Boolean).join(', ') || `${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°`}
+          </div>
+          <div style="display: flex; gap: 8px; font-weight: 600;">
+            <span style="color: #38bdf8;">💨 ${speedDisplay}</span>
+            <span style="color: #4ade80;">🌡️ ${tempDisplay}</span>
+          </div>
+        </div>
+      `;
+
+      marker.bindPopup(popupContent);
+
+      marker.on('click', () => {
+        onSelectLocation(loc);
+      });
+
+      markersRef.current[loc.id] = marker;
+    });
+  }, [locations, weatherMap, selectedLocation, onSelectLocation]);
+
+  // Center map on selected location change
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !selectedLocation) return;
+
+    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], 9, {
+      duration: 1.2,
+      easeLinearity: 0.25,
+    });
+
+    const marker = markersRef.current[selectedLocation.id];
+    if (marker) {
+      marker.openPopup();
+    }
+  }, [selectedLocation]);
+
+  return <div ref={mapContainerRef} className="w-full h-full relative" />;
+};

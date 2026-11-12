@@ -1,0 +1,59 @@
+"""Pydantic models and schemas for API requests and responses."""
+
+from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+class LocationBase(BaseModel):
+    name: str = Field(..., description="Location name / label")
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
+    admin1: Optional[str] = Field(None, description="State / Province / Region")
+    country: Optional[str] = Field(None, description="Country name")
+
+
+class LocationCreate(LocationBase):
+    pass
+
+
+class LocationResponse(LocationBase):
+    id: int
+    is_default: bool = False
+    created_at: Optional[str] = None
+
+
+class GeocodeResult(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    admin1: Optional[str] = None
+    country: Optional[str] = None
+    display_name: str
+
+
+class WeatherForecastPoint(BaseModel):
+    time: str
+    temperature_c: float
+    temperature_f: float
+    wind_speed_knots: float
+    wind_speed_kmh: float
+    wind_speed_mph: float
+    wind_speed_ms: float
+    wind_direction_deg: float
+    wind_direction_cardinal: str
+    humidity: float
+    weather_code: int
+
+
+class WeatherForecastResponse(BaseModel):
+    location_id: int
+    location_name: str
+    latitude: float
+    longitude: float
+    model: str
+    timezone: str
+    cached: bool
+    cached_at: float
+    current: WeatherForecastPoint
+    forecast: List[WeatherForecastPoint]

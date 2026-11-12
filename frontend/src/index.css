@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Leaflet Map styling for minimalist dark mode */
+.leaflet-container {
+  background-color: #0d1117 !important;
+  font-family: inherit;
+}
+
+.leaflet-bar a {
+  background-color: #161b22 !important;
+  color: #c9d1d9 !important;
+  border-bottom: 1px solid #30363d !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #21262d !important;
+  color: #58a6ff !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background-color: #161b22 !important;
+  color: #c9d1d9 !important;
+  border: 1px solid #30363d !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background-color: #161b22 !important;
+}
+
+/* Custom Wind Barb Marker class */
+.wind-barb-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.wind-barb-marker:hover svg {
+  transform: scale(1.15);
+  transition: transform 0.15s ease-in-out;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #161b22;
+}
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
