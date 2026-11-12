@@ -22,6 +22,7 @@ MOCK_RAW_RESPONSE = {
         "wind_speed_10m": 15.0,
         "wind_direction_10m": 220,
         "weather_code": 1,
+        "wind_gusts_10m": 22.0,
     },
     "hourly": {
         "time": [f"2026-11-{12 + i//24:02d}T{i%24:02d}:00" for i in range(96)],
@@ -30,6 +31,7 @@ MOCK_RAW_RESPONSE = {
         "wind_speed_10m": [15.0] * 96,
         "wind_direction_10m": [220] * 96,
         "weather_code": [1] * 96,
+        "wind_gusts_10m": [22.0] * 96,
     },
 }
 
@@ -76,12 +78,16 @@ def test_build_weather_point():
         wind_knots=10.0,
         wind_deg=180.0,
         weather_code=3,
+        gust_knots=22.0,
     )
     assert pt.temperature_c == 10.0
     assert pt.temperature_f == 50.0  # 10 * 1.8 + 32 = 50
     assert pt.wind_speed_knots == 10.0
     assert pt.wind_speed_kmh == 18.5
     assert pt.wind_direction_cardinal == "S"
+    assert pt.wind_gust_knots == 22.0
+    assert pt.wind_gust_kmh == round(22.0 * 1.852, 1)
+    assert pt.wind_gust_mph == round(22.0 * 1.15078, 1)
 
 
 def test_weather_forecast_and_cache(client):

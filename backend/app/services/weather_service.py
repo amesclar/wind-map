@@ -26,11 +26,15 @@ def build_weather_point(
     wind_knots: float,
     wind_deg: float,
     weather_code: int,
+    gust_knots: float = 0.0,
 ) -> WeatherForecastPoint:
     temp_f = round(temp_c * 9.0 / 5.0 + 32.0, 1)
     wind_kmh = round(wind_knots * 1.852, 1)
     wind_mph = round(wind_knots * 1.15078, 1)
     wind_ms = round(wind_knots * 0.514444, 1)
+    gust_kmh = round(gust_knots * 1.852, 1)
+    gust_mph = round(gust_knots * 1.15078, 1)
+    gust_ms = round(gust_knots * 0.514444, 1)
 
     return WeatherForecastPoint(
         time=time_str,
@@ -40,6 +44,10 @@ def build_weather_point(
         wind_speed_kmh=wind_kmh,
         wind_speed_mph=wind_mph,
         wind_speed_ms=wind_ms,
+        wind_gust_knots=round(gust_knots, 1),
+        wind_gust_kmh=gust_kmh,
+        wind_gust_mph=gust_mph,
+        wind_gust_ms=gust_ms,
         wind_direction_deg=round(wind_deg, 1),
         wind_direction_cardinal=deg_to_cardinal(wind_deg),
         humidity=round(humidity, 1),
@@ -82,8 +90,8 @@ async def get_weather(
     params: Dict[str, Any] = {
         "latitude": latitude,
         "longitude": longitude,
-        "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code",
-        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code",
+        "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,wind_gusts_10m",
+        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,wind_gusts_10m",
         "wind_speed_unit": "kn",
         "timezone": timezone,
         "forecast_days": 4,
@@ -107,6 +115,7 @@ async def get_weather(
         wind_knots=curr.get("wind_speed_10m", 0.0),
         wind_deg=curr.get("wind_direction_10m", 0.0),
         weather_code=curr.get("weather_code", 0),
+        gust_knots=curr.get("wind_gusts_10m", 0.0),
     )
 
     # Parse 16 points starting from now every 3 hours
@@ -117,6 +126,7 @@ async def get_weather(
     hourly_winds: List[float] = hourly.get("wind_speed_10m", [])
     hourly_wind_dirs: List[float] = hourly.get("wind_direction_10m", [])
     hourly_codes: List[int] = hourly.get("weather_code", [])
+    hourly_gusts: List[float] = hourly.get("wind_gusts_10m", [])
 
     current_hour_str = (curr.get("time", "")[:13] + ":00") if curr.get("time") else ""
     try:
@@ -136,6 +146,7 @@ async def get_weather(
                     wind_knots=hourly_winds[idx],
                     wind_deg=hourly_wind_dirs[idx],
                     weather_code=hourly_codes[idx],
+                    gust_knots=hourly_gusts[idx] if idx < len(hourly_gusts) else 0.0,
                 )
             )
 

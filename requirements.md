@@ -1,4 +1,5 @@
-create a standalone application that shows weather predictions on a map
+# summary
+create a standalone application that shows wind predictions on a map
 
 # weather data
 the weather data should come from open source api sources (ie. meteo, etc.) and the data should be displayed in a map
@@ -12,6 +13,8 @@ the application should be able to show multiple locations at once, each marked w
 the web ui should have a text box allowing users to add locations - the locations should be verified and converted to lat/long before adding to location database
 
 provide a button to list saved locations with minus sign buttons for removal
+
+wind data should include wind speed, wind gust, and wind direction
 
 cache weather data with 30min TTL
 

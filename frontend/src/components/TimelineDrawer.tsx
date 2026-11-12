@@ -15,6 +15,7 @@ import {
   Clock,
   Sparkles,
   Database,
+  Zap,
 } from 'lucide-react';
 import { WindBarb, getTemperatureColor } from './WindBarb';
 
@@ -69,6 +70,20 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
       case 'knots':
       default:
         return `${pt.wind_speed_knots} kt`;
+    }
+  };
+
+  const getGustDisplay = (pt: WeatherForecastPoint) => {
+    switch (speedUnit) {
+      case 'kmh':
+        return `${pt.wind_gust_kmh} km/h`;
+      case 'mph':
+        return `${pt.wind_gust_mph} mph`;
+      case 'ms':
+        return `${pt.wind_gust_ms} m/s`;
+      case 'knots':
+      default:
+        return `${pt.wind_gust_knots} kt`;
     }
   };
 
@@ -209,6 +224,12 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                   <div className="text-[11px] font-medium text-gray-300 flex items-center gap-1">
                     <Wind className="w-3 h-3 text-sky-400" />
                     <span>{getSpeedDisplay(pt)}</span>
+                  </div>
+
+                  {/* Wind gusts */}
+                  <div className="text-[10px] text-orange-300 flex items-center gap-0.5">
+                    <Zap className="w-2.5 h-2.5 text-orange-400" />
+                    <span>G {getGustDisplay(pt)}</span>
                   </div>
 
                   {/* Temperature with color coding */}

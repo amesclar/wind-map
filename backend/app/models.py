@@ -40,6 +40,10 @@ class WeatherForecastPoint(BaseModel):
     wind_speed_kmh: float
     wind_speed_mph: float
     wind_speed_ms: float
+    wind_gust_knots: float
+    wind_gust_kmh: float
+    wind_gust_mph: float
+    wind_gust_ms: float
     wind_direction_deg: float
     wind_direction_cardinal: str
     humidity: float

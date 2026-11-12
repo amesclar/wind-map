@@ -26,6 +26,10 @@ export interface WeatherForecastPoint {
   wind_speed_kmh: number;
   wind_speed_mph: number;
   wind_speed_ms: number;
+  wind_gust_knots: number;
+  wind_gust_kmh: number;
+  wind_gust_mph: number;
+  wind_gust_ms: number;
   wind_direction_deg: number;
   wind_direction_cardinal: string;
   humidity: number;

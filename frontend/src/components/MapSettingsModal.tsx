@@ -203,3 +203,4 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
     </div>
   );
 };
+

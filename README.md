@@ -69,7 +69,7 @@ docker run -d -p 5005:5005 -v wind_data:/app/data --name wind-map wind-map
 
 *(Optional: Pass your free CARTO API key to unlock watermark-free CARTO Dark Matter)*:
 ```bash
-docker run -d -p 5005:5005 -e CARTO_API_KEY="your_carto_key" -v wind_data:/app/data --name wind-map wind-map
+docker run -d -p 5005:5005 -e CARTO_API_KEY="$CARTO_API_KEY" -v wind_data:/app/data --name wind-map wind-map
 ```
 
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
@@ -129,17 +129,17 @@ docker stop wind-map && docker rm wind-map
 
 ## REST API Reference
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Health check endpoint |
-| `GET` | `/api/locations` | List all saved locations |
-| `POST` | `/api/locations` | Save a new verified location |
-| `DELETE` | `/api/locations/{id}` | Delete a saved location |
-| `GET` | `/api/weather/models` | List available weather models |
-| `GET` | `/api/weather` | Get 48h forecast & current conditions for a location |
-| `GET` | `/api/weather/all` | Get current conditions for all saved locations |
-| `GET` | `/api/geocode?q=...` | Autocomplete search for cities & coordinates |
-| `GET` | `/docs` | Interactive Swagger / OpenAPI documentation |
+| Method   | Endpoint              | Description                                          |
+| -------- | --------------------- | ---------------------------------------------------- |
+| `GET`    | `/api/health`         | Health check endpoint                                |
+| `GET`    | `/api/locations`      | List all saved locations                             |
+| `POST`   | `/api/locations`      | Save a new verified location                         |
+| `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
+| `GET`    | `/api/weather/models` | List available weather models                        |
+| `GET`    | `/api/weather`        | Get 48h forecast & current conditions for a location |
+| `GET`    | `/api/weather/all`    | Get current conditions for all saved locations       |
+| `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
+| `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
 ---
 
