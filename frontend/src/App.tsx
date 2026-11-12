@@ -126,6 +126,11 @@ export const App: React.FC = () => {
           mapObj[w.location_id] = w;
         });
         setWeatherMap(mapObj);
+
+        // Pre-populate selectedWeather if we already have data for the initial location
+        if (initialLoc && mapObj[initialLoc.id]) {
+          setSelectedWeather(mapObj[initialLoc.id]);
+        }
       } catch (err) {
         console.error('Initialization error:', err);
       }
@@ -138,11 +143,22 @@ export const App: React.FC = () => {
     if (selectedLocation) {
       loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
     }
-  }, [selectedLocation, selectedModel, timezone, loadWeatherForLocation]);
+  }, [selectedLocation?.id, selectedModel, timezone, loadWeatherForLocation]);
 
   // Handle location selection
   const handleSelectLocation = (loc: SavedLocation) => {
-    setSelectedLocation(loc);
+    // Immediately show any already-fetched data for this location
+    // so the drawer appears instantly even if loc is already selected
+    if (weatherMap[loc.id]) {
+      setSelectedWeather(weatherMap[loc.id]);
+    }
+    // Always update selectedLocation — but if it's the same id,
+    // React won't re-run the useEffect, so also trigger a fresh fetch here
+    if (selectedLocation?.id === loc.id) {
+      loadWeatherForLocation(loc.id, selectedModel, timezone);
+    } else {
+      setSelectedLocation(loc);
+    }
   };
 
   // Handle add location from autocomplete
