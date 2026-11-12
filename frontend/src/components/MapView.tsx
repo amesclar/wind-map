@@ -114,6 +114,9 @@ export const MapView: React.FC<MapViewProps> = ({
       const speedDisplay = weather ? `${Math.round(speedKnots)} kt` : '--';
       const gustKnots = weather?.current?.wind_gust_knots ?? 0;
       const gustDisplay = weather ? `${Math.round(gustKnots)} kt` : '--';
+      const windDirDeg = weather?.current?.wind_direction_deg ?? 0;
+      const windDirCard = weather?.current?.wind_direction_cardinal ?? '--';
+      const windDirDisplay = weather ? `${windDirCard} (${Math.round(windDirDeg)}°)` : '--';
 
       // SVG Wind Barb icon
       const svgIconHtml = generateWindBarbSvg(
@@ -152,6 +155,9 @@ export const MapView: React.FC<MapViewProps> = ({
             <span style="color: #38bdf8;">💨 ${speedDisplay}</span>
             <span style="color: #fb923c;">⚡ G: ${gustDisplay}</span>
             <span style="color: #4ade80;">🌡️ ${tempDisplay}</span>
+          </div>
+          <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">
+            🧭 ${windDirDisplay}
           </div>
         </div>
       `;
