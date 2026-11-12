@@ -77,3 +77,4 @@ def clean_expired_cache() -> None:
     cursor.execute("DELETE FROM weather_cache WHERE expires_at < ?;", (time.time(),))
     conn.commit()
     conn.close()
+

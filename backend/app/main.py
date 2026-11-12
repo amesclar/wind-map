@@ -57,3 +57,4 @@ if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
         if full_path and target_file.is_file():
             return FileResponse(target_file)
         return FileResponse(STATIC_DIR / "index.html")
+

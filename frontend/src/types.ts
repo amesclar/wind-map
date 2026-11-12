@@ -53,3 +53,4 @@ export interface WeatherModel {
 export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
+

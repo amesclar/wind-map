@@ -52,3 +52,4 @@ async def search_locations(query: str, count: int = 10) -> List[GeocodeResult]:
             )
         )
     return results
+

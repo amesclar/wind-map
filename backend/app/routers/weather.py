@@ -76,3 +76,4 @@ async def get_all_locations_weather(
         except Exception:
             continue
     return results
+

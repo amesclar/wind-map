@@ -89,3 +89,4 @@ def test_weather_forecast_and_cache(client):
     assert data2["cached"] is True
     assert dur2 < 0.5
     assert len(data2["forecast"]) == 16
+

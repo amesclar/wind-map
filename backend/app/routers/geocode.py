@@ -14,3 +14,4 @@ async def geocode_query(
     count: int = Query(10, ge=1, le=20),
 ) -> List[GeocodeResult]:
     return await search_locations(query=q, count=count)
+

@@ -34,3 +34,4 @@ AVAILABLE_MODELS = [
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
 ]
+

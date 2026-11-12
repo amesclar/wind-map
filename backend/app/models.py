@@ -57,3 +57,4 @@ class WeatherForecastResponse(BaseModel):
     cached_at: float
     current: WeatherForecastPoint
     forecast: List[WeatherForecastPoint]
+

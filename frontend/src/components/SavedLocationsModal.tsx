@@ -113,3 +113,4 @@ export const SavedLocationsModal: React.FC<SavedLocationsModalProps> = ({
     </div>
   );
 };
+

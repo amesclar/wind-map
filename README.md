@@ -64,10 +64,10 @@ docker build -t wind-map .
 ### 2. Run the Container with Persistent Storage
 
 ```bash
-docker run -d -p 5000:5000 -v wind_data:/app/data --name wind-map wind-map
+docker run -d -p 5005:5005 -v wind_data:/app/data --name wind-map wind-map
 ```
 
-Open your browser at **[http://localhost:5000](http://localhost:5000)**.
+Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
 To stop the container:
 ```bash
@@ -95,7 +95,7 @@ docker stop wind-map && docker rm wind-map
    ```
 4. Start development backend server:
    ```bash
-   uvicorn backend.app.main:app --reload --port 5000
+   uvicorn backend.app.main:app --reload --port 5005
    ```
 
 ### Frontend (Node.js)
@@ -109,7 +109,7 @@ docker stop wind-map && docker rm wind-map
    ```bash
    npm run dev
    ```
-3. Open **http://localhost:5173** (API requests are automatically proxied to port 5000).
+3. Open **http://localhost:5173** (API requests are automatically proxied to port 5005).
 
 ---
 
@@ -143,3 +143,4 @@ Run tests locally via:
 ```bash
 pytest backend/tests
 ```
+

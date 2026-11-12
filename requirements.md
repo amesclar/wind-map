@@ -58,9 +58,9 @@ use node.js for frontend and python for backend
 
 use a multi-stage Dockerfile:
 + Stage 1 (Node.js): Builds the frontend assets (e.g., Vite/React or static bundle).
-+ Stage 2 (Python/FastAPI or Flask): Runs the backend API and serves the compiled static frontend files on port 5000.
++ Stage 2 (Python/FastAPI or Flask): Runs the backend API and serves the compiled static frontend files on port 5005.
 
-Docker: Multi-stage build producing a single lightweight image run via docker run -p 5000:5000 -v wind_data:/app/data wind-map
+Docker: Multi-stage build producing a single lightweight image run via docker run -p 5005:5005 -v wind_data:/app/data wind-map
 
 # git and code layout
 locate the project in /Users/fredames/Projects/wind-map

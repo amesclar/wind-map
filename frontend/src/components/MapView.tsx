@@ -144,3 +144,4 @@ export const MapView: React.FC<MapViewProps> = ({
 
   return <div ref={mapContainerRef} className="w-full h-full relative" />;
 };
+

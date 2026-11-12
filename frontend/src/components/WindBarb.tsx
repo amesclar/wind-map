@@ -121,3 +121,4 @@ export const WindBarb: React.FC<WindBarbProps> = ({
     />
   );
 };
+

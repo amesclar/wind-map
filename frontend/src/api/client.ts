@@ -75,3 +75,4 @@ export async function searchGeocode(query: string): Promise<GeocodeResult[]> {
   if (!res.ok) return [];
   return res.json();
 }
+

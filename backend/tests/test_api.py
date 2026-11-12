@@ -92,3 +92,4 @@ def test_weather_models_list(client):
     assert "ecmwf_ifs04" in model_ids
     assert "gfs_seamless" in model_ids
     assert "icon_seamless" in model_ids
+

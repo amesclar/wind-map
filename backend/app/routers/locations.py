@@ -114,3 +114,4 @@ def delete_location(location_id: int):
     conn.commit()
     conn.close()
     return None
+
