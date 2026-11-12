@@ -17,6 +17,10 @@ cache weather data with 30min TTL
 
 # map data
 use an open-source map library (e.g., Leaflet.js with OpenStreetMap or CartoDB)
++ Support CARTO API Key via CARTO_API_KEY environment variable or in-app settings modal (removes CARTO's "API KEY REQUIRED" watermark).
++ Provide OpenStreetMap Dark mode as default keyless, watermark-free base layer.
+
+get and use api key for map library
 
 # location
 the user should be able to select a location and see the weather predictions for that location
@@ -37,7 +41,7 @@ data should persist across docker container restarts
 
 Backend: FastAPI (Python 3.11+) with SQLite caching (30min TTL), geocoding proxy, and location CRUD endpoints (GET/POST/DELETE).
 
-## units
+# units
 there should be a toggle between Metric and Imperial
 
 user selects units

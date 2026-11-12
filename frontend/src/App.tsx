@@ -7,6 +7,7 @@ import {
   WindSpeedUnit,
   WindDirDisplay,
   GeocodeResult,
+  MapTileLayer,
 } from './types';
 import {
   fetchLocations,
@@ -15,11 +16,13 @@ import {
   fetchModels,
   fetchWeather,
   fetchAllWeather,
+  fetchAppConfig,
 } from './api/client';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { TimelineDrawer } from './components/TimelineDrawer';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
+import { MapSettingsModal } from './components/MapSettingsModal';
 
 export const App: React.FC = () => {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
@@ -27,6 +30,15 @@ export const App: React.FC = () => {
   const [models, setModels] = useState<WeatherModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('best_match');
   const [timezone, setTimezone] = useState<string>('America/Los_Angeles');
+
+  // Map Tile & API Key settings
+  const [tileLayerType, setTileLayerType] = useState<MapTileLayer>(() => {
+    return (localStorage.getItem('map_tile_layer') as MapTileLayer) || 'osm_dark';
+  });
+  const [cartoApiKey, setCartoApiKey] = useState<string>(() => {
+    return localStorage.getItem('carto_api_key') || '';
+  });
+  const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
 
   // Units
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
@@ -62,6 +74,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     async function init() {
       try {
+        // Fetch server config for CARTO API Key
+        const cfg = await fetchAppConfig();
+        if (cfg.carto_api_key && !localStorage.getItem('carto_api_key')) {
+          setCartoApiKey(cfg.carto_api_key);
+          setTileLayerType('carto_dark');
+        }
+
         // Load models
         const availableModels = await fetchModels();
         setModels(availableModels);
@@ -88,12 +107,10 @@ export const App: React.FC = () => {
                 });
                 setSelectedLocation(userLoc);
               } catch {
-                // If geocoding add fails, fall back to default
                 if (initialLoc) setSelectedLocation(initialLoc);
               }
             },
             () => {
-              // Geolocation denied or unavailable -> use Oak Harbor default
               if (initialLoc) setSelectedLocation(initialLoc);
             },
             { timeout: 4000 }
@@ -186,6 +203,24 @@ export const App: React.FC = () => {
     }
   };
 
+  // Handle saving CARTO API Key
+  const handleSaveCartoApiKey = (key: string) => {
+    setCartoApiKey(key);
+    if (key) {
+      localStorage.setItem('carto_api_key', key);
+      setTileLayerType('carto_dark');
+      localStorage.setItem('map_tile_layer', 'carto_dark');
+    } else {
+      localStorage.removeItem('carto_api_key');
+    }
+  };
+
+  // Handle changing map tile layer
+  const handleChangeTileLayer = (layer: MapTileLayer) => {
+    setTileLayerType(layer);
+    localStorage.setItem('map_tile_layer', layer);
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
       {/* Top Navbar */}
@@ -204,6 +239,8 @@ export const App: React.FC = () => {
         savedLocationsCount={locations.length}
         onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
         onSelectAndAddLocation={handleSelectAndAddLocation}
+        onOpenMapSettings={() => setIsMapSettingsOpen(true)}
+        hasCartoKey={Boolean(cartoApiKey)}
       />
 
       {/* Main Map View */}
@@ -213,6 +250,8 @@ export const App: React.FC = () => {
           selectedLocation={selectedLocation}
           onSelectLocation={handleSelectLocation}
           weatherMap={weatherMap}
+          tileLayerType={tileLayerType}
+          cartoApiKey={cartoApiKey}
         />
 
         {/* Bottom Timeline Drawer */}
@@ -234,9 +273,18 @@ export const App: React.FC = () => {
         onSelectLocation={handleSelectLocation}
         onDeleteLocation={handleDeleteLocation}
       />
+
+      {/* Map Settings & API Key Modal */}
+      <MapSettingsModal
+        isOpen={isMapSettingsOpen}
+        onClose={() => setIsMapSettingsOpen(false)}
+        tileLayer={tileLayerType}
+        onChangeTileLayer={handleChangeTileLayer}
+        cartoApiKey={cartoApiKey}
+        onSaveCartoApiKey={handleSaveCartoApiKey}
+      />
     </div>
   );
 };
 
 export default App;
-

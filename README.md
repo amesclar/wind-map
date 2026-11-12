@@ -67,7 +67,21 @@ docker build -t wind-map .
 docker run -d -p 5005:5005 -v wind_data:/app/data --name wind-map wind-map
 ```
 
+*(Optional: Pass your free CARTO API key to unlock watermark-free CARTO Dark Matter)*:
+```bash
+docker run -d -p 5005:5005 -e CARTO_API_KEY="your_carto_key" -v wind_data:/app/data --name wind-map wind-map
+```
+
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
+
+---
+
+### Map Layers & CARTO API Key
+
+- **OpenStreetMap Dark (Default):** Clean, high-contrast dark theme that requires **no API key** and has no watermarks.
+- **CARTO Dark Matter:** CARTO requires a free API key to remove their *"API KEY REQUIRED"* watermark.
+  1. Visit **[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)** to get an instant free key (up to 5 million requests/month).
+  2. Click the **Map** button in the app's top bar to paste and save your key directly in the UI, or pass it via `CARTO_API_KEY` environment variable.
 
 To stop the container:
 ```bash

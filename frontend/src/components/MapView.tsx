@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { SavedLocation, WeatherForecastResponse } from '../types';
+import { SavedLocation, WeatherForecastResponse, MapTileLayer } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 
 interface MapViewProps {
@@ -8,6 +8,8 @@ interface MapViewProps {
   selectedLocation: SavedLocation | null;
   onSelectLocation: (loc: SavedLocation) => void;
   weatherMap: Record<number, WeatherForecastResponse>;
+  tileLayerType: MapTileLayer;
+  cartoApiKey: string;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -15,9 +17,12 @@ export const MapView: React.FC<MapViewProps> = ({
   selectedLocation,
   onSelectLocation,
   weatherMap,
+  tileLayerType,
+  cartoApiKey,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<Record<number, L.Marker>>({});
 
   // Initialize Leaflet Map
@@ -34,17 +39,6 @@ export const MapView: React.FC<MapViewProps> = ({
       zoomControl: false,
     });
 
-    // Minimalist Dark Matter CartoDB tiles
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      }
-    ).addTo(map);
-
     // Zoom controls positioned at top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
@@ -55,6 +49,49 @@ export const MapView: React.FC<MapViewProps> = ({
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Update Tile Layer whenever tileLayerType or cartoApiKey changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+      tileLayerRef.current = null;
+    }
+
+    let newLayer: L.TileLayer;
+
+    if (tileLayerType === 'carto_dark') {
+      const trimmedKey = cartoApiKey.trim();
+      const url = trimmedKey
+        ? `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${encodeURIComponent(trimmedKey)}`
+        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+      newLayer = L.tileLayer(url, {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      });
+    } else if (tileLayerType === 'osm_dark') {
+      newLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        className: 'osm-dark-tiles',
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      });
+    } else {
+      newLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      });
+    }
+
+    newLayer.addTo(map);
+    tileLayerRef.current = newLayer;
+  }, [tileLayerType, cartoApiKey]);
 
   // Update Markers whenever locations or weather data changes
   useEffect(() => {
@@ -144,4 +181,3 @@ export const MapView: React.FC<MapViewProps> = ({
 
   return <div ref={mapContainerRef} className="w-full h-full relative" />;
 };
-

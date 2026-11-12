@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.config import STATIC_DIR
+from backend.app.config import STATIC_DIR, CARTO_API_KEY
 from backend.app.database import init_db
 from backend.app.routers import geocode, locations, weather
 
@@ -44,6 +44,13 @@ app.include_router(geocode.router)
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def get_config():
+    return {
+        "carto_api_key": CARTO_API_KEY,
+    }
 
 
 # Serve static frontend if available

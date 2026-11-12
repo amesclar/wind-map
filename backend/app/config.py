@@ -27,6 +27,9 @@ DEFAULT_LOCATION = {
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
+# Map Settings
+CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
+
 # Supported weather models
 AVAILABLE_MODELS = [
     {"id": "best_match", "name": "Open-Meteo (Best Match)"},

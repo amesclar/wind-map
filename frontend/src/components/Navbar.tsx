@@ -5,6 +5,7 @@ import {
   MapPin,
   Settings,
   Clock,
+  Map,
 } from 'lucide-react';
 import {
   WeatherModel,
@@ -12,6 +13,7 @@ import {
   WindSpeedUnit,
   WindDirDisplay,
   GeocodeResult,
+  MapTileLayer,
 } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 
@@ -30,6 +32,8 @@ interface NavbarProps {
   savedLocationsCount: number;
   onOpenSavedLocations: () => void;
   onSelectAndAddLocation: (result: GeocodeResult) => void;
+  onOpenMapSettings: () => void;
+  hasCartoKey: boolean;
 }
 
 const TIMEZONES = [
@@ -58,6 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   savedLocationsCount,
   onOpenSavedLocations,
   onSelectAndAddLocation,
+  onOpenMapSettings,
+  hasCartoKey,
 }) => {
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -91,6 +97,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="px-1.5 py-0.2 rounded-full bg-dark-600 text-[10px] text-gray-300">
             {savedLocationsCount}
           </span>
+        </button>
+
+        {/* Map Layers & API Key Settings */}
+        <button
+          onClick={onOpenMapSettings}
+          title="Map Layers & CARTO API Key"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 text-xs font-medium transition shrink-0"
+        >
+          <Map className="w-3.5 h-3.5 text-sky-400" />
+          <span className="hidden md:inline">Map</span>
+          {hasCartoKey && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="API key active" />
+          )}
         </button>
       </div>
 

@@ -59,3 +59,8 @@
   background: #484f58;
 }
 
+
+/* OpenStreetMap Dark Mode Filter (Keyless & Watermark-Free) */
+.osm-dark-tiles {
+  filter: invert(100%) hue-rotate(185deg) brightness(92%) contrast(90%);
+}

@@ -42,6 +42,12 @@ def test_health_check(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_config(client):
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    assert "carto_api_key" in response.json()
+
+
 def test_default_seeded_location(client):
     response = client.get("/api/locations")
     assert response.status_code == 200

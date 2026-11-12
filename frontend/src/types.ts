@@ -54,3 +54,5 @@ export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
 
+
+export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard';

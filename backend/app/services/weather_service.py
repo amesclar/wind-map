@@ -92,7 +92,8 @@ async def get_weather(
     if model and model != "best_match":
         params["models"] = model
 
-    async with httpx.AsyncClient(timeout=8.0) as client:
+    transport = httpx.AsyncHTTPTransport(retries=2)
+    async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
         resp = await client.get(OPEN_METEO_FORECAST_URL, params=params)
         resp.raise_for_status()
         raw_data = resp.json()

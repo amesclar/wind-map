@@ -8,9 +8,30 @@ from fastapi.testclient import TestClient
 os.environ["DATABASE_PATH"] = "./data/test_wind_map.db"
 os.environ["DATA_DIR"] = "./data"
 
+from unittest.mock import patch
+import httpx
 from backend.app.database import init_db, get_db_connection
 from backend.app.main import app
 from backend.app.services.weather_service import deg_to_cardinal, build_weather_point
+
+MOCK_RAW_RESPONSE = {
+    "current": {
+        "time": "2026-11-12T12:00",
+        "temperature_2m": 12.0,
+        "relative_humidity_2m": 60,
+        "wind_speed_10m": 15.0,
+        "wind_direction_10m": 220,
+        "weather_code": 1,
+    },
+    "hourly": {
+        "time": [f"2026-11-{12 + i//24:02d}T{i%24:02d}:00" for i in range(96)],
+        "temperature_2m": [12.0] * 96,
+        "relative_humidity_2m": [60] * 96,
+        "wind_speed_10m": [15.0] * 96,
+        "wind_direction_10m": [220] * 96,
+        "weather_code": [1] * 96,
+    },
+}
 
 
 @pytest.fixture(autouse=True)
@@ -69,24 +90,31 @@ def test_weather_forecast_and_cache(client):
     assert len(locs) > 0
     loc_id = locs[0]["id"]
 
-    # First call: fetched from API
-    start_time = time.time()
-    resp1 = client.get(f"/api/weather?location_id={loc_id}&model=best_match")
-    dur1 = time.time() - start_time
-    assert resp1.status_code == 200
-    data1 = resp1.json()
-    assert data1["cached"] is False
-    assert len(data1["forecast"]) == 16
-    assert "current" in data1
-    assert data1["model"] == "best_match"
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=MOCK_RAW_RESPONSE,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
 
-    # Second call: must come from cache and be fast (<0.5s)
+    with patch("httpx.AsyncClient.get", return_value=mock_resp):
+        # First call: fetched from API
+        start_time = time.time()
+        resp1 = client.get(f"/api/weather?location_id={loc_id}&model=best_match")
+        dur1 = time.time() - start_time
+        assert resp1.status_code == 200
+        data1 = resp1.json()
+        assert data1["cached"] is False
+        assert len(data1["forecast"]) == 16
+        assert "current" in data1
+        assert data1["model"] == "best_match"
+
+    # Second call: must come from SQLite cache without calling httpx
     start_time = time.time()
     resp2 = client.get(f"/api/weather?location_id={loc_id}&model=best_match")
     dur2 = time.time() - start_time
     assert resp2.status_code == 200
     data2 = resp2.json()
     assert data2["cached"] is True
-    assert dur2 < 0.5
+    assert dur2 < 0.2
     assert len(data2["forecast"]) == 16
 

@@ -76,3 +76,14 @@ export async function searchGeocode(query: string): Promise<GeocodeResult[]> {
   return res.json();
 }
 
+
+
+export async function fetchAppConfig(): Promise<{ carto_api_key?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/config`);
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
+}
