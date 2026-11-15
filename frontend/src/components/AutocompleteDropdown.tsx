@@ -58,6 +58,13 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
     setResults([]);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && results.length > 0) {
+      e.preventDefault();
+      handleSelect(results[0]);
+    }
+  };
+
   return (
     <div ref={wrapperRef} className="relative w-64 md:w-80">
       <div className="relative flex items-center">
@@ -66,6 +73,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setIsOpen(true)}
           placeholder="Add location (e.g. Seattle, Paris)..."
           className="w-full pl-9 pr-9 py-1.5 bg-dark-800 text-gray-100 text-xs placeholder-gray-400 rounded-lg border border-dark-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"

@@ -178,6 +178,8 @@ export const App: React.FC = () => {
       });
 
       setSelectedLocation(created);
+      // Immediately load weather forecast for the new location
+      loadWeatherForLocation(created.id, selectedModel, timezone);
     } catch (err) {
       console.error('Failed to add location:', err);
     }
@@ -272,6 +274,7 @@ export const App: React.FC = () => {
 
         {/* Bottom Timeline Drawer */}
         <TimelineDrawer
+          selectedLocation={selectedLocation}
           weatherData={selectedWeather}
           isLoading={isTimelineLoading}
           unitSystem={unitSystem}
