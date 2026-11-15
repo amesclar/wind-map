@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   WeatherForecastResponse,
   WeatherForecastPoint,
+  SavedLocation,
   UnitSystem,
   WindSpeedUnit,
   WindDirDisplay,
@@ -20,6 +21,7 @@ import {
 import { WindBarb, getTemperatureColor } from './WindBarb';
 
 interface TimelineDrawerProps {
+  selectedLocation?: SavedLocation | null;
   weatherData: WeatherForecastResponse | null;
   isLoading: boolean;
   unitSystem: UnitSystem;
@@ -28,6 +30,7 @@ interface TimelineDrawerProps {
 }
 
 export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
+  selectedLocation,
   weatherData,
   isLoading,
   unitSystem,
@@ -36,7 +39,14 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  if (!weatherData && !isLoading) {
+  // Automatically expand drawer whenever a new location is selected
+  useEffect(() => {
+    if (selectedLocation?.id) {
+      setIsCollapsed(false);
+    }
+  }, [selectedLocation?.id]);
+
+  if (!weatherData && !isLoading && !selectedLocation) {
     return null;
   }
 
@@ -109,15 +119,16 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
             <span>48-Hour Forecast Timeline</span>
           </button>
 
-          {weatherData && (
+          {(selectedLocation || weatherData) && (
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span className="text-gray-600">•</span>
               <span className="font-medium text-gray-100">
-                {weatherData.location_name}
+                {selectedLocation?.name || weatherData?.location_name}
               </span>
               <span className="text-gray-600">•</span>
               <span className="hidden sm:inline font-mono text-[11px] text-gray-500">
-                {weatherData.latitude.toFixed(2)}°, {weatherData.longitude.toFixed(2)}°
+                {(selectedLocation?.latitude ?? weatherData?.latitude)?.toFixed(2)}°,{' '}
+                {(selectedLocation?.longitude ?? weatherData?.longitude)?.toFixed(2)}°
               </span>
             </div>
           )}
@@ -152,7 +163,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 
       {/* 16-point Cards Content */}
       <div className="p-3">
-        {isLoading ? (
+        {isLoading || (selectedLocation && weatherData && weatherData.location_id !== selectedLocation.id) ? (
           <div className="h-32 flex items-center justify-center text-xs text-sky-400 gap-2">
             <div className="w-4 h-4 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
             <span>Loading 48-hour forecast points...</span>

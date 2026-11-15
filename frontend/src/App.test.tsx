@@ -118,6 +118,7 @@ vi.mock('./api/client', () => ({
   fetchWeather: vi.fn(),
   fetchAllWeather: vi.fn(),
   fetchAppConfig: vi.fn(),
+  searchGeocode: vi.fn(),
 }));
 
 import * as api from './api/client';
@@ -207,5 +208,70 @@ describe('App prediction drawer integration', () => {
       expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
     });
     expect(screen.getAllByText('20 kt').length).toBeGreaterThan(0);
+  });
+
+  it('updates prediction drawer when selecting new location added by typing in location box (not previously cached)', async () => {
+    const newLocationGeocode = {
+      name: 'Miami',
+      latitude: 25.7617,
+      longitude: -80.1918,
+      admin1: 'Florida',
+      country: 'United States',
+      display_name: 'Miami, Florida, United States',
+    };
+
+    const newLocationSaved: SavedLocation = {
+      id: 3,
+      name: 'Miami',
+      latitude: 25.7617,
+      longitude: -80.1918,
+      admin1: 'Florida',
+      country: 'United States',
+      is_default: false,
+    };
+
+    const mockForecastMiami: WeatherForecastResponse = {
+      location_id: 3,
+      location_name: 'Miami',
+      latitude: 25.7617,
+      longitude: -80.1918,
+      model: 'best_match',
+      timezone: 'America/Los_Angeles',
+      cached: false,
+      cached_at: 0,
+      current: createMockPoint(0, 18, 26),
+      forecast: Array.from({ length: 16 }, (_, i) => createMockPoint(i, 18, 26)),
+    };
+
+    (api.searchGeocode as any).mockResolvedValue([newLocationGeocode]);
+    (api.addLocation as any).mockResolvedValue(newLocationSaved);
+    (api.fetchWeather as any).mockImplementation((id: number) => {
+      if (id === 3) return Promise.resolve(mockForecastMiami);
+      if (id === 2) return Promise.resolve(mockForecast2);
+      return Promise.resolve(mockForecast1);
+    });
+
+    render(<App />);
+
+    const drawer = await screen.findByTestId('timeline-drawer');
+    expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy();
+
+    // Type 'Miami' in the location box input
+    const input = screen.getByPlaceholderText('Add location (e.g. Seattle, Paris)...');
+    fireEvent.change(input, { target: { value: 'Miami' } });
+
+    // Wait for autocomplete geocoding results
+    const dropdownResult = await screen.findByText('Miami');
+    fireEvent.click(dropdownResult);
+
+    // Verify drawer updates to Miami with Miami predictions
+    await waitFor(() => {
+      expect(within(drawer).getByText('Miami')).toBeTruthy();
+    });
+
+    const forecastPoints = screen.getAllByTestId('forecast-point');
+    expect(forecastPoints).toHaveLength(16);
+    expect(screen.getAllByText('18 kt').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('G 26 kt').length).toBeGreaterThan(0);
   });
 });
