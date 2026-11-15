@@ -89,6 +89,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 
   return (
     <div
+      data-testid="timeline-drawer"
       className={`fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-md border-t border-dark-600 shadow-2xl transition-all duration-300 ease-in-out ${
         isCollapsed ? 'translate-y-[calc(100%-42px)]' : 'translate-y-0'
       }`}
@@ -165,6 +166,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
               return (
                 <div
                   key={`${pt.time}-${index}`}
+                  data-testid="forecast-point"
                   className={`min-w-[124px] max-w-[130px] p-2.5 rounded-xl border flex flex-col items-center justify-between gap-1.5 transition ${
                     isCurrent
                       ? 'bg-sky-950/30 border-sky-600/60 shadow-lg shadow-sky-950/50'

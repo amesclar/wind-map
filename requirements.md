@@ -33,6 +33,14 @@ Typing in the search box queries https://geocoding-api.open-meteo.com/v1/search?
 # data presentation
 show 16 data points for each location starting from now and every 3 hours after that for the next 48 hours based on the user selected timezone with a default of Pacific
 
+clicking on location should show;
++ location name
++ lat/long
++ wind speed
++ wind gust speed
++ wind direction - both cardinal (e.g. SW) and degrees
++ temperature
+
 Wind Barb Markers: SVG wind barbs with speed feathers (knots) and temperature color-coding on the map.
 
 Drawer: Bottom timeline showing 16 time slices (every 3h for 48h) in Pacific Time by default.

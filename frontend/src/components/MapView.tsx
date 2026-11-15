@@ -188,5 +188,14 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [selectedLocation]);
 
-  return <div ref={mapContainerRef} className="w-full h-full relative" />;
+  // Leaflet panes and zoom controls use z-index 400–1000 and are position:absolute.
+  // Without a stacking context on this root, those layers paint above the
+  // timeline drawer (z-40) and hide the forecast.
+  return (
+    <div
+      ref={mapContainerRef}
+      data-testid="map-canvas"
+      className="w-full h-full relative isolate"
+    />
+  );
 };
