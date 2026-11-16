@@ -20,6 +20,12 @@ import {
 } from 'lucide-react';
 import { WindBarb, getTemperatureColor } from './WindBarb';
 
+/** Wind direction in whole degrees true, normalized to 0–359. */
+export function formatDegreesTrue(deg: number): string {
+  const rounded = Math.round(((deg % 360) + 360) % 360);
+  return `${rounded >= 360 ? 0 : rounded}°T`;
+}
+
 interface TimelineDrawerProps {
   selectedLocation?: SavedLocation | null;
   weatherData: WeatherForecastResponse | null;
@@ -195,7 +201,10 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                   </div>
 
                   {/* Wind representation: Barbs (default), Cardinal, or Degrees */}
-                  <div className="my-0.5 flex flex-col items-center justify-center min-h-[46px]">
+                  <div
+                    data-testid="wind-direction-display"
+                    className="my-0.5 flex flex-col items-center justify-center min-h-[46px]"
+                  >
                     {dirDisplay === 'barb' ? (
                       <WindBarb
                         speedKnots={pt.wind_speed_knots}
@@ -233,8 +242,21 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                     )}
                   </div>
 
+                  {/* Wind direction in whole degrees true (SCRUM-90) */}
+                  <div
+                    data-testid="wind-direction-true"
+                    title="Wind direction (degrees true)"
+                    className="text-[10px] font-mono text-gray-300 flex items-center gap-0.5"
+                  >
+                    <Compass className="w-2.5 h-2.5 text-sky-400" />
+                    <span>{formatDegreesTrue(pt.wind_direction_deg)}</span>
+                  </div>
+
                   {/* Wind speed */}
-                  <div className="text-[11px] font-medium text-gray-300 flex items-center gap-1">
+                  <div
+                    data-testid="wind-speed"
+                    className="text-[11px] font-medium text-gray-300 flex items-center gap-1"
+                  >
                     <Wind className="w-3 h-3 text-sky-400" />
                     <span>{getSpeedDisplay(pt)}</span>
                   </div>
