@@ -3,7 +3,6 @@ import L from 'leaflet';
 import { SavedLocation, WeatherForecastResponse, MapTileLayer } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay, SelectedGridPoint } from './WindOverlay';
-import { WindOverlayLegend } from './WindOverlayLegend';
 import { GridWindPoint } from '../api/client';
 
 interface MapViewProps {
@@ -207,7 +206,6 @@ export const MapView: React.FC<MapViewProps> = ({
         selectedPoint={selectedGridPoint}
         onChevronClick={onChevronClick}
       />
-      <WindOverlayLegend visible={windOverlayVisible} />
     </div>
   );
 };

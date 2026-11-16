@@ -174,3 +174,22 @@ describe('generateWindBarbSvg structure', () => {
     expect(svg).toContain('#60a5fa');
   });
 });
+
+// ---------------------------------------------------------------------------
+// colorOverride (SCRUM-89)
+// ---------------------------------------------------------------------------
+
+describe('generateWindBarbSvg colorOverride', () => {
+  it('uses the override color instead of the temperature color', () => {
+    const svg = generateWindBarbSvg(15, 90, 100, 32, false, '#4ade80');
+    expect(svg).toContain('#4ade80');
+    expect(svg).not.toContain(getTemperatureColor(100));
+  });
+
+  it('keeps the same geometry with and without an override', () => {
+    const strip = (s: string) => s.replace(/#[0-9a-f]{6}/gi, 'C');
+    expect(strip(generateWindBarbSvg(27, 305, 50, 40, false, '#4ade80'))).toBe(
+      strip(generateWindBarbSvg(27, 305, 50, 40, false)),
+    );
+  });
+});

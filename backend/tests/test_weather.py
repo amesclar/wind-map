@@ -248,3 +248,32 @@ def test_point_weather_forwards_model(client):
     assert resp.status_code == 200
     assert captured["params"].get("models") == "gfs_seamless"
 
+
+
+def test_first_forecast_slice_uses_current_conditions(client):
+    """SCRUM-89: forecast[0] must be the Open-Meteo 'current' values, not the hourly value."""
+    import copy
+
+    raw = copy.deepcopy(MOCK_RAW_RESPONSE)
+    raw["current"].update(
+        {"time": "2026-11-12T12:15", "wind_speed_10m": 18.0, "wind_direction_10m": 250, "temperature_2m": 9.0}
+    )
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=raw,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
+    with patch("httpx.AsyncClient.get", return_value=mock_resp):
+        data = client.get("/api/weather/point?lat=48.78&lon=-121.94").json()
+
+    forecast = data["forecast"]
+    assert len(forecast) == 16
+    first = forecast[0]
+    assert first == data["current"]
+    assert first["time"] == "2026-11-12T12:15"
+    assert first["wind_speed_knots"] == 18.0
+    assert first["wind_direction_deg"] == 250
+    # Later slices are still hourly values at +3h steps from the current hour.
+    assert forecast[1]["time"] == "2026-11-12T15:00"
+    assert forecast[1]["wind_speed_knots"] == 15.0
+    assert forecast[1]["wind_direction_deg"] == 220

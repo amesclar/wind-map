@@ -25,8 +25,8 @@ from backend.app.services.grid_weather_service import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_open_meteo_item(speed: float = 10.0, direction: float = 180.0) -> dict:
-    return {"current": {"wind_speed_10m": speed, "wind_direction_10m": direction}}
+def _make_open_meteo_item(speed: float = 10.0, direction: float = 180.0, temp_c: float = 10.0) -> dict:
+    return {"current": {"wind_speed_10m": speed, "wind_direction_10m": direction, "temperature_2m": temp_c}}
 
 
 def _mock_response(items: list) -> httpx.Response:
@@ -66,6 +66,7 @@ def setup_test_db():
             expires_at REAL NOT NULL,
             wind_speed_knots REAL NOT NULL,
             wind_direction_deg REAL NOT NULL,
+            temperature_f REAL,
             PRIMARY KEY (lat_key, lon_key, model)
         );
         """
@@ -242,8 +243,8 @@ async def test_get_grid_wind_partial_cache_hit():
     cur.execute(
         """
         INSERT INTO grid_weather_cache
-            (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg)
-        VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0)
+            (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg, temperature_f)
+        VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0, 55.0)
         """,
         (now, now + 3600),
     )
@@ -477,3 +478,83 @@ def test_grid_endpoint_second_request_served_from_cache(client):
 
     assert r1.status_code == 200
     assert r2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-89: temperature for temperature-colored map barbs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_fetch_returns_temperature_f_and_requests_temperature():
+    """Grid points carry current temperature in °F, converted like the drawer (1 decimal)."""
+    captured = {}
+    mock_resp = _mock_response([_make_open_meteo_item(12.0, 200.0, temp_c=12.3)])
+
+    async def fake_get(self_or_url, url=None, **kwargs):
+        captured["params"] = kwargs.get("params", {})
+        return mock_resp
+
+    with patch("httpx.AsyncClient.get", new=fake_get):
+        result = await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
+
+    assert "temperature_2m" in captured["params"]["current"]
+    assert result[0].temperature_f == round(12.3 * 9 / 5 + 32, 1)  # 54.1
+
+
+@pytest.mark.asyncio
+async def test_get_grid_wind_caches_temperature():
+    pts = [(48.0, -122.0)]
+    with patch("httpx.AsyncClient.get", return_value=_mock_response([_make_open_meteo_item(12.0, 200.0, temp_c=20.0)])):
+        first = await get_grid_wind(pts, "best_match")
+    # Second call is served from cache (no patch active) and keeps the temperature.
+    second = await get_grid_wind(pts, "best_match")
+    assert first[0].temperature_f == 68.0
+    assert second[0].temperature_f == 68.0
+
+
+@pytest.mark.asyncio
+async def test_get_grid_wind_migrates_old_table_and_refetches_rows_without_temperature():
+    """An existing cache table without temperature_f gains the column; old rows are refetched."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS grid_weather_cache;")
+    cur.execute(
+        """
+        CREATE TABLE grid_weather_cache (
+            lat_key REAL NOT NULL, lon_key REAL NOT NULL, model TEXT NOT NULL,
+            cached_at REAL NOT NULL, expires_at REAL NOT NULL,
+            wind_speed_knots REAL NOT NULL, wind_direction_deg REAL NOT NULL,
+            PRIMARY KEY (lat_key, lon_key, model)
+        );
+        """
+    )
+    now = time.time()
+    cur.execute(
+        "INSERT INTO grid_weather_cache VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0)",
+        (now, now + 3600),
+    )
+    conn.commit()
+    conn.close()
+
+    mock_resp = _mock_response([_make_open_meteo_item(9.0, 100.0, temp_c=0.0)])
+    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
+        result = await get_grid_wind([(48.0, -122.0)], "best_match")
+        assert mock_get.call_count == 1  # old row has no temperature → cache miss
+
+    assert result[0].temperature_f == 32.0
+    assert result[0].wind_speed_knots == 9.0
+    conn = get_db_connection()
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(grid_weather_cache)").fetchall()}
+    conn.close()
+    assert "temperature_f" in cols
+
+
+def test_grid_endpoint_includes_temperature_f(client):
+    mock_items = [_make_open_meteo_item(14.5, 225.0, temp_c=15.0)] * 4
+    with patch("httpx.AsyncClient.get", return_value=_mock_response(mock_items)):
+        resp = client.get(
+            "/api/weather/grid",
+            params={"min_lat": 47, "max_lat": 48, "min_lon": -123, "max_lon": -122, "cols": 2, "rows": 2},
+        )
+    assert resp.status_code == 200
+    assert all(p["temperature_f"] == 59.0 for p in resp.json())

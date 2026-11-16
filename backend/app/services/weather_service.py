@@ -197,6 +197,14 @@ async def get_weather(
                 )
             )
 
+    # SCRUM-89: the first ("Now") slice uses current conditions so it matches the
+    # map grid barbs, which are also drawn from Open-Meteo "current" values.
+    if curr.get("time"):
+        if forecast_points:
+            forecast_points[0] = current_point
+        else:
+            forecast_points.append(current_point)
+
     result_dict = {
         "location_id": location_id,
         "location_name": location_name,

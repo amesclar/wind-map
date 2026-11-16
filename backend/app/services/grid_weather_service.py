@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import httpx
 from backend.app.config import OPEN_METEO_FORECAST_URL, CACHE_TTL_SECONDS
 from backend.app.database import get_db_connection
@@ -17,12 +17,18 @@ def _cache_key(lat: float, lon: float) -> Tuple[float, float]:
     return (round(lat, CACHE_PRECISION), round(lon, CACHE_PRECISION))
 
 
+def _c_to_f(temp_c: Optional[float]) -> float:
+    """Same conversion and rounding as the drawer's forecast points (weather_service)."""
+    c = 0.0 if temp_c is None else float(temp_c)
+    return round(c * 9.0 / 5.0 + 32.0, 1)
+
+
 async def get_grid_wind(
     points: List[Tuple[float, float]],
     model: str = "best_match",
 ) -> List[GridWindPoint]:
     """
-    Return current wind speed (knots) and direction (degrees) for each (lat, lon) point.
+    Return current wind speed (knots), direction (degrees) and temperature (°F) for each (lat, lon) point.
     Hits the cache first; fetches any misses in a single batched Open-Meteo request.
     """
     if not points:
@@ -43,10 +49,16 @@ async def get_grid_wind(
             expires_at REAL NOT NULL,
             wind_speed_knots REAL NOT NULL,
             wind_direction_deg REAL NOT NULL,
+            temperature_f REAL,
             PRIMARY KEY (lat_key, lon_key, model)
         );
         """
     )
+    # SCRUM-89 migration: older tables lack temperature_f. Rows without it are
+    # treated as cache misses below, so they are refetched with temperature.
+    columns = {r["name"] for r in cursor.execute("PRAGMA table_info(grid_weather_cache)").fetchall()}
+    if "temperature_f" not in columns:
+        cursor.execute("ALTER TABLE grid_weather_cache ADD COLUMN temperature_f REAL")
     conn.commit()
 
     results: List[GridWindPoint] = []
@@ -55,8 +67,8 @@ async def get_grid_wind(
     for lat, lon in points:
         lk, lnk = _cache_key(lat, lon)
         cursor.execute(
-            "SELECT wind_speed_knots, wind_direction_deg FROM grid_weather_cache "
-            "WHERE lat_key=? AND lon_key=? AND model=? AND expires_at>?",
+            "SELECT wind_speed_knots, wind_direction_deg, temperature_f FROM grid_weather_cache "
+            "WHERE lat_key=? AND lon_key=? AND model=? AND expires_at>? AND temperature_f IS NOT NULL",
             (lk, lnk, model, now),
         )
         row = cursor.fetchone()
@@ -67,6 +79,7 @@ async def get_grid_wind(
                     longitude=lon,
                     wind_speed_knots=row["wind_speed_knots"],
                     wind_direction_deg=row["wind_direction_deg"],
+                    temperature_f=row["temperature_f"],
                 )
             )
         else:
@@ -81,15 +94,16 @@ async def get_grid_wind(
             cursor.execute(
                 """
                 INSERT INTO grid_weather_cache
-                    (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg, temperature_f)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(lat_key, lon_key, model) DO UPDATE SET
                     cached_at=excluded.cached_at,
                     expires_at=excluded.expires_at,
                     wind_speed_knots=excluded.wind_speed_knots,
-                    wind_direction_deg=excluded.wind_direction_deg
+                    wind_direction_deg=excluded.wind_direction_deg,
+                    temperature_f=excluded.temperature_f
                 """,
-                (lk, lnk, model, now, expires_at, point.wind_speed_knots, point.wind_direction_deg),
+                (lk, lnk, model, now, expires_at, point.wind_speed_knots, point.wind_direction_deg, point.temperature_f),
             )
             results.append(point)
 
@@ -113,7 +127,7 @@ async def _fetch_from_open_meteo(
     params = {
         "latitude": lats,
         "longitude": lons,
-        "current": "wind_speed_10m,wind_direction_10m",
+        "current": "wind_speed_10m,wind_direction_10m,temperature_2m",
         "wind_speed_unit": "kn",
         "forecast_days": 1,
     }
@@ -141,6 +155,7 @@ async def _fetch_from_open_meteo(
                 longitude=lon,
                 wind_speed_knots=float(current.get("wind_speed_10m") or 0.0),
                 wind_direction_deg=float(current.get("wind_direction_10m") or 0.0),
+                temperature_f=_c_to_f(current.get("temperature_2m")),
             )
         )
     return output

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { fetchWindGrid, GridWindPoint } from '../api/client';
-import { generateWindChevronSvg, generateSelectedChevronSvg } from './WindChevron';
+import { generateWindBarbSvg } from './WindBarb';
 
 export interface SelectedGridPoint {
   latitude: number;
@@ -17,13 +17,13 @@ interface WindOverlayProps {
   onChevronClick: (pt: GridWindPoint) => void;
 }
 
-const CHEVRON_SPACING_PX = 80;
+const BARB_SPACING_PX = 80;
 const MAX_GRID_DIM = 30;
 
 function gridDimensions(map: L.Map): { cols: number; rows: number } {
   const size = map.getSize();
-  const cols = Math.min(Math.max(2, Math.round(size.x / CHEVRON_SPACING_PX)), MAX_GRID_DIM);
-  const rows = Math.min(Math.max(2, Math.round(size.y / CHEVRON_SPACING_PX)), MAX_GRID_DIM);
+  const cols = Math.min(Math.max(2, Math.round(size.x / BARB_SPACING_PX)), MAX_GRID_DIM);
+  const rows = Math.min(Math.max(2, Math.round(size.y / BARB_SPACING_PX)), MAX_GRID_DIM);
   return { cols, rows };
 }
 
@@ -32,17 +32,44 @@ function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boo
   return Math.abs(a.latitude - lat) < 0.001 && Math.abs(a.longitude - lon) < 0.001;
 }
 
-function buildIcon(pt: GridWindPoint, isSelected: boolean): L.DivIcon {
-  const svgHtml = isSelected
-    ? generateSelectedChevronSvg(pt.wind_speed_knots, 32)
-    : generateWindChevronSvg(pt.wind_speed_knots, pt.wind_direction_deg, 28);
-  const size: [number, number] = isSelected ? [32, 32] : [28, 28];
-  const anchor: [number, number] = isSelected ? [16, 16] : [14, 14];
+/** Fallback color when a grid point has no temperature. */
+export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
+const BARB_SIZE = 32;
+const SELECTED_BARB_SIZE = 40;
+
+/**
+ * SVG for a grid barb — the same drawing and temperature colors the drawer uses.
+ * Falls back to green when the temperature is unknown.
+ */
+export function generateGridBarbSvg(
+  speedKnots: number,
+  directionDeg: number,
+  tempF: number | null | undefined,
+  size: number = BARB_SIZE,
+): string {
+  const hasTemp = typeof tempF === 'number';
+  return generateWindBarbSvg(
+    speedKnots,
+    directionDeg,
+    hasTemp ? tempF : 0,
+    size,
+    false,
+    hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
+  );
+}
+
+export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.DivIcon {
+  const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
+  const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
+  // Selected barb gets a white highlight ring.
+  const ringStyle = isSelected
+    ? 'border-radius:50%;box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);'
+    : '';
   return L.divIcon({
-    className: 'wind-chevron-marker',
-    html: `<div style="cursor:pointer">${svgHtml}</div>`,
-    iconSize: size,
-    iconAnchor: anchor,
+    className: 'wind-grid-barb-marker',
+    html: `<div data-wind-barb data-selected="${isSelected}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
 }
 
@@ -72,7 +99,7 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
     points.forEach((pt) => {
       const isSelected = isSamePoint(selectedPointRef.current, pt.latitude, pt.longitude);
       const marker = L.marker([pt.latitude, pt.longitude], {
-        icon: buildIcon(pt, isSelected),
+        icon: buildGridBarbIcon(pt, isSelected),
         interactive: true,
       }).addTo(map);
 
@@ -122,7 +149,7 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
       const pt = pointsRef.current[i];
       if (!pt) return;
       const isSelected = isSamePoint(selectedPoint, pt.latitude, pt.longitude);
-      marker.setIcon(buildIcon(pt, isSelected));
+      marker.setIcon(buildGridBarbIcon(pt, isSelected));
     });
   }, [selectedPoint]);
 

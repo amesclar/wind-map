@@ -45,17 +45,18 @@ clicking on location should show;
 
 Wind Barb Markers: SVG wind barbs with speed feathers (knots) and temperature color-coding on the map.
 
-Wind Grid Overlay (SCRUM-86): A continuous grid of wind chevrons covering the entire visible map viewport, not just saved locations.
-+ Grid density: approximately one chevron per 80px at the current zoom level; grid dimensions (cols × rows) are computed from the map bounds and pixel size on each pan/zoom.
-+ Data source: `GET /api/weather/grid` backend endpoint, which accepts a bounding box and grid dimensions, fetches current wind from Open-Meteo in a single batched request, and caches each grid point for 30 minutes (same TTL as location weather). No additional CARTO tile API calls are incurred — chevrons are DOM elements, not tiles.
-+ Speed encoding: number of chevron stripes — 1 chevron (light, 2–9 kt), 2 chevrons (moderate, 10–19 kt), 3 chevrons (fresh, 20–33 kt), 3 chevrons + filled arrowhead (strong, ≥ 34 kt). Calm (< 2 kt) renders as a dot.
-+ Color encoding: blue (calm) → emerald (light) → amber (moderate) → orange (fresh) → red (strong).
-+ A small legend is displayed on the map to explain the speed tiers.
-+ Chevron click (SCRUM-88): clicking a chevron clears the saved-location selection, fetches `/api/weather/point` for that grid point, and the timeline drawer header shows the point's name and coordinates (e.g. "48.78°N, 121.94°W") from the point forecast. Stale in-flight saved-location forecasts cannot overwrite the chevron's forecast. Saved-location selection behavior is unchanged.
+Wind Grid Overlay (SCRUM-86, SCRUM-89): A continuous grid of wind barbs covering the entire visible map viewport, not just saved locations.
++ Grid density: approximately one barb per 80px at the current zoom level; grid dimensions (cols × rows) are computed from the map bounds and pixel size on each pan/zoom.
++ Data source: `GET /api/weather/grid` backend endpoint, which accepts a bounding box and grid dimensions, fetches current wind from Open-Meteo in a single batched request, and caches each grid point for 30 minutes (same TTL as location weather). No additional CARTO tile API calls are incurred — barbs are DOM elements, not tiles.
++ Barb style (SCRUM-89): the same meteorological wind barb drawing as the drawer (staff points toward the wind direction; 50 kt pennants, 10 kt full barbs, 5 kt half barbs; calm < 2 kt renders as a circle). Grid barbs use the same temperature color scale as the drawer barbs; speed is indicated by the number of barbs. If a point has no temperature, its barb falls back to green (#4ade80). No legend is shown.
++ `GET /api/weather/grid` returns `temperature_f` per point (Open-Meteo current `temperature_2m`, converted to °F and rounded to 1 decimal, same as the drawer). `grid_weather_cache` gains a nullable `temperature_f` column, added automatically to existing tables; cached rows without a temperature are refetched.
++ Selected grid point (SCRUM-89): the clicked barb is drawn larger with a white highlight ring. Its speed, direction and color match the leftmost barb of the drawer, because both use Open-Meteo "current" values.
++ Barb click (SCRUM-88): clicking a barb clears the saved-location selection, fetches `/api/weather/point` for that grid point, and the timeline drawer header shows the point's name and coordinates (e.g. "48.78°N, 121.94°W") from the point forecast. Stale in-flight saved-location forecasts cannot overwrite the barb's forecast. Saved-location selection behavior is unchanged.
 + Toggled via Map Settings modal (default: visible).
 + Hard limits of 30 cols × 30 rows prevent runaway API requests.
 
 Drawer: Bottom timeline showing 16 time slices (every 3h for 48h) in Pacific Time by default.
++ The first ("Now") slice uses Open-Meteo "current" conditions rather than the top-of-hour hourly value (SCRUM-89); the remaining 15 slices are hourly values at +3h steps.
 
 # data persistence
 use a local SQLite database to store the locations and weather data
