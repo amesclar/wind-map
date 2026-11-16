@@ -147,6 +147,19 @@ docker stop wind-map && docker rm wind-map
 
 ---
 
+## Versioning
+
+The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.2.0`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it as `v0.2.0`. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
+
+```bash
+echo "X.Y.Z" > VERSION
+(cd frontend && npm version X.Y.Z --no-git-tag-version --allow-same-version)
+```
+
+Tests fail if the two files disagree.
+
+---
+
 ## Testing
 
 Backend test suite coverage includes:

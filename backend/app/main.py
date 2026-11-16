@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.config import STATIC_DIR, CARTO_API_KEY
+from backend.app.config import STATIC_DIR, CARTO_API_KEY, APP_VERSION
 from backend.app.database import init_db
 from backend.app.routers import geocode, grid, locations, weather
 
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Wind Map API",
     description="Weather and wind predictions on an interactive map",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -44,7 +44,7 @@ app.include_router(geocode.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.get("/api/config")

@@ -11,6 +11,20 @@ DATABASE_PATH = Path(os.getenv("DATABASE_PATH", DATA_DIR / "wind_map.db"))
 
 STATIC_DIR = Path(os.getenv("STATIC_DIR", "/app/static" if Path("/app/static").exists() else "./frontend/dist"))
 
+# App version (SCRUM-91): single source of truth is the VERSION file in the project root
+# (/app/VERSION in the container). Keep it equal to the release tag without the "v".
+VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+
+
+def read_app_version(path: Path = VERSION_FILE) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+APP_VERSION = read_app_version()
+
 # Cache settings
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "1800"))  # 30 minutes
 

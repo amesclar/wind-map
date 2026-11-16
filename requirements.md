@@ -91,6 +91,14 @@ use a multi-stage Dockerfile:
 
 Docker: Multi-stage build producing a single lightweight image run via docker run -p 5005:5005 -v wind_data:/app/data wind-map
 
+# versioning (SCRUM-91)
+the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔ release/tag v0.2.0)
++ Single source of truth: `VERSION` file in the project root (plain `MAJOR.MINOR.PATCH`, no "v").
++ Backend reads it for the FastAPI app version (`/docs`) and returns it from `GET /api/health` as `version`.
++ Frontend reads it at build time (Vite `__APP_VERSION__`) and shows it in the navbar as `vX.Y.Z`.
++ `frontend/package.json` `version` must match `VERSION`; tests fail if they differ.
++ For every release: update `VERSION` and `frontend/package.json` to the release number before tagging `vX.Y.Z`.
+
 # git and code layout
 locate the project in /Users/fredames/Projects/wind-map
 

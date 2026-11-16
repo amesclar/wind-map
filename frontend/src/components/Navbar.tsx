@@ -1,4 +1,5 @@
 import React from 'react';
+import { APP_VERSION } from '../version';
 import {
   Wind,
   Layers,
@@ -75,8 +76,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-gray-100 tracking-wide flex items-center gap-1.5">
             Wind Map
-            <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40">
-              v1.0
+            <span
+              data-testid="app-version"
+              className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40"
+            >
+              v{APP_VERSION}
             </span>
           </h1>
         </div>
