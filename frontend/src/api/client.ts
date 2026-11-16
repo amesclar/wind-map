@@ -93,6 +93,8 @@ export interface GridWindPoint {
   longitude: number;
   wind_speed_knots: number;
   wind_direction_deg: number;
+  /** Current temperature in °F; colors the map barb like the drawer (SCRUM-89). */
+  temperature_f?: number | null;
 }
 
 export async function fetchWindGrid(params: {

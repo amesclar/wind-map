@@ -22,9 +22,10 @@ export function generateWindBarbSvg(
   directionDeg: number,
   tempF: number,
   size: number = 44,
-  showLabel: boolean = true
+  showLabel: boolean = true,
+  colorOverride?: string
 ): string {
-  const color = getTemperatureColor(tempF);
+  const color = colorOverride ?? getTemperatureColor(tempF);
   const roundedSpeed = Math.round(speedKnots);
 
   // Calm conditions (< 2 knots)

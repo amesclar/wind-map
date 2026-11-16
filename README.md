@@ -10,9 +10,9 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
 
 - **Interactive Map:** Powered by Leaflet.js with CartoDB Dark Matter tiles.
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
-- **Wind Grid Overlay *(SCRUM-86)*:** A continuous grid of wind chevrons covering the entire visible viewport. Speed is encoded as chevron count (1 = light, 2 = moderate, 3 = fresh/strong) with an arrowhead added at ≥ 34 kt. Color transitions from blue (calm) through green → amber → orange → red (storm). Grid density targets one chevron per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on). A speed-tier legend sits in the top-left corner of the map.
-- **Clickable Chevrons *(SCRUM-88)*:** Clicking any wind chevron loads a full 48-hour forecast for that exact lat/lon into the drawer without saving it as a location — useful over open water where no place name exists. The selected chevron swaps to a filled diamond in its tier color. Clicking a saved location marker restores normal drawer behaviour.
-- **48-Hour Forecast Timeline Drawer:** Collapsible bottom drawer showing 16 time slices (every 3 hours for 48 hours) with temperature, wind speed/direction, and relative humidity.
+- **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the drawer's barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
+- **Clickable Barbs *(SCRUM-88, SCRUM-89)*:** Clicking any grid barb loads a full 48-hour forecast for that exact lat/lon into the drawer without saving it as a location — useful over open water where no place name exists. The selected barb is drawn larger with a white highlight ring and matches the drawer's leftmost barb. Clicking a saved location marker restores normal drawer behaviour.
+- **48-Hour Forecast Timeline Drawer:** Collapsible bottom drawer showing 16 time slices (every 3 hours for 48 hours) with temperature, wind speed/direction, and relative humidity. The first ("Now") slice shows Open-Meteo current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS 0.4°*
@@ -141,7 +141,7 @@ docker stop wind-map && docker rm wind-map
 | `GET`    | `/api/weather`        | Get 48h forecast & current conditions for a location |
 | `GET`    | `/api/weather/all`    | Get current conditions for all saved locations       |
 | `GET`    | `/api/weather/point`  | Get 48h forecast for an arbitrary lat/lon point (no saved location needed) |
-| `GET`    | `/api/weather/grid`   | Get current wind for a lat/lon bounding box grid (powers the chevron overlay) |
+| `GET`    | `/api/weather/grid`   | Get current wind for a lat/lon bounding box grid (powers the wind barb overlay) |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
@@ -161,10 +161,9 @@ Backend test suite coverage includes:
 
 Frontend test suite coverage includes:
 - Wind barb SVG generation (feather counts, pennants, calm circles, direction encoding, temperature color, label rendering)
-- Wind chevron SVG generation (speed tiers, chevron counts, arrowhead at strong, direction rotation, calm dot)
-- Selected chevron diamond SVG (polygon shape, tier color, white stroke, size parameter)
+- Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring) *(SCRUM-89)*
+- Selected map barb matches the drawer's leftmost barb (direction, barb count and color) *(SCRUM-89)*
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
-- `WindOverlayLegend` visibility, tier labels, speed ranges, SVG count, pointer-events, top-left positioning *(SCRUM-87)*
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
 - Timeline drawer rendering, empty state, stacking context isolation
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add

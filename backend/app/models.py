@@ -69,4 +69,5 @@ class GridWindPoint(BaseModel):
     longitude: float
     wind_speed_knots: float
     wind_direction_deg: float
+    temperature_f: Optional[float] = None
 

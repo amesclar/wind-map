@@ -131,7 +131,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
             <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
               <div>
                 <div className="text-xs font-medium text-gray-100">
-                  Show wind chevrons across map
+                  Show wind barbs across map
                 </div>
                 <div className="text-[11px] text-gray-400 mt-0.5">
                   Displays a continuous grid of wind direction and speed indicators over the visible viewport.

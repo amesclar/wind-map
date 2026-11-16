@@ -30,7 +30,7 @@ vi.mock('leaflet', () => {
         zoom: vi.fn(() => ({ addTo: vi.fn() })),
       },
       tileLayer: vi.fn(layer),
-      divIcon: vi.fn(() => ({})),
+      divIcon: vi.fn((opts: any) => ({ ...opts })),
       marker: vi.fn((coords: [number, number]) => {
         const key = `${coords[0]},${coords[1]}`;
         const instance = {
@@ -450,5 +450,78 @@ describe('App prediction drawer integration', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
     expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();
+  });
+
+  it('selected map wind barb matches the leftmost drawer wind barb (SCRUM-89)', async () => {
+    // Grid "current" wind and the point forecast's "Now" slice (= current) agree;
+    // later drawer slices differ so the test proves the leftmost card is compared.
+    const gridPoint = {
+      latitude: 48.78,
+      longitude: -121.94,
+      wind_speed_knots: 27,
+      wind_direction_deg: 305,
+      temperature_f: 84,
+    };
+    const base = await (api.fetchPointWeather as any).getMockImplementation()?.();
+    const nowPoint = {
+      ...base.forecast[0],
+      wind_speed_knots: 27,
+      wind_direction_deg: 305,
+      wind_direction_cardinal: 'NW',
+      temperature_f: 84,
+      temperature_c: 28.9,
+    };
+    (api.fetchPointWeather as any).mockResolvedValueOnce({
+      ...base,
+      current: nowPoint,
+      forecast: [nowPoint, ...base.forecast.slice(1)],
+    });
+
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+
+    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
+    const L = (await import('leaflet')).default as any;
+    const mapInstance = L.map.mock.results[0].value;
+    mapInstance.getBounds.mockReturnValue({
+      getSouth: () => 46.0,
+      getNorth: () => 50.0,
+      getWest: () => -124.0,
+      getEast: () => -120.0,
+    });
+    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
+
+    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
+    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
+    const marker = mockMarkerInstances[key];
+    marker._handlers['click']();
+
+    await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
+
+    // The marker icon is switched to the selected (highlighted) barb
+    await waitFor(() => expect(marker.setIcon).toHaveBeenCalled());
+    const selectedHtml: string = marker.setIcon.mock.calls.at(-1)[0].html;
+    expect(selectedHtml).toContain('data-selected="true"');
+
+    const signature = (root: ParentNode) => {
+      const g = root.querySelector('svg g[transform]');
+      if (!g) throw new Error('barb group not found');
+      return {
+        rotation: g.getAttribute('transform'),
+        pennants: g.querySelectorAll('polygon').length,
+        barbs: g.querySelectorAll('line').length, // staff + full/half barbs
+        color: g.querySelector('line')?.getAttribute('stroke'),
+      };
+    };
+    const mapBarb = document.createElement('div');
+    mapBarb.innerHTML = selectedHtml;
+
+    const leftmostCard = within(drawer).getAllByTestId('forecast-point')[0];
+    const drawerSig = signature(leftmostCard);
+
+    expect(signature(mapBarb)).toEqual(drawerSig);
+    // 27 kt → staff + 2 full barbs + 1 half barb, pointing 305°, 84 °F → orange
+    expect(drawerSig).toEqual({ rotation: 'rotate(305, 25, 25)', pennants: 0, barbs: 4, color: '#fb923c' });
   });
 });
