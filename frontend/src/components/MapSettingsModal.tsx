@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind } from 'lucide-react';
 import { MapTileLayer } from '../types';
 
 interface MapSettingsModalProps {
@@ -9,6 +9,8 @@ interface MapSettingsModalProps {
   onChangeTileLayer: (layer: MapTileLayer) => void;
   cartoApiKey: string;
   onSaveCartoApiKey: (key: string) => void;
+  windOverlayVisible: boolean;
+  onToggleWindOverlay: (visible: boolean) => void;
 }
 
 export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
@@ -18,6 +20,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onChangeTileLayer,
   cartoApiKey,
   onSaveCartoApiKey,
+  windOverlayVisible,
+  onToggleWindOverlay,
 }) => {
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
@@ -115,6 +119,39 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   </div>
                 </div>
               </label>
+            </div>
+          </div>
+
+          {/* Wind Grid Overlay Toggle */}
+          <div className="pt-2 border-t border-dark-600/70">
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Wind className="w-3.5 h-3.5 text-sky-400" />
+              Wind Grid Overlay
+            </label>
+            <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
+              <div>
+                <div className="text-xs font-medium text-gray-100">
+                  Show wind chevrons across map
+                </div>
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  Displays a continuous grid of wind direction and speed indicators over the visible viewport.
+                </div>
+              </div>
+              <button
+                data-testid="wind-overlay-toggle"
+                type="button"
+                onClick={() => onToggleWindOverlay(!windOverlayVisible)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ml-3 ${
+                  windOverlayVisible ? 'bg-sky-500' : 'bg-dark-600'
+                }`}
+                aria-pressed={windOverlayVisible}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    windOverlayVisible ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
           </div>
 

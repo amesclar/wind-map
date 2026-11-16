@@ -1,0 +1,102 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Update `handleChevronClick` in `App.tsx` to clear `selectedLocation` when a chevron is clicked": [
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849500363
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849505620
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849584856
+      }
+    ],
+    "2. Enable \"Save Location\" button for chevron-clicked locations": [
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849500393
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849592896
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849611934
+      }
+    ],
+    "3. Add unit test for chevron click behavior": [
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849500412
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849616310
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849645884
+      }
+    ],
+    "4. Add regression test for saved location behavior": [
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849500453
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849653280
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849679087
+      }
+    ],
+    "5. Run verification": [
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849500469
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849686484
+      },
+      {
+        "executionId": "5b16c2d3-3612-45b1-9827-4f08028fe380",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794849739367
+      }
+    ],
+    "6. Cache point forecasts by coordinates instead of location_id": [
+      {
+        "executionId": "7a4e3390-e533-48e6-b751-e445abfc96f7",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794850186425
+      },
+      {
+        "executionId": "7a4e3390-e533-48e6-b751-e445abfc96f7",
+        "chatSessionId": "sess_522de688-6534-4ee3-8413-38c046e0a7d4",
+        "timestamp": 1794850247386
+      }
+    ]
+  }
+}

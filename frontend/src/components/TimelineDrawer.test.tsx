@@ -15,6 +15,15 @@ vi.mock('leaflet', () => {
       map: vi.fn(() => ({
         remove: vi.fn(),
         flyTo: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        getBounds: vi.fn(() => ({
+          getSouth: () => 47.0,
+          getNorth: () => 49.0,
+          getWest: () => -123.0,
+          getEast: () => -121.0,
+        })),
+        getSize: vi.fn(() => ({ x: 800, y: 600 })),
       })),
       control: {
         zoom: vi.fn(() => ({ addTo: vi.fn() })),
@@ -111,12 +120,16 @@ describe('timeline drawer forecast', () => {
         weatherMap={{}}
         tileLayerType="osm_dark"
         cartoApiKey=""
+        selectedModel="best_match"
+        windOverlayVisible={false}
       />
     );
 
     // Leaflet's .leaflet-pane is z-index 400 and .leaflet-top is z-index 1000.
     // The map root must create a stacking context or those layers cover the drawer.
+    // isolate is now on the MapView wrapper, not the inner map-canvas div.
     const canvas = screen.getByTestId('map-canvas');
-    expect(canvas.className.split(/\s+/)).toContain('isolate');
+    const wrapper = canvas.parentElement as HTMLElement;
+    expect(wrapper.className.split(/\s+/)).toContain('isolate');
   });
 });

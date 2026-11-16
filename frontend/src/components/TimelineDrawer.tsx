@@ -39,14 +39,14 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Automatically expand drawer whenever a new location is selected
+  // Automatically expand drawer whenever a new location is selected or a chevron is clicked
   useEffect(() => {
-    if (selectedLocation?.id) {
+    if (weatherData) {
       setIsCollapsed(false);
     }
-  }, [selectedLocation?.id]);
+  }, [weatherData?.location_id, weatherData?.latitude, weatherData?.longitude]);
 
-  if (!weatherData && !isLoading && !selectedLocation) {
+  if (!weatherData && !isLoading) {
     return null;
   }
 
@@ -163,7 +163,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 
       {/* 16-point Cards Content */}
       <div className="p-3">
-        {isLoading || (selectedLocation && weatherData && weatherData.location_id !== selectedLocation.id) ? (
+        {isLoading ? (
           <div className="h-32 flex items-center justify-center text-xs text-sky-400 gap-2">
             <div className="w-4 h-4 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
             <span>Loading 48-hour forecast points...</span>

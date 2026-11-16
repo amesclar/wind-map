@@ -14,6 +14,26 @@ CARDINALS = [
 ]
 
 
+# Round point coordinates to 2 decimals (~1.1 km) for cache keys.
+POINT_CACHE_PRECISION = 2
+
+POINT_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS point_weather_cache (
+    lat_key      REAL NOT NULL,
+    lon_key      REAL NOT NULL,
+    model        TEXT NOT NULL,
+    cached_at    REAL NOT NULL,
+    expires_at   REAL NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (lat_key, lon_key, model)
+);
+"""
+
+
+def _point_cache_key(lat: float, lon: float) -> tuple[float, float]:
+    return (round(lat, POINT_CACHE_PRECISION), round(lon, POINT_CACHE_PRECISION))
+
+
 def deg_to_cardinal(deg: float) -> str:
     idx = int((deg + 11.25) / 22.5) % 16
     return CARDINALS[idx]
@@ -74,18 +94,38 @@ async def get_weather(
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Check cache
-    cursor.execute(
-        """
-        SELECT payload_json, cached_at, expires_at
-        FROM weather_cache
-        WHERE location_id = ? AND model = ?;
-        """,
-        (location_id, model),
-    )
+    # Ad-hoc map points (location_id == 0) are cached by coordinates; saved
+    # locations keep using weather_cache keyed by (location_id, model).
+    is_point = location_id == 0
+    lat_key, lon_key = _point_cache_key(latitude, longitude)
+
+    if is_point:
+        cursor.execute(POINT_CACHE_DDL)
+        conn.commit()
+        cursor.execute(
+            """
+            SELECT payload_json, cached_at, expires_at
+            FROM point_weather_cache
+            WHERE lat_key = ? AND lon_key = ? AND model = ?;
+            """,
+            (lat_key, lon_key, model),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT payload_json, cached_at, expires_at
+            FROM weather_cache
+            WHERE location_id = ? AND model = ?;
+            """,
+            (location_id, model),
+        )
     row = cursor.fetchone()
     if row and row["expires_at"] > now:
         cached_data = json.loads(row["payload_json"])
+        if is_point:
+            cached_data["location_name"] = location_name
+            cached_data["latitude"] = latitude
+            cached_data["longitude"] = longitude
         conn.close()
         return WeatherForecastResponse(
             **cached_data,
@@ -170,17 +210,30 @@ async def get_weather(
 
     # Store in cache
     expires_at = now + CACHE_TTL_SECONDS
-    cursor.execute(
-        """
-        INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, model) DO UPDATE SET
-            cached_at=excluded.cached_at,
-            expires_at=excluded.expires_at,
-            payload_json=excluded.payload_json;
-        """,
-        (location_id, model, now, expires_at, json.dumps(result_dict)),
-    )
+    if is_point:
+        cursor.execute(
+            """
+            INSERT INTO point_weather_cache (lat_key, lon_key, model, cached_at, expires_at, payload_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(lat_key, lon_key, model) DO UPDATE SET
+                cached_at=excluded.cached_at,
+                expires_at=excluded.expires_at,
+                payload_json=excluded.payload_json;
+            """,
+            (lat_key, lon_key, model, now, expires_at, json.dumps(result_dict)),
+        )
+    else:
+        cursor.execute(
+            """
+            INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(location_id, model) DO UPDATE SET
+                cached_at=excluded.cached_at,
+                expires_at=excluded.expires_at,
+                payload_json=excluded.payload_json;
+            """,
+            (location_id, model, now, expires_at, json.dumps(result_dict)),
+        )
     conn.commit()
     conn.close()
 

@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { SavedLocation, WeatherForecastResponse, MapTileLayer } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
+import { WindOverlay, SelectedGridPoint } from './WindOverlay';
+import { WindOverlayLegend } from './WindOverlayLegend';
+import { GridWindPoint } from '../api/client';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -10,6 +13,10 @@ interface MapViewProps {
   weatherMap: Record<number, WeatherForecastResponse>;
   tileLayerType: MapTileLayer;
   cartoApiKey: string;
+  selectedModel: string;
+  windOverlayVisible: boolean;
+  selectedGridPoint: SelectedGridPoint | null;
+  onChevronClick: (pt: GridWindPoint) => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -19,17 +26,24 @@ export const MapView: React.FC<MapViewProps> = ({
   weatherMap,
   tileLayerType,
   cartoApiKey,
+  selectedModel,
+  windOverlayVisible,
+  selectedGridPoint,
+  onChevronClick,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<Record<number, L.Marker>>({});
 
+  // Expose the live map instance to child components via state so React
+  // re-renders WindOverlay once the map is ready.
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+
   // Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Default center: Oak Harbor, WA
     const initialLat = selectedLocation ? selectedLocation.latitude : 48.2939;
     const initialLon = selectedLocation ? selectedLocation.longitude : -122.6064;
 
@@ -39,14 +53,15 @@ export const MapView: React.FC<MapViewProps> = ({
       zoomControl: false,
     });
 
-    // Zoom controls positioned at top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
     mapInstanceRef.current = map;
+    setMapInstance(map);
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
+      setMapInstance(null);
     };
   }, []);
 
@@ -93,12 +108,11 @@ export const MapView: React.FC<MapViewProps> = ({
     tileLayerRef.current = newLayer;
   }, [tileLayerType, cartoApiKey]);
 
-  // Update Markers whenever locations or weather data changes
+  // Update wind barb markers whenever locations or weather data changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Clear existing markers
     Object.values(markersRef.current).forEach((marker) => marker.remove());
     markersRef.current = {};
 
@@ -106,7 +120,6 @@ export const MapView: React.FC<MapViewProps> = ({
       const weather = weatherMap[loc.id];
       const isSelected = selectedLocation?.id === loc.id;
 
-      // Extract current conditions or fallback
       const speedKnots = weather?.current?.wind_speed_knots ?? 10;
       const dirDeg = weather?.current?.wind_direction_deg ?? 180;
       const tempF = weather?.current?.temperature_f ?? 50;
@@ -118,7 +131,6 @@ export const MapView: React.FC<MapViewProps> = ({
       const windDirCard = weather?.current?.wind_direction_cardinal ?? '--';
       const windDirDisplay = weather ? `${windDirCard} (${Math.round(windDirDeg)}°)` : '--';
 
-      // SVG Wind Barb icon
       const svgIconHtml = generateWindBarbSvg(
         speedKnots,
         dirDeg,
@@ -144,7 +156,6 @@ export const MapView: React.FC<MapViewProps> = ({
         icon: customIcon,
       }).addTo(map);
 
-      // Popup
       const popupContent = `
         <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
           <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${loc.name}</div>
@@ -163,16 +174,12 @@ export const MapView: React.FC<MapViewProps> = ({
       `;
 
       marker.bindPopup(popupContent);
-
-      marker.on('click', () => {
-        onSelectLocation(loc);
-      });
-
+      marker.on('click', () => onSelectLocation(loc));
       markersRef.current[loc.id] = marker;
     });
   }, [locations, weatherMap, selectedLocation, onSelectLocation]);
 
-  // Center map on selected location change
+  // Fly to selected location
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !selectedLocation) return;
@@ -183,19 +190,24 @@ export const MapView: React.FC<MapViewProps> = ({
     });
 
     const marker = markersRef.current[selectedLocation.id];
-    if (marker) {
-      marker.openPopup();
-    }
+    if (marker) marker.openPopup();
   }, [selectedLocation]);
 
-  // Leaflet panes and zoom controls use z-index 400–1000 and are position:absolute.
-  // Without a stacking context on this root, those layers paint above the
-  // timeline drawer (z-40) and hide the forecast.
   return (
-    <div
-      ref={mapContainerRef}
-      data-testid="map-canvas"
-      className="w-full h-full relative isolate"
-    />
+    <div className="w-full h-full relative isolate">
+      <div
+        ref={mapContainerRef}
+        data-testid="map-canvas"
+        className="w-full h-full"
+      />
+      <WindOverlay
+        map={mapInstance}
+        model={selectedModel}
+        visible={windOverlayVisible}
+        selectedPoint={selectedGridPoint}
+        onChevronClick={onChevronClick}
+      />
+      <WindOverlayLegend visible={windOverlayVisible} />
+    </div>
   );
 };
