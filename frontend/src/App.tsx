@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SavedLocation,
   WeatherModel,
@@ -17,7 +17,10 @@ import {
   fetchWeather,
   fetchAllWeather,
   fetchAppConfig,
+  fetchPointWeather,
 } from './api/client';
+import type { GridWindPoint } from './api/client';
+import { SelectedGridPoint } from './components/WindOverlay';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { TimelineDrawer } from './components/TimelineDrawer';
@@ -40,6 +43,15 @@ export const App: React.FC = () => {
   });
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
 
+  // Wind grid overlay visibility — default on, persisted to localStorage
+  const [windOverlayVisible, setWindOverlayVisible] = useState<boolean>(() => {
+    const stored = localStorage.getItem('wind_overlay_visible');
+    return stored === null ? true : stored === 'true';
+  });
+
+  // Selected ephemeral grid point (chevron click) — cleared when a saved location is selected
+  const [selectedGridPoint, setSelectedGridPoint] = useState<SelectedGridPoint | null>(null);
+
   // Units
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
   const [speedUnit, setSpeedUnit] = useState<WindSpeedUnit>('knots');
@@ -50,48 +62,63 @@ export const App: React.FC = () => {
   const [selectedWeather, setSelectedWeather] = useState<WeatherForecastResponse | null>(null);
   const [isTimelineLoading, setIsTimelineLoading] = useState(false);
 
+  // Monotonic id of the latest drawer weather request; stale responses are dropped.
+  const weatherRequestRef = useRef(0);
+
   // Modals
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
 
-  // Load weather for a specific location
+  // Load weather for a specific location (drives the timeline drawer)
   const loadWeatherForLocation = useCallback(
     async (locationId: number, model: string, tz: string) => {
+      const requestId = ++weatherRequestRef.current;
       setIsTimelineLoading(true);
       try {
         const data = await fetchWeather(locationId, model, tz);
-        setSelectedWeather(data);
         setWeatherMap((prev) => ({ ...prev, [locationId]: data }));
+        // Ignore stale responses (e.g. a chevron was clicked while this was in flight)
+        if (requestId === weatherRequestRef.current) setSelectedWeather(data);
       } catch (err) {
         console.error('Failed to load weather:', err);
       } finally {
-        setIsTimelineLoading(false);
+        if (requestId === weatherRequestRef.current) setIsTimelineLoading(false);
       }
     },
     []
   );
 
-  // Load initial data and geolocation
+  // Refresh wind barb markers for all saved locations (background, no loading state)
+  const loadAllWeather = useCallback(async (model: string, tz: string) => {
+    try {
+      const allW = await fetchAllWeather(model, tz);
+      setWeatherMap((prev) => {
+        const updated = { ...prev };
+        allW.forEach((w) => { updated[w.location_id] = w; });
+        return updated;
+      });
+    } catch (err) {
+      console.error('Failed to refresh all weather:', err);
+    }
+  }, []);
+
+  // Initial load: config, models, locations, weather for all markers
   useEffect(() => {
     async function init() {
       try {
-        // Fetch server config for CARTO API Key
         const cfg = await fetchAppConfig();
         if (cfg.carto_api_key && !localStorage.getItem('carto_api_key')) {
           setCartoApiKey(cfg.carto_api_key);
           setTileLayerType('carto_dark');
         }
 
-        // Load models
         const availableModels = await fetchModels();
         setModels(availableModels);
 
-        // Load saved locations
         const saved = await fetchLocations();
         setLocations(saved);
 
-        let initialLoc = saved.length > 0 ? saved[0] : null;
+        const initialLoc = saved.length > 0 ? saved[0] : null;
 
-        // Try HTML5 geolocation if available
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             async (pos) => {
@@ -119,16 +146,13 @@ export const App: React.FC = () => {
           setSelectedLocation(initialLoc);
         }
 
-        // Fetch all weather for markers
+        // Use current selectedModel / timezone (defaults at mount time)
         const allW = await fetchAllWeather('best_match', 'America/Los_Angeles');
         const mapObj: Record<number, WeatherForecastResponse> = {};
-        allW.forEach((w) => {
-          mapObj[w.location_id] = w;
-        });
+        allW.forEach((w) => { mapObj[w.location_id] = w; });
         setWeatherMap(mapObj);
 
-        // Pre-populate selectedWeather if we already have data for the initial location
-        if (initialLoc && mapObj[initialLoc.id]) {
+        if (initialLoc && mapObj[initialLoc.id] && weatherRequestRef.current === 0) {
           setSelectedWeather(mapObj[initialLoc.id]);
         }
       } catch (err) {
@@ -138,22 +162,24 @@ export const App: React.FC = () => {
     init();
   }, []);
 
-  // Whenever selected location, model, or timezone changes, refresh forecast
+  // Whenever the selected location changes, refresh its forecast
   useEffect(() => {
     if (selectedLocation) {
       loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
     }
-  }, [selectedLocation?.id, selectedModel, timezone, loadWeatherForLocation]);
+  }, [selectedLocation?.id, loadWeatherForLocation]);
 
-  // Handle location selection
-  const handleSelectLocation = (loc: SavedLocation) => {
-    // Immediately show any already-fetched data for this location
-    // so the drawer appears instantly even if loc is already selected
-    if (weatherMap[loc.id]) {
-      setSelectedWeather(weatherMap[loc.id]);
+  // When model or timezone changes, refresh both the drawer and all markers
+  useEffect(() => {
+    if (selectedLocation) {
+      loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
     }
-    // Always update selectedLocation — but if it's the same id,
-    // React won't re-run the useEffect, so also trigger a fresh fetch here
+    loadAllWeather(selectedModel, timezone);
+  }, [selectedModel, timezone, loadWeatherForLocation, loadAllWeather]);
+
+  const handleSelectLocation = (loc: SavedLocation) => {
+    setSelectedGridPoint(null); // clear ephemeral chevron selection
+    if (weatherMap[loc.id]) setSelectedWeather(weatherMap[loc.id]);
     if (selectedLocation?.id === loc.id) {
       loadWeatherForLocation(loc.id, selectedModel, timezone);
     } else {
@@ -161,7 +187,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handle add location from autocomplete
   const handleSelectAndAddLocation = async (result: GeocodeResult) => {
     try {
       const created = await addLocation({
@@ -171,21 +196,17 @@ export const App: React.FC = () => {
         admin1: result.admin1,
         country: result.country,
       });
-
       setLocations((prev) => {
         const filtered = prev.filter((l) => l.id !== created.id);
         return [...filtered, created];
       });
-
       setSelectedLocation(created);
-      // Immediately load weather forecast for the new location
       loadWeatherForLocation(created.id, selectedModel, timezone);
     } catch (err) {
       console.error('Failed to add location:', err);
     }
   };
 
-  // Handle delete location
   const handleDeleteLocation = async (id: number) => {
     try {
       await deleteLocation(id);
@@ -195,7 +216,6 @@ export const App: React.FC = () => {
         delete copy[id];
         return copy;
       });
-
       if (selectedLocation?.id === id) {
         const remaining = locations.filter((l) => l.id !== id);
         if (remaining.length > 0) {
@@ -210,7 +230,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Toggle unit system between Metric and Imperial
   const handleToggleUnitSystem = () => {
     if (unitSystem === 'imperial') {
       setUnitSystem('metric');
@@ -221,7 +240,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handle saving CARTO API Key
   const handleSaveCartoApiKey = (key: string) => {
     setCartoApiKey(key);
     if (key) {
@@ -233,15 +251,34 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handle changing map tile layer
   const handleChangeTileLayer = (layer: MapTileLayer) => {
     setTileLayerType(layer);
     localStorage.setItem('map_tile_layer', layer);
   };
 
+  const handleToggleWindOverlay = (visible: boolean) => {
+    setWindOverlayVisible(visible);
+    localStorage.setItem('wind_overlay_visible', String(visible));
+  };
+
+  const handleChevronClick = useCallback(async (pt: GridWindPoint) => {
+    const requestId = ++weatherRequestRef.current;
+    setSelectedGridPoint({ latitude: pt.latitude, longitude: pt.longitude, wind_speed_knots: pt.wind_speed_knots });
+    // Clear the saved selection so the drawer header uses the point's own name/coordinates.
+    setSelectedLocation(null);
+    setIsTimelineLoading(true);
+    try {
+      const data = await fetchPointWeather(pt.latitude, pt.longitude, selectedModel, timezone);
+      if (requestId === weatherRequestRef.current) setSelectedWeather(data);
+    } catch (err) {
+      console.error('Failed to load point weather:', err);
+    } finally {
+      if (requestId === weatherRequestRef.current) setIsTimelineLoading(false);
+    }
+  }, [selectedModel, timezone]);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
-      {/* Top Navbar */}
       <Navbar
         models={models}
         selectedModel={selectedModel}
@@ -261,7 +298,6 @@ export const App: React.FC = () => {
         hasCartoKey={Boolean(cartoApiKey)}
       />
 
-      {/* Main Map View */}
       <main className="flex-1 relative w-full h-[calc(100vh-56px)]">
         <MapView
           locations={locations}
@@ -270,9 +306,12 @@ export const App: React.FC = () => {
           weatherMap={weatherMap}
           tileLayerType={tileLayerType}
           cartoApiKey={cartoApiKey}
+          selectedModel={selectedModel}
+          windOverlayVisible={windOverlayVisible}
+          selectedGridPoint={selectedGridPoint}
+          onChevronClick={handleChevronClick}
         />
 
-        {/* Bottom Timeline Drawer */}
         <TimelineDrawer
           selectedLocation={selectedLocation}
           weatherData={selectedWeather}
@@ -283,7 +322,6 @@ export const App: React.FC = () => {
         />
       </main>
 
-      {/* Saved Locations Modal */}
       <SavedLocationsModal
         isOpen={isLocationsModalOpen}
         onClose={() => setIsLocationsModalOpen(false)}
@@ -293,7 +331,6 @@ export const App: React.FC = () => {
         onDeleteLocation={handleDeleteLocation}
       />
 
-      {/* Map Settings & API Key Modal */}
       <MapSettingsModal
         isOpen={isMapSettingsOpen}
         onClose={() => setIsMapSettingsOpen(false)}
@@ -301,6 +338,8 @@ export const App: React.FC = () => {
         onChangeTileLayer={handleChangeTileLayer}
         cartoApiKey={cartoApiKey}
         onSaveCartoApiKey={handleSaveCartoApiKey}
+        windOverlayVisible={windOverlayVisible}
+        onToggleWindOverlay={handleToggleWindOverlay}
       />
     </div>
   );

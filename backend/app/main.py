@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import STATIC_DIR, CARTO_API_KEY
 from backend.app.database import init_db
-from backend.app.routers import geocode, locations, weather
+from backend.app.routers import geocode, grid, locations, weather
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.add_middleware(
 # Register API routers
 app.include_router(locations.router)
 app.include_router(weather.router)
+app.include_router(grid.router)
 app.include_router(geocode.router)
 
 

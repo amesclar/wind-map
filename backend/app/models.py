@@ -62,3 +62,11 @@ class WeatherForecastResponse(BaseModel):
     current: WeatherForecastPoint
     forecast: List[WeatherForecastPoint]
 
+
+class GridWindPoint(BaseModel):
+    """A single wind observation point for the map grid overlay."""
+    latitude: float
+    longitude: float
+    wind_speed_knots: float
+    wind_direction_deg: float
+

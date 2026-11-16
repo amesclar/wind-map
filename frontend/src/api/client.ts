@@ -87,3 +87,50 @@ export async function fetchAppConfig(): Promise<{ carto_api_key?: string }> {
     return {};
   }
 }
+
+export interface GridWindPoint {
+  latitude: number;
+  longitude: number;
+  wind_speed_knots: number;
+  wind_direction_deg: number;
+}
+
+export async function fetchWindGrid(params: {
+  min_lat: number;
+  max_lat: number;
+  min_lon: number;
+  max_lon: number;
+  cols: number;
+  rows: number;
+  model?: string;
+}): Promise<GridWindPoint[]> {
+  const p = new URLSearchParams({
+    min_lat: params.min_lat.toString(),
+    max_lat: params.max_lat.toString(),
+    min_lon: params.min_lon.toString(),
+    max_lon: params.max_lon.toString(),
+    cols: params.cols.toString(),
+    rows: params.rows.toString(),
+    model: params.model ?? 'best_match',
+  });
+  const res = await fetch(`${API_BASE}/weather/grid?${p}`);
+  if (!res.ok) throw new Error('Failed to fetch wind grid');
+  return res.json();
+}
+
+export async function fetchPointWeather(
+  lat: number,
+  lon: number,
+  model: string = 'best_match',
+  timezone: string = 'America/Los_Angeles',
+): Promise<WeatherForecastResponse> {
+  const p = new URLSearchParams({
+    lat: lat.toString(),
+    lon: lon.toString(),
+    model,
+    timezone,
+  });
+  const res = await fetch(`${API_BASE}/weather/point?${p}`);
+  if (!res.ok) throw new Error('Failed to fetch point weather');
+  return res.json();
+}

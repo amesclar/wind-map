@@ -16,6 +16,15 @@ vi.mock('leaflet', () => {
       map: vi.fn(() => ({
         remove: vi.fn(),
         flyTo: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        getBounds: vi.fn(() => ({
+          getSouth: () => 47.0,
+          getNorth: () => 49.0,
+          getWest: () => -123.0,
+          getEast: () => -121.0,
+        })),
+        getSize: vi.fn(() => ({ x: 800, y: 600 })),
       })),
       control: {
         zoom: vi.fn(() => ({ addTo: vi.fn() })),
@@ -33,6 +42,7 @@ vi.mock('leaflet', () => {
             return this;
           }),
           remove: vi.fn(),
+          setIcon: vi.fn(),
           openPopup: vi.fn(),
           _handlers: {} as Record<string, Function>,
         };
@@ -119,6 +129,51 @@ vi.mock('./api/client', () => ({
   fetchAllWeather: vi.fn(),
   fetchAppConfig: vi.fn(),
   searchGeocode: vi.fn(),
+  fetchWindGrid: vi.fn().mockResolvedValue([]),
+  fetchPointWeather: vi.fn().mockResolvedValue({
+    location_id: 0,
+    location_name: '48.78°N, 121.94°W',
+    latitude: 48.78,
+    longitude: -121.94,
+    model: 'best_match',
+    timezone: 'America/Los_Angeles',
+    cached: false,
+    cached_at: 0,
+    current: {
+      time: '2026-11-15T17:00',
+      temperature_c: 10,
+      temperature_f: 50,
+      wind_speed_knots: 14,
+      wind_speed_kmh: 26,
+      wind_speed_mph: 16,
+      wind_speed_ms: 7.2,
+      wind_gust_knots: 20,
+      wind_gust_kmh: 37,
+      wind_gust_mph: 23,
+      wind_gust_ms: 10.3,
+      wind_direction_deg: 220,
+      wind_direction_cardinal: 'SW',
+      humidity: 65,
+      weather_code: 1,
+    },
+    forecast: Array.from({ length: 16 }, (_, i) => ({
+      time: `2026-11-15T${String((17 + i * 3) % 24).padStart(2, '0')}:00`,
+      temperature_c: 10,
+      temperature_f: 50,
+      wind_speed_knots: 14,
+      wind_speed_kmh: 26,
+      wind_speed_mph: 16,
+      wind_speed_ms: 7.2,
+      wind_gust_knots: 20,
+      wind_gust_kmh: 37,
+      wind_gust_mph: 23,
+      wind_gust_ms: 10.3,
+      wind_direction_deg: 220,
+      wind_direction_cardinal: 'SW',
+      humidity: 65,
+      weather_code: 1,
+    })),
+  }),
 }));
 
 import * as api from './api/client';
@@ -160,7 +215,8 @@ describe('App prediction drawer integration', () => {
     expect(forecastPoints).toHaveLength(16);
 
     const mapCanvas = screen.getByTestId('map-canvas');
-    expect(mapCanvas.className.split(/\s+/)).toContain('isolate');
+    const mapWrapper = mapCanvas.parentElement as HTMLElement;
+    expect(mapWrapper.className.split(/\s+/)).toContain("isolate");
   });
 
   it('updates prediction drawer data when clicking a saved location in modal', async () => {
@@ -273,5 +329,126 @@ describe('App prediction drawer integration', () => {
     expect(forecastPoints).toHaveLength(16);
     expect(screen.getAllByText('18 kt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('G 26 kt').length).toBeGreaterThan(0);
+  });
+
+  it('updates prediction drawer when clicking a grid chevron (SCRUM-88)', async () => {
+    render(<App />);
+
+    const drawer = await screen.findByTestId('timeline-drawer');
+    expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy();
+
+    // Verify fetchPointWeather is called with correct params
+    expect(api.fetchPointWeather).not.toHaveBeenCalled();
+
+    const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
+    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
+
+    // Trigger a grid refresh by invoking the map 'moveend' handler registered by WindOverlay
+    const L = (await import('leaflet')).default as any;
+    const mapInstance = L.map.mock.results[0].value;
+    // Change the bounds so the fetch key differs and the grid reloads
+    mapInstance.getBounds.mockReturnValue({
+      getSouth: () => 46.0,
+      getNorth: () => 50.0,
+      getWest: () => -124.0,
+      getEast: () => -120.0,
+    });
+    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
+
+    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
+    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
+
+    mockMarkerInstances[key]._handlers['click']();
+
+    await waitFor(() => {
+      expect(api.fetchPointWeather).toHaveBeenCalledWith(48.78, -121.94, 'best_match', 'America/Los_Angeles');
+      expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy();
+    });
+    // Saved-location name is gone and coordinates come from the point forecast
+    expect(within(drawer).queryByText('Oak Harbor, WA')).toBeNull();
+    expect(within(drawer).getByText(/48\.78°,\s*-121\.94°/)).toBeTruthy();
+  });
+
+  it('ignores a slow saved-location response that resolves after a chevron click (SCRUM-88)', async () => {
+    // Seattle's forecast stays pending until we resolve it manually
+    let resolveSeattle!: (w: WeatherForecastResponse) => void;
+    (api.fetchWeather as any).mockImplementation((id: number) => {
+      if (id === 2) return new Promise<WeatherForecastResponse>((res) => { resolveSeattle = res; });
+      return Promise.resolve(mockForecast1);
+    });
+
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+
+    // Select Seattle via the modal; its weather request is now in flight
+    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
+    fireEvent.click(await screen.findByText('Seattle, WA'));
+    await waitFor(() => expect(resolveSeattle).toBeDefined());
+
+    // Load a grid point and click its chevron while Seattle is still pending
+    const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
+    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
+    const L = (await import('leaflet')).default as any;
+    const mapInstance = L.map.mock.results[0].value;
+    mapInstance.getBounds.mockReturnValue({
+      getSouth: () => 46.0,
+      getNorth: () => 50.0,
+      getWest: () => -124.0,
+      getEast: () => -120.0,
+    });
+    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
+
+    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
+    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
+    mockMarkerInstances[key]._handlers['click']();
+
+    await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
+
+    // The stale Seattle response arrives late and must not overwrite the chevron forecast
+    resolveSeattle(mockForecast2);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy();
+    expect(within(drawer).queryByText('Seattle, WA')).toBeNull();
+    expect(within(drawer).queryByText('Oak Harbor, WA')).toBeNull();
+  });
+
+  it('shows the saved location name and forecast when selected after a chevron click (SCRUM-88 regression)', async () => {
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+
+    // Click a grid chevron first
+    const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
+    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
+    const L = (await import('leaflet')).default as any;
+    const mapInstance = L.map.mock.results[0].value;
+    mapInstance.getBounds.mockReturnValue({
+      getSouth: () => 46.0,
+      getNorth: () => 50.0,
+      getWest: () => -124.0,
+      getEast: () => -120.0,
+    });
+    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
+
+    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
+    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
+    mockMarkerInstances[key]._handlers['click']();
+    await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
+
+    // Now explicitly select the saved location Seattle
+    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
+    fireEvent.click(await screen.findByText('Seattle, WA'));
+
+    await waitFor(() => expect(within(drawer).getByText('Seattle, WA')).toBeTruthy());
+    expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();
+    expect(screen.getAllByText('20 kt').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('G 30 kt').length).toBeGreaterThan(0);
+
+    // Let any lingering async work settle; the chevron selection must not override Seattle
+    await new Promise((r) => setTimeout(r, 0));
+    expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
+    expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();
   });
 });

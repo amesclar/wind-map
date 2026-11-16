@@ -41,6 +41,7 @@ def setup_test_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS weather_cache;")
+    cursor.execute("DROP TABLE IF EXISTS point_weather_cache;")
     cursor.execute("DROP TABLE IF EXISTS locations;")
     conn.commit()
     conn.close()
@@ -49,6 +50,7 @@ def setup_test_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS weather_cache;")
+    cursor.execute("DROP TABLE IF EXISTS point_weather_cache;")
     cursor.execute("DROP TABLE IF EXISTS locations;")
     conn.commit()
     conn.close()
@@ -123,4 +125,126 @@ def test_weather_forecast_and_cache(client):
     assert data2["cached"] is True
     assert dur2 < 0.2
     assert len(data2["forecast"]) == 16
+
+
+def test_point_weather_returns_forecast(client):
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=MOCK_RAW_RESPONSE,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
+
+    with patch("httpx.AsyncClient.get", return_value=mock_resp):
+        resp = client.get("/api/weather/point?lat=48.29&lon=-122.60")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["location_id"] == 0
+    assert "48.29" in data["location_name"]
+    assert "122.60" in data["location_name"]
+    assert "current" in data
+    assert len(data["forecast"]) == 16
+
+
+def test_point_weather_location_name_format(client):
+    """Name should encode N/S and E/W correctly for all quadrants."""
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=MOCK_RAW_RESPONSE,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
+
+    cases = [
+        (48.29,  -122.60, "N", "W"),
+        (-33.87,  151.21, "S", "E"),
+        (1.0,     -1.0,   "N", "W"),
+        (-1.0,     1.0,   "S", "E"),
+    ]
+
+    for lat, lon, expected_lat_hem, expected_lon_hem in cases:
+        # Wipe the weather cache so location_id=0 doesn't return a stale entry
+        conn = get_db_connection()
+        conn.execute("DELETE FROM weather_cache WHERE location_id = 0;")
+        conn.commit()
+        conn.close()
+
+        with patch("httpx.AsyncClient.get", return_value=mock_resp):
+            resp = client.get(f"/api/weather/point?lat={lat}&lon={lon}")
+        assert resp.status_code == 200
+        name = resp.json()["location_name"]
+        assert expected_lat_hem in name, f"Expected {expected_lat_hem} in '{name}' (lat={lat})"
+        assert expected_lon_hem in name, f"Expected {expected_lon_hem} in '{name}' (lon={lon})"
+
+
+def _mock_resp():
+    return httpx.Response(
+        status_code=200,
+        json=MOCK_RAW_RESPONSE,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
+
+
+def test_point_weather_distinct_points_not_shared(client):
+    with patch("httpx.AsyncClient.get", return_value=_mock_resp()):
+        a = client.get("/api/weather/point?lat=48.78&lon=-121.94").json()
+        b = client.get("/api/weather/point?lat=48.10&lon=-123.20").json()
+    assert a["cached"] is False and b["cached"] is False
+    assert a["location_name"] != b["location_name"]
+    assert (a["latitude"], a["longitude"]) == (48.78, -121.94)
+    assert (b["latitude"], b["longitude"]) == (48.10, -123.20)
+
+
+def test_point_weather_same_point_cached(client):
+    with patch("httpx.AsyncClient.get", return_value=_mock_resp()):
+        first = client.get("/api/weather/point?lat=48.78&lon=-121.94").json()
+    # Second call must not hit Open-Meteo (no patch active).
+    second = client.get("/api/weather/point?lat=48.78&lon=-121.94").json()
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert second["location_name"] == first["location_name"]
+    assert second["latitude"] == 48.78 and second["longitude"] == -121.94
+
+
+def test_saved_location_still_uses_weather_cache(client):
+    loc_id = client.get("/api/locations").json()[0]["id"]
+    with patch("httpx.AsyncClient.get", return_value=_mock_resp()):
+        client.get(f"/api/weather?location_id={loc_id}&model=best_match")
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT COUNT(*) AS n FROM weather_cache WHERE location_id = ?;", (loc_id,)
+    ).fetchone()
+    conn.close()
+    assert rows["n"] == 1
+
+
+def test_point_weather_rejects_invalid_coords(client):
+    assert client.get("/api/weather/point?lat=91&lon=0").status_code == 422
+    assert client.get("/api/weather/point?lat=0&lon=181").status_code == 422
+    assert client.get("/api/weather/point?lat=-91&lon=0").status_code == 422
+
+
+def test_point_weather_requires_lat_and_lon(client):
+    assert client.get("/api/weather/point?lat=48.0").status_code == 422
+    assert client.get("/api/weather/point?lon=-122.0").status_code == 422
+    assert client.get("/api/weather/point").status_code == 422
+
+
+def test_point_weather_forwards_model(client):
+    """The model query param must reach the Open-Meteo request."""
+    mock_resp = httpx.Response(
+        status_code=200,
+        json=MOCK_RAW_RESPONSE,
+        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+    )
+    captured = {}
+
+    async def fake_get(self_or_url, url=None, **kwargs):
+        captured["params"] = kwargs.get("params", {})
+        return mock_resp
+
+    with patch("httpx.AsyncClient.get", new=fake_get):
+        resp = client.get("/api/weather/point?lat=48.0&lon=-122.0&model=gfs_seamless")
+
+    assert resp.status_code == 200
+    assert captured["params"].get("models") == "gfs_seamless"
 

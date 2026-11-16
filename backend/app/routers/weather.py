@@ -77,3 +77,33 @@ async def get_all_locations_weather(
             continue
     return results
 
+
+@router.get("/point", response_model=WeatherForecastResponse)
+async def get_point_weather(
+    lat: float = Query(..., ge=-90, le=90, description="Latitude"),
+    lon: float = Query(..., ge=-180, le=180, description="Longitude"),
+    model: str = Query("best_match", description="Weather forecast model"),
+    timezone: str = Query("America/Los_Angeles", description="Timezone name"),
+) -> WeatherForecastResponse:
+    """
+    Return a full forecast for an arbitrary lat/lon point (no saved location needed).
+    Used by the wind grid overlay chevron click to populate the drawer ephemerally.
+    location_id is 0 and location_name is the formatted coordinates.
+    """
+    location_name = f"{abs(lat):.2f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.2f}°{'E' if lon >= 0 else 'W'}"
+    try:
+        forecast = await get_weather(
+            location_id=0,
+            location_name=location_name,
+            latitude=lat,
+            longitude=lon,
+            model=model,
+            timezone=timezone,
+        )
+        return forecast
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch point weather forecast: {str(exc)}",
+        )
+
