@@ -8,7 +8,9 @@ WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm install
 
-# Build static assets
+# Build static assets. VERSION sits one level above the frontend sources,
+# matching the repo layout that frontend/appVersion.ts expects (SCRUM-91).
+COPY VERSION /VERSION
 COPY frontend/ ./
 RUN npm run build
 
@@ -36,8 +38,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy compiled frontend from Stage 1
 COPY --from=frontend-builder /build/dist /app/static
 
-# Copy backend application
+# Copy backend application and app version (SCRUM-91)
 COPY backend /app/backend
+COPY VERSION /app/VERSION
 
 # Expose web server port
 EXPOSE 5005

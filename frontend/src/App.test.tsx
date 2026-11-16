@@ -452,6 +452,13 @@ describe('App prediction drawer integration', () => {
     expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();
   });
 
+  it('shows the app version from the VERSION file in the navbar (SCRUM-91)', async () => {
+    const { APP_VERSION } = await import('./version');
+    render(<App />);
+    const badge = await screen.findByTestId('app-version');
+    expect(badge.textContent?.trim()).toBe(`v${APP_VERSION}`);
+  });
+
   it('selected map wind barb matches the leftmost drawer wind barb (SCRUM-89)', async () => {
     // Grid "current" wind and the point forecast's "Now" slice (= current) agree;
     // later drawer slices differ so the test proves the leftmost card is compared.

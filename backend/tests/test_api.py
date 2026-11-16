@@ -39,7 +39,9 @@ def client():
 def test_health_check(client):
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert "version" in body  # SCRUM-91; exact value checked in test_version.py
 
 
 def test_config(client):
