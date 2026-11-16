@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { TimelineDrawer } from './TimelineDrawer';
+import { TimelineDrawer, formatDegreesTrue } from './TimelineDrawer';
 import { MapView } from './MapView';
 import type { WeatherForecastPoint, WeatherForecastResponse } from '../types';
 
@@ -96,6 +96,49 @@ describe('timeline drawer forecast', () => {
     expect(screen.getAllByText('54°F').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SW').length).toBeGreaterThan(0);
     expect(screen.getAllByText('64%').length).toBeGreaterThan(0);
+  });
+
+  it.each(['barb', 'cardinal', 'degrees'] as const)(
+    'shows degrees true below the barb and above the wind speed on every card (%s display) (SCRUM-90)',
+    (dirDisplay) => {
+      const data: WeatherForecastResponse = {
+        ...forecast,
+        forecast: forecast.forecast.map((p, i) => (i === 0 ? { ...p, wind_direction_deg: 305.4 } : p)),
+      };
+      const { container } = render(
+        <TimelineDrawer
+          weatherData={data}
+          isLoading={false}
+          unitSystem="imperial"
+          speedUnit="knots"
+          dirDisplay={dirDisplay}
+        />
+      );
+
+      const cards = within(container).getAllByTestId('forecast-point');
+      expect(cards).toHaveLength(16);
+      cards.forEach((card) => {
+        const directionDisplay = within(card).getByTestId('wind-direction-display');
+        const degrees = within(card).getByTestId('wind-direction-true');
+        const speed = within(card).getByTestId('wind-speed');
+        // Order: barb/direction display → degrees true → wind speed
+        expect(directionDisplay.nextElementSibling).toBe(degrees);
+        expect(degrees.nextElementSibling).toBe(speed);
+      });
+      expect(within(cards[0]).getByTestId('wind-direction-true').textContent).toBe('305°T');
+      expect(within(cards[1]).getByTestId('wind-direction-true').textContent).toBe('220°T');
+      cleanup();
+    }
+  );
+
+  it('formats degrees true as whole numbers, normalized to 0–359 (SCRUM-90)', () => {
+    expect(formatDegreesTrue(220)).toBe('220°T');
+    expect(formatDegreesTrue(7.5)).toBe('8°T');
+    expect(formatDegreesTrue(305.4)).toBe('305°T');
+    expect(formatDegreesTrue(0)).toBe('0°T');
+    expect(formatDegreesTrue(360)).toBe('0°T');
+    expect(formatDegreesTrue(359.6)).toBe('0°T');
+    expect(formatDegreesTrue(-10)).toBe('350°T');
   });
 
   it('stays hidden until a location forecast exists', () => {
