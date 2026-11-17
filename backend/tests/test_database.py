@@ -1,4 +1,4 @@
-"""SCRUM-92 phase 1: connection handling and expired-cache cleanup."""
+"""Schema, migrations, connection handling and expired-cache cleanup (SCRUM-92)."""
 
 import sqlite3
 import time
@@ -9,14 +9,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import database
-from backend.app.database import clean_expired_cache, db_connection, get_db_connection
+from backend.app.database import (
+    CACHE_TABLES,
+    SCHEMA_VERSION,
+    clean_expired_cache,
+    db_connection,
+    get_db_connection,
+    init_db,
+)
 from backend.app.main import app
-from backend.app.services.grid_weather_service import _ensure_grid_cache_table
-from backend.app.services.weather_service import POINT_CACHE_DDL, get_weather
+from backend.app.services.weather_service import get_weather
 from factories import insert_grid_row, upstream_error
-
-CACHE_TABLES = ("weather_cache", "point_weather_cache", "grid_weather_cache")
-
 
 def _is_closed(conn: sqlite3.Connection) -> bool:
     try:
@@ -67,8 +70,6 @@ async def test_get_weather_closes_connections_when_open_meteo_fails(open_meteo):
 def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
     now = time.time()
     with db_connection() as conn:
-        conn.execute(POINT_CACHE_DDL)
-        _ensure_grid_cache_table(conn.cursor())
         conn.execute(
             "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
             "VALUES (1, 'a', ?, ?, '{}'), (1, 'b', ?, ?, '{}');",
@@ -88,11 +89,6 @@ def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
             assert conn.execute(f"SELECT COUNT(*) AS n FROM {table};").fetchone()["n"] == 1
 
 
-def test_clean_expired_cache_skips_missing_tables():
-    # Only weather_cache exists after init_db; must not raise for the lazily created ones.
-    assert clean_expired_cache() == 0
-
-
 def test_startup_cleans_expired_cache():
 
     with db_connection() as conn:
@@ -107,3 +103,69 @@ def test_startup_cleans_expired_cache():
         assert conn.execute("SELECT COUNT(*) AS n FROM weather_cache;").fetchone()["n"] == 0
     finally:
         conn.close()
+
+
+def _tables(conn: sqlite3.Connection) -> set[str]:
+    return {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table';").fetchall()}
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {r["name"] for r in conn.execute(f"PRAGMA table_info({table});").fetchall()}
+
+
+def test_init_db_creates_every_table_and_sets_schema_version():
+    with db_connection() as conn:
+        assert {"locations", *CACHE_TABLES} <= _tables(conn)
+        assert "temperature_f" in _columns(conn, "grid_weather_cache")
+        assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_init_db_is_idempotent_and_keeps_data():
+    with db_connection() as conn:
+        conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES ('Keep', 1, 2);")
+        conn.execute(
+            "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
+            "VALUES (1, 'best_match', 0, 9999999999, '{}');"
+        )
+    init_db()
+    with db_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) AS n FROM locations WHERE name = 'Keep';").fetchone()["n"] == 1
+        assert conn.execute("SELECT COUNT(*) AS n FROM weather_cache;").fetchone()["n"] == 1
+
+
+def test_upgrade_from_unversioned_db_resets_caches_and_keeps_locations():
+    """A pre-SCRUM-92 database: old grid table without temperature_f, a point forecast
+    stored in weather_cache under location_id 0, and user_version 0."""
+    with db_connection() as conn:
+        for table in CACHE_TABLES:
+            conn.execute(f"DROP TABLE {table};")
+        conn.execute(
+            "CREATE TABLE grid_weather_cache (lat_key REAL, lon_key REAL, model TEXT, cached_at REAL, "
+            "expires_at REAL, wind_speed_knots REAL, wind_direction_deg REAL, PRIMARY KEY (lat_key, lon_key, model));"
+        )
+        conn.execute("INSERT INTO grid_weather_cache VALUES (48, -122, 'best_match', 0, 9999999999, 7, 90);")
+        conn.execute(
+            "CREATE TABLE weather_cache (id INTEGER PRIMARY KEY, location_id INTEGER, model TEXT, "
+            "cached_at REAL, expires_at REAL, payload_json TEXT, UNIQUE(location_id, model));"
+        )
+        conn.execute("INSERT INTO weather_cache VALUES (1, 0, 'best_match', 0, 9999999999, '{}');")
+        conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES ('Saved', 1, 2);")
+        conn.execute("PRAGMA user_version = 0;")
+
+    init_db()
+
+    with db_connection() as conn:
+        assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+        assert "temperature_f" in _columns(conn, "grid_weather_cache")
+        for table in CACHE_TABLES:
+            assert conn.execute(f"SELECT COUNT(*) AS n FROM {table};").fetchone()["n"] == 0
+        assert conn.execute("SELECT COUNT(*) AS n FROM locations WHERE name = 'Saved';").fetchone()["n"] == 1
+
+
+def test_foreign_keys_are_enforced():
+    with pytest.raises(sqlite3.IntegrityError):
+        with db_connection() as conn:
+            conn.execute(
+                "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
+                "VALUES (999, 'best_match', 0, 1, '{}');"
+            )

@@ -1,4 +1,5 @@
 """Geocoder service and /api/geocode router tests."""
+import httpx
 import pytest
 
 from backend.app.config import OPEN_METEO_GEOCODING_URL
@@ -77,20 +78,31 @@ async def test_query_shorter_than_two_chars_returns_empty_without_http_call(open
 
 
 @pytest.mark.asyncio
-async def test_upstream_failure_returns_empty_list(open_meteo):
-    """Current behaviour: a geocoder outage is swallowed and reported as 'no results'."""
+async def test_upstream_failure_raises(open_meteo):
+    """SCRUM-92: an outage is no longer reported as 'no results'."""
     open_meteo.fail(upstream_error())
 
-    assert await search_locations("Seattle") == []
+    with pytest.raises(httpx.HTTPError):
+        await search_locations("Seattle")
     assert open_meteo.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_upstream_http_error_status_returns_empty_list(open_meteo):
-    """Current behaviour: a 5xx from the geocoder is swallowed and reported as 'no results'."""
+async def test_upstream_http_error_status_raises(open_meteo):
     open_meteo.respond({"error": True}, status=503)
 
-    assert await search_locations("Seattle") == []
+    with pytest.raises(httpx.HTTPStatusError):
+        await search_locations("Seattle")
+
+
+def test_router_reports_upstream_failure_as_502_without_details(client, open_meteo):
+    open_meteo.fail(upstream_error("secret-host.internal refused"))
+
+    resp = client.get("/api/geocode", params={"q": "Seattle"})
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "Failed to search locations with Open-Meteo"
+    assert "secret-host" not in resp.text
 
 
 def test_router_returns_results(client, open_meteo):

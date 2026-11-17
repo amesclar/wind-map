@@ -1,42 +1,28 @@
-"""Weather service handling Open-Meteo API requests and 30-minute caching."""
+"""Weather service: Open-Meteo forecasts with 30-minute caching (CACHE_TTL_SECONDS)."""
 
 import json
 import time
-from typing import Dict, Any, List
-import httpx
-from backend.app.config import OPEN_METEO_FORECAST_URL, CACHE_TTL_SECONDS
+from typing import List
+
+from backend.app.config import (
+    CACHE_TTL_SECONDS,
+    DEFAULT_MODEL,
+    DEFAULT_TIMEZONE,
+    FORECAST_DAYS,
+    FORECAST_POINTS,
+    FORECAST_STEP_HOURS,
+    OPEN_METEO_FORECAST_URL,
+)
 from backend.app.database import db_connection
 from backend.app.models import WeatherForecastPoint, WeatherForecastResponse
+from backend.app.services import open_meteo
+from backend.app.units import as_float, c_to_f, coord_key, deg_to_cardinal, knots_to_units
 
-CARDINALS = [
-    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
-]
+__all__ = ["build_weather_point", "deg_to_cardinal", "get_weather"]
 
-
-# Round point coordinates to 2 decimals (~1.1 km) for cache keys.
-POINT_CACHE_PRECISION = 2
-
-POINT_CACHE_DDL = """
-CREATE TABLE IF NOT EXISTS point_weather_cache (
-    lat_key      REAL NOT NULL,
-    lon_key      REAL NOT NULL,
-    model        TEXT NOT NULL,
-    cached_at    REAL NOT NULL,
-    expires_at   REAL NOT NULL,
-    payload_json TEXT NOT NULL,
-    PRIMARY KEY (lat_key, lon_key, model)
-);
-"""
-
-
-def _point_cache_key(lat: float, lon: float) -> tuple[float, float]:
-    return (round(lat, POINT_CACHE_PRECISION), round(lon, POINT_CACHE_PRECISION))
-
-
-def deg_to_cardinal(deg: float) -> str:
-    idx = int((deg + 11.25) / 22.5) % 16
-    return CARDINALS[idx]
+FORECAST_VARIABLES = (
+    "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,wind_gusts_10m"
+)
 
 
 def build_weather_point(
@@ -46,39 +32,27 @@ def build_weather_point(
     wind_knots: float | None,
     wind_deg: float | None,
     weather_code: int | None,
-    gust_knots: float | None = 0.0,
+    gust_knots: float | None = None,
 ) -> WeatherForecastPoint:
-    temp_c_val = 0.0 if temp_c is None else float(temp_c)
-    humidity_val = 0.0 if humidity is None else float(humidity)
-    wind_knots_val = 0.0 if wind_knots is None else float(wind_knots)
-    wind_deg_val = 0.0 if wind_deg is None else float(wind_deg)
-    weather_code_val = 0 if weather_code is None else int(weather_code)
-    gust_knots_val = 0.0 if gust_knots is None else float(gust_knots)
-
-    temp_f = round(temp_c_val * 9.0 / 5.0 + 32.0, 1)
-    wind_kmh = round(wind_knots_val * 1.852, 1)
-    wind_mph = round(wind_knots_val * 1.15078, 1)
-    wind_ms = round(wind_knots_val * 0.514444, 1)
-    gust_kmh = round(gust_knots_val * 1.852, 1)
-    gust_mph = round(gust_knots_val * 1.15078, 1)
-    gust_ms = round(gust_knots_val * 0.514444, 1)
-
+    wind = knots_to_units(wind_knots)
+    gust = knots_to_units(gust_knots)
+    wind_deg_val = as_float(wind_deg)
     return WeatherForecastPoint(
         time=time_str,
-        temperature_c=round(temp_c_val, 1),
-        temperature_f=temp_f,
-        wind_speed_knots=round(wind_knots_val, 1),
-        wind_speed_kmh=wind_kmh,
-        wind_speed_mph=wind_mph,
-        wind_speed_ms=wind_ms,
-        wind_gust_knots=round(gust_knots_val, 1),
-        wind_gust_kmh=gust_kmh,
-        wind_gust_mph=gust_mph,
-        wind_gust_ms=gust_ms,
+        temperature_c=round(as_float(temp_c), 1),
+        temperature_f=c_to_f(temp_c),
+        wind_speed_knots=wind["knots"],
+        wind_speed_kmh=wind["kmh"],
+        wind_speed_mph=wind["mph"],
+        wind_speed_ms=wind["ms"],
+        wind_gust_knots=gust["knots"],
+        wind_gust_kmh=gust["kmh"],
+        wind_gust_mph=gust["mph"],
+        wind_gust_ms=gust["ms"],
         wind_direction_deg=round(wind_deg_val, 1),
         wind_direction_cardinal=deg_to_cardinal(wind_deg_val),
-        humidity=round(humidity_val, 1),
-        weather_code=weather_code_val,
+        humidity=round(as_float(humidity), 1),
+        weather_code=0 if weather_code is None else int(weather_code),
     )
 
 
@@ -87,21 +61,20 @@ async def get_weather(
     location_name: str,
     latitude: float,
     longitude: float,
-    model: str = "best_match",
-    timezone: str = "America/Los_Angeles",
+    model: str = DEFAULT_MODEL,
+    timezone: str = DEFAULT_TIMEZONE,
 ) -> WeatherForecastResponse:
     now = time.time()
 
     # Ad-hoc map points (location_id == 0) are cached by coordinates; saved
     # locations keep using weather_cache keyed by (location_id, model).
     is_point = location_id == 0
-    lat_key, lon_key = _point_cache_key(latitude, longitude)
+    lat_key, lon_key = coord_key(latitude, longitude)
 
     # Short-lived connection for the cache read; no connection is held during the HTTP call.
     with db_connection() as conn:
         cursor = conn.cursor()
         if is_point:
-            cursor.execute(POINT_CACHE_DDL)
             cursor.execute(
                 """
                 SELECT payload_json, cached_at, expires_at
@@ -134,24 +107,16 @@ async def get_weather(
         )
 
     # Fetch from Open-Meteo API
-    params: Dict[str, Any] = {
+    params = {
+        **open_meteo.forecast_params(model),
         "latitude": latitude,
         "longitude": longitude,
-        "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,wind_gusts_10m",
-        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,wind_gusts_10m",
-        "wind_speed_unit": "kn",
+        "hourly": FORECAST_VARIABLES,
+        "current": FORECAST_VARIABLES,
         "timezone": timezone,
-        "forecast_days": 4,
+        "forecast_days": FORECAST_DAYS,
     }
-
-    if model and model != "best_match":
-        params["models"] = model
-
-    transport = httpx.AsyncHTTPTransport(retries=2)
-    async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
-        resp = await client.get(OPEN_METEO_FORECAST_URL, params=params)
-        resp.raise_for_status()
-        raw_data = resp.json()
+    raw_data = await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params)
 
     # Parse current point
     curr = raw_data.get("current", {})
@@ -165,7 +130,7 @@ async def get_weather(
         gust_knots=curr.get("wind_gusts_10m"),
     )
 
-    # Parse 16 points starting from now every 3 hours
+    # FORECAST_POINTS slices starting at the current hour, every FORECAST_STEP_HOURS
     hourly = raw_data.get("hourly", {})
     hourly_times: List[str] = hourly.get("time", []) or []
     hourly_temps: List[float] = hourly.get("temperature_2m", []) or []
@@ -182,8 +147,8 @@ async def get_weather(
         start_idx = 0
 
     forecast_points: List[WeatherForecastPoint] = []
-    for i in range(16):
-        idx = start_idx + (i * 3)
+    for i in range(FORECAST_POINTS):
+        idx = start_idx + (i * FORECAST_STEP_HOURS)
         if idx < len(hourly_times):
             forecast_points.append(
                 build_weather_point(

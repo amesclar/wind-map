@@ -66,6 +66,10 @@ data should persist across docker container restarts
 
 Backend: FastAPI (Python 3.11+) with SQLite caching (30min TTL), geocoding proxy, and location CRUD endpoints (GET/POST/DELETE).
 + Expired rows in all cache tables (`weather_cache`, `point_weather_cache`, `grid_weather_cache`) are deleted at startup (SCRUM-92).
++ Schema (SCRUM-92): all tables are created in `backend/app/database.py` at startup, versioned with SQLite `PRAGMA user_version`. On a version upgrade the cache tables are recreated (they only hold refetchable data); saved locations are kept. Foreign keys are enforced, so deleting a location deletes its cached forecasts.
++ `model` must be one of the ids from `GET /api/weather/models`; any other value returns 422 without calling Open-Meteo (SCRUM-92).
++ `GET /api/geocode` returns 502 when the geocoder is unavailable, instead of an empty list (SCRUM-92). The search box still shows no results in that case.
++ Settings such as the default model and timezone, forecast shape (16 slices every 3 hours), cache-key precision, grid limit, duplicate-location radius and Open-Meteo timeouts are named constants in `backend/app/config.py`.
 + DB connections are always closed, including when Open-Meteo fails; no connection is held open during Open-Meteo requests (SCRUM-92).
 + Error handling (SCRUM-92): Open-Meteo failures return 502 with a fixed message (details are logged, never returned to the client); other errors return 500. `/api/weather/all` logs and skips locations whose forecast fails.
 + CORS (SCRUM-92): off by default (the app serves its own frontend and the Vite dev server proxies `/api`). Set `CORS_ORIGINS` (comma-separated) to allow cross-origin access; credentials are never allowed.

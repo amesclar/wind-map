@@ -1,16 +1,11 @@
 """Tests for the wind grid endpoint and grid_weather_service."""
 
-import time
 
 import pytest
 
-from backend.app.database import db_connection, get_db_connection
-from backend.app.services.grid_weather_service import (
-    CACHE_PRECISION,
-    _cache_key,
-    _fetch_from_open_meteo,
-    get_grid_wind,
-)
+from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
+from backend.app.services.grid_weather_service import _fetch_from_open_meteo, get_grid_wind
+from backend.app.units import coord_key as _cache_key
 from factories import grid_item, grid_payload, insert_grid_row, upstream_error
 
 BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
@@ -141,7 +136,7 @@ async def test_get_grid_wind_cache_miss_then_hit(open_meteo):
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_partial_cache_hit(open_meteo, grid_cache_table):
+async def test_get_grid_wind_partial_cache_hit(open_meteo):
     """When some points are cached and others are not, only missing points are fetched."""
     insert_grid_row(48.0, -122.0, speed=7.0, direction=90.0, temperature_f=55.0)  # pre-seed one point
 
@@ -159,7 +154,7 @@ async def test_get_grid_wind_partial_cache_hit(open_meteo, grid_cache_table):
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_expired_cache_refetches(open_meteo, grid_cache_table):
+async def test_get_grid_wind_expired_cache_refetches(open_meteo):
     """An expired cache entry should trigger a fresh API call."""
     insert_grid_row(48.0, -122.0, speed=3.0, direction=45.0, expires_in=-10)  # already expired
 
@@ -312,35 +307,16 @@ async def test_get_grid_wind_caches_temperature(open_meteo):
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_migrates_old_table_and_refetches_rows_without_temperature(open_meteo):
-    """An existing cache table without temperature_f gains the column; old rows are refetched."""
-    now = time.time()
-    with db_connection() as conn:
-        conn.execute(
-            """
-            CREATE TABLE grid_weather_cache (
-                lat_key REAL NOT NULL, lon_key REAL NOT NULL, model TEXT NOT NULL,
-                cached_at REAL NOT NULL, expires_at REAL NOT NULL,
-                wind_speed_knots REAL NOT NULL, wind_direction_deg REAL NOT NULL,
-                PRIMARY KEY (lat_key, lon_key, model)
-            );
-            """
-        )
-        conn.execute(
-            "INSERT INTO grid_weather_cache VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0)",
-            (now, now + 3600),
-        )
-
+async def test_get_grid_wind_refetches_cached_rows_without_temperature(open_meteo):
+    """A cached row with no temperature (e.g. written before SCRUM-89) is a cache miss."""
+    insert_grid_row(48.0, -122.0, speed=7.0, direction=90.0, temperature_f=None)
     open_meteo.respond(grid_payload(grid_item(9.0, 100.0, temp_c=0.0)))
-    result = await get_grid_wind([(48.0, -122.0)], "best_match")
-    assert open_meteo.call_count == 1  # old row has no temperature → cache miss
 
+    result = await get_grid_wind([(48.0, -122.0)], "best_match")
+
+    assert open_meteo.call_count == 1
     assert result[0].temperature_f == 32.0
     assert result[0].wind_speed_knots == 9.0
-    conn = get_db_connection()
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(grid_weather_cache)").fetchall()}
-    conn.close()
-    assert "temperature_f" in cols
 
 
 def test_grid_endpoint_includes_temperature_f(client, open_meteo):

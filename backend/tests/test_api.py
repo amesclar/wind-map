@@ -85,3 +85,44 @@ def test_cross_origin_requests_get_no_cors_headers_by_default(client):
     assert resp.status_code == 200
     assert "access-control-allow-origin" not in resp.headers
     assert "access-control-allow-credentials" not in resp.headers
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 3: locations repository behaviour
+# ---------------------------------------------------------------------------
+
+def test_deleting_a_location_cascades_to_its_cached_forecasts(client, open_meteo):
+    from backend.app.database import db_connection
+    from factories import forecast_payload
+
+    loc = client.post("/api/locations", json={"name": "Tmp", "latitude": 10.0, "longitude": 20.0}).json()
+    open_meteo.respond(forecast_payload())
+    assert client.get(f"/api/weather?location_id={loc['id']}").status_code == 200
+
+    def cached_rows() -> int:
+        with db_connection() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) AS n FROM weather_cache WHERE location_id = ?;", (loc["id"],)
+            ).fetchone()["n"]
+
+    assert cached_rows() == 1
+    assert client.delete(f"/api/locations/{loc['id']}").status_code == 204
+    assert cached_rows() == 0  # removed by ON DELETE CASCADE, not by router code
+
+
+def test_delete_unknown_location_is_404(client):
+    resp = client.delete("/api/locations/9999")
+    assert resp.status_code == 404
+
+
+def test_nearby_location_returns_the_existing_one(client):
+    first = client.post("/api/locations", json={"name": "A", "latitude": 10.0, "longitude": 20.0}).json()
+    near = client.post("/api/locations", json={"name": "B", "latitude": 10.004, "longitude": 20.004}).json()
+    far = client.post("/api/locations", json={"name": "C", "latitude": 10.01, "longitude": 20.0}).json()
+    assert near["id"] == first["id"] and near["name"] == "A"
+    assert far["id"] != first["id"]
+
+
+def test_weather_for_unknown_location_is_404(client, open_meteo):
+    assert client.get("/api/weather?location_id=9999").status_code == 404
+    assert open_meteo.call_count == 0

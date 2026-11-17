@@ -52,6 +52,13 @@ DEFAULT_LOCATION = {
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
+# Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
+OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
+OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 900 points)
+OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
+OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
+OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
+
 # Map Settings
 CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
 
@@ -62,4 +69,24 @@ AVAILABLE_MODELS = [
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
 ]
+MODEL_IDS = frozenset(m["id"] for m in AVAILABLE_MODELS)
+DEFAULT_MODEL = "best_match"  # Open-Meteo picks the best model; no `models` param is sent
+DEFAULT_TIMEZONE = "America/Los_Angeles"  # Pacific, per requirements
+
+# Forecast shape: 16 slices every 3 hours = 48 hours, starting at the current hour.
+FORECAST_POINTS = 16
+FORECAST_STEP_HOURS = 3
+# Hourly data starts at local midnight, so the last slice can be up to
+# 23 + (16 - 1) * 3 = 68 hours in; 4 days (96 hours) covers that with a margin.
+FORECAST_DAYS = 4
+assert 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24, "FORECAST_DAYS too small"
+
+# Cache keys round coordinates to 2 decimals (~1.1 km), for point and grid caches.
+COORD_CACHE_PRECISION = 2
+
+# Wind grid limits (per axis) to prevent runaway requests.
+GRID_MAX_DIM = 30
+
+# A new location within this many degrees (~500 m) of a saved one is treated as the same.
+DUPLICATE_LOCATION_RADIUS_DEG = 0.005
 

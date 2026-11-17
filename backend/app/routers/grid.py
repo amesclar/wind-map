@@ -3,7 +3,9 @@
 import logging
 from typing import List
 import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from backend.app.config import GRID_MAX_DIM
+from backend.app.dependencies import model_param
 from backend.app.models import GridWindPoint
 from backend.app.services.grid_weather_service import get_grid_wind
 
@@ -12,8 +14,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/weather/grid", tags=["grid"])
 
 # Hard limits to prevent runaway requests
-MAX_COLS = 30
-MAX_ROWS = 30
+MAX_COLS = GRID_MAX_DIM
+MAX_ROWS = GRID_MAX_DIM
 
 
 @router.get("", response_model=List[GridWindPoint])
@@ -24,16 +26,16 @@ async def get_wind_grid(
     max_lon: float = Query(..., ge=-180, le=180),
     cols: int = Query(..., ge=2, le=MAX_COLS),
     rows: int = Query(..., ge=2, le=MAX_ROWS),
-    model: str = Query("best_match"),
+    model: str = Depends(model_param),
 ) -> List[GridWindPoint]:
     if min_lat >= max_lat:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail="min_lat must be less than max_lat",
         )
     if min_lon >= max_lon:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail="min_lon must be less than max_lon",
         )
 
