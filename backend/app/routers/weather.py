@@ -1,13 +1,22 @@
 """Weather API router: weather forecast endpoints."""
 
-from typing import List, Dict, Any
+import logging
+from typing import List, Dict
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from backend.app.config import AVAILABLE_MODELS
-from backend.app.database import get_db_connection
+from backend.app.database import db_connection
 from backend.app.models import WeatherForecastResponse
 from backend.app.services.weather_service import get_weather
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/weather", tags=["weather"])
+
+
+def upstream_error(message: str) -> HTTPException:
+    """502 for Open-Meteo failures. The message is fixed; details go to the log only."""
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
 
 
 @router.get("/models")
@@ -21,11 +30,8 @@ async def get_location_weather(
     model: str = Query("best_match", description="Weather forecast model"),
     timezone: str = Query("America/Los_Angeles", description="Timezone name"),
 ) -> WeatherForecastResponse:
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM locations WHERE id = ?;", (location_id,))
-    row = cursor.fetchone()
-    conn.close()
+    with db_connection() as conn:
+        row = conn.execute("SELECT * FROM locations WHERE id = ?;", (location_id,)).fetchone()
 
     if not row:
         raise HTTPException(
@@ -34,7 +40,7 @@ async def get_location_weather(
         )
 
     try:
-        forecast = await get_weather(
+        return await get_weather(
             location_id=row["id"],
             location_name=row["name"],
             latitude=row["latitude"],
@@ -42,12 +48,9 @@ async def get_location_weather(
             model=model,
             timezone=timezone,
         )
-        return forecast
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch weather forecast: {str(exc)}",
-        )
+    except httpx.HTTPError as exc:
+        logger.exception("Open-Meteo forecast request failed for location %s", location_id)
+        raise upstream_error("Failed to fetch weather forecast from Open-Meteo") from exc
 
 
 @router.get("/all", response_model=List[WeatherForecastResponse])
@@ -55,11 +58,8 @@ async def get_all_locations_weather(
     model: str = Query("best_match", description="Weather forecast model"),
     timezone: str = Query("America/Los_Angeles", description="Timezone name"),
 ) -> List[WeatherForecastResponse]:
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM locations ORDER BY id ASC;")
-    rows = cursor.fetchall()
-    conn.close()
+    with db_connection() as conn:
+        rows = conn.execute("SELECT * FROM locations ORDER BY id ASC;").fetchall()
 
     results: List[WeatherForecastResponse] = []
     for row in rows:
@@ -73,7 +73,9 @@ async def get_all_locations_weather(
                 timezone=timezone,
             )
             results.append(fc)
-        except Exception:
+        except httpx.HTTPError:
+            # One failing location must not hide the others; it is logged, not swallowed.
+            logger.exception("Open-Meteo forecast request failed for location %s; skipping", row["id"])
             continue
     return results
 
@@ -87,12 +89,12 @@ async def get_point_weather(
 ) -> WeatherForecastResponse:
     """
     Return a full forecast for an arbitrary lat/lon point (no saved location needed).
-    Used by the wind grid overlay chevron click to populate the drawer ephemerally.
+    Used by the wind grid overlay barb click to populate the drawer ephemerally.
     location_id is 0 and location_name is the formatted coordinates.
     """
     location_name = f"{abs(lat):.2f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.2f}°{'E' if lon >= 0 else 'W'}"
     try:
-        forecast = await get_weather(
+        return await get_weather(
             location_id=0,
             location_name=location_name,
             latitude=lat,
@@ -100,10 +102,6 @@ async def get_point_weather(
             model=model,
             timezone=timezone,
         )
-        return forecast
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch point weather forecast: {str(exc)}",
-        )
-
+    except httpx.HTTPError as exc:
+        logger.exception("Open-Meteo point forecast request failed for %s,%s", lat, lon)
+        raise upstream_error("Failed to fetch point weather forecast from Open-Meteo") from exc

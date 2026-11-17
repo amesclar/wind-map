@@ -5,7 +5,7 @@ import time
 from typing import Dict, Any, List
 import httpx
 from backend.app.config import OPEN_METEO_FORECAST_URL, CACHE_TTL_SECONDS
-from backend.app.database import get_db_connection
+from backend.app.database import db_connection
 from backend.app.models import WeatherForecastPoint, WeatherForecastResponse
 
 CARDINALS = [
@@ -91,42 +91,42 @@ async def get_weather(
     timezone: str = "America/Los_Angeles",
 ) -> WeatherForecastResponse:
     now = time.time()
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
     # Ad-hoc map points (location_id == 0) are cached by coordinates; saved
     # locations keep using weather_cache keyed by (location_id, model).
     is_point = location_id == 0
     lat_key, lon_key = _point_cache_key(latitude, longitude)
 
-    if is_point:
-        cursor.execute(POINT_CACHE_DDL)
-        conn.commit()
-        cursor.execute(
-            """
-            SELECT payload_json, cached_at, expires_at
-            FROM point_weather_cache
-            WHERE lat_key = ? AND lon_key = ? AND model = ?;
-            """,
-            (lat_key, lon_key, model),
-        )
-    else:
-        cursor.execute(
-            """
-            SELECT payload_json, cached_at, expires_at
-            FROM weather_cache
-            WHERE location_id = ? AND model = ?;
-            """,
-            (location_id, model),
-        )
-    row = cursor.fetchone()
+    # Short-lived connection for the cache read; no connection is held during the HTTP call.
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        if is_point:
+            cursor.execute(POINT_CACHE_DDL)
+            cursor.execute(
+                """
+                SELECT payload_json, cached_at, expires_at
+                FROM point_weather_cache
+                WHERE lat_key = ? AND lon_key = ? AND model = ?;
+                """,
+                (lat_key, lon_key, model),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT payload_json, cached_at, expires_at
+                FROM weather_cache
+                WHERE location_id = ? AND model = ?;
+                """,
+                (location_id, model),
+            )
+        row = cursor.fetchone()
+
     if row and row["expires_at"] > now:
         cached_data = json.loads(row["payload_json"])
         if is_point:
             cached_data["location_name"] = location_name
             cached_data["latitude"] = latitude
             cached_data["longitude"] = longitude
-        conn.close()
         return WeatherForecastResponse(
             **cached_data,
             cached=True,
@@ -218,32 +218,31 @@ async def get_weather(
 
     # Store in cache
     expires_at = now + CACHE_TTL_SECONDS
-    if is_point:
-        cursor.execute(
-            """
-            INSERT INTO point_weather_cache (lat_key, lon_key, model, cached_at, expires_at, payload_json)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(lat_key, lon_key, model) DO UPDATE SET
-                cached_at=excluded.cached_at,
-                expires_at=excluded.expires_at,
-                payload_json=excluded.payload_json;
-            """,
-            (lat_key, lon_key, model, now, expires_at, json.dumps(result_dict)),
-        )
-    else:
-        cursor.execute(
-            """
-            INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(location_id, model) DO UPDATE SET
-                cached_at=excluded.cached_at,
-                expires_at=excluded.expires_at,
-                payload_json=excluded.payload_json;
-            """,
-            (location_id, model, now, expires_at, json.dumps(result_dict)),
-        )
-    conn.commit()
-    conn.close()
+    with db_connection() as conn:
+        if is_point:
+            conn.execute(
+                """
+                INSERT INTO point_weather_cache (lat_key, lon_key, model, cached_at, expires_at, payload_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(lat_key, lon_key, model) DO UPDATE SET
+                    cached_at=excluded.cached_at,
+                    expires_at=excluded.expires_at,
+                    payload_json=excluded.payload_json;
+                """,
+                (lat_key, lon_key, model, now, expires_at, json.dumps(result_dict)),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(location_id, model) DO UPDATE SET
+                    cached_at=excluded.cached_at,
+                    expires_at=excluded.expires_at,
+                    payload_json=excluded.payload_json;
+                """,
+                (location_id, model, now, expires_at, json.dumps(result_dict)),
+            )
 
     return WeatherForecastResponse(
         **result_dict,

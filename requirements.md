@@ -65,6 +65,10 @@ use a local SQLite database to store the locations and weather data
 data should persist across docker container restarts
 
 Backend: FastAPI (Python 3.11+) with SQLite caching (30min TTL), geocoding proxy, and location CRUD endpoints (GET/POST/DELETE).
++ Expired rows in all cache tables (`weather_cache`, `point_weather_cache`, `grid_weather_cache`) are deleted at startup (SCRUM-92).
++ DB connections are always closed, including when Open-Meteo fails; no connection is held open during Open-Meteo requests (SCRUM-92).
++ Error handling (SCRUM-92): Open-Meteo failures return 502 with a fixed message (details are logged, never returned to the client); other errors return 500. `/api/weather/all` logs and skips locations whose forecast fails.
++ CORS (SCRUM-92): off by default (the app serves its own frontend and the Vite dev server proxies `/api`). Set `CORS_ORIGINS` (comma-separated) to allow cross-origin access; credentials are never allowed.
 
 # units
 there should be a toggle between Metric and Imperial
@@ -79,6 +83,10 @@ Wind direction: Degrees (0, 90, 180, 270, 360) or cardinal directions (N, NE, SW
 use a minimalist ui
 
 Frontend: React + Vite + Leaflet + TailwindCSS in dark minimalist style.
++ Location names and regions are HTML-escaped before being placed in map popups (SCRUM-92).
++ Wind grid requests are cancelled when superseded; only the latest response draws barbs, and a failed request is retried on the next pan/zoom (SCRUM-92).
++ Code quality (SCRUM-92): ESLint (`npm run lint`, TypeScript + React hooks rules, zero warnings allowed) and TypeScript `noUnusedLocals` / `noUnusedParameters`.
++ Refactoring plan and progress: `SCRUM-92-refactor-maintainability.md`.
 
 # containerization
 the application should run in a self contained docker environment, using a lightweight framework (ie. Flask, FastAPI, etc.) and a database to store the locations and weather data and open source map library to display the map and open source weather api

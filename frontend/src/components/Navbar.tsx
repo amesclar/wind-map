@@ -4,7 +4,6 @@ import {
   Wind,
   Layers,
   MapPin,
-  Settings,
   Clock,
   Map,
 } from 'lucide-react';
@@ -14,7 +13,6 @@ import {
   WindSpeedUnit,
   WindDirDisplay,
   GeocodeResult,
-  MapTileLayer,
 } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 

@@ -277,3 +277,49 @@ def test_first_forecast_slice_uses_current_conditions(client):
     assert forecast[1]["time"] == "2026-11-12T15:00"
     assert forecast[1]["wind_speed_knots"] == 15.0
     assert forecast[1]["wind_direction_deg"] == 220
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 1: specific error handling
+# ---------------------------------------------------------------------------
+
+def _upstream_error():
+    return httpx.ConnectError(
+        "secret-host.internal refused", request=httpx.Request("GET", "https://api.open-meteo.com")
+    )
+
+
+def test_location_weather_upstream_failure_is_502_without_internal_detail(client):
+    loc_id = client.get("/api/locations").json()[0]["id"]
+    with patch("httpx.AsyncClient.get", side_effect=_upstream_error()):
+        resp = client.get(f"/api/weather?location_id={loc_id}")
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "Failed to fetch weather forecast from Open-Meteo"
+    assert "secret-host" not in resp.text
+
+
+def test_point_weather_upstream_failure_is_502_without_internal_detail(client):
+    with patch("httpx.AsyncClient.get", side_effect=_upstream_error()):
+        resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "Failed to fetch point weather forecast from Open-Meteo"
+    assert "secret-host" not in resp.text
+
+
+def test_programming_errors_are_500_not_502():
+    """Non-HTTP errors (bugs) must not be reported as an upstream failure."""
+    with TestClient(app, raise_server_exceptions=False) as c:
+        with patch(
+            "backend.app.routers.weather.get_weather", side_effect=KeyError("bug")
+        ):
+            resp = c.get("/api/weather/point?lat=48.0&lon=-122.0")
+    assert resp.status_code == 500
+
+
+def test_all_weather_skips_and_logs_failed_location(client, caplog):
+    with patch("httpx.AsyncClient.get", side_effect=_upstream_error()):
+        with caplog.at_level("ERROR", logger="backend.app.routers.weather"):
+            resp = client.get("/api/weather/all")
+    assert resp.status_code == 200
+    assert resp.json() == []
+    assert "skipping" in caplog.text

@@ -113,6 +113,16 @@ describe('fetchWindGrid', () => {
 
     await expect(fetchWindGrid(BASE_PARAMS)).rejects.toThrow('Network failure');
   });
+
+  it('forwards an AbortSignal to fetch (SCRUM-92)', async () => {
+    const spy = mockFetch(MOCK_GRID);
+    vi.stubGlobal('fetch', spy);
+    const controller = new AbortController();
+
+    await fetchWindGrid(BASE_PARAMS, { signal: controller.signal });
+
+    expect(spy.mock.calls[0][1]).toEqual({ signal: controller.signal });
+  });
 });
 
 // ---------------------------------------------------------------------------

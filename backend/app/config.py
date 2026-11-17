@@ -28,6 +28,17 @@ APP_VERSION = read_app_version()
 # Cache settings
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "1800"))  # 30 minutes
 
+
+def parse_cors_origins(value: str | None) -> list[str]:
+    """Comma-separated list of allowed cross-origin hosts. Empty means same-origin only."""
+    return [o.strip() for o in (value or "").split(",") if o.strip()]
+
+
+# CORS (SCRUM-92): the app serves its own frontend, and `npm run dev` proxies /api through
+# Vite, so cross-origin access is off by default. Set CORS_ORIGINS to enable it,
+# e.g. CORS_ORIGINS=http://localhost:5173
+CORS_ORIGINS = parse_cors_origins(os.getenv("CORS_ORIGINS"))
+
 # Default seeded location
 DEFAULT_LOCATION = {
     "name": "Oak Harbor, WA",

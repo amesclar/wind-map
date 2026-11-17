@@ -105,7 +105,7 @@ export async function fetchWindGrid(params: {
   cols: number;
   rows: number;
   model?: string;
-}): Promise<GridWindPoint[]> {
+}, options: { signal?: AbortSignal } = {}): Promise<GridWindPoint[]> {
   const p = new URLSearchParams({
     min_lat: params.min_lat.toString(),
     max_lat: params.max_lat.toString(),
@@ -115,7 +115,7 @@ export async function fetchWindGrid(params: {
     rows: params.rows.toString(),
     model: params.model ?? 'best_match',
   });
-  const res = await fetch(`${API_BASE}/weather/grid?${p}`);
+  const res = await fetch(`${API_BASE}/weather/grid?${p}`, { signal: options.signal });
   if (!res.ok) throw new Error('Failed to fetch wind grid');
   return res.json();
 }

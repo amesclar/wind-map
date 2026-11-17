@@ -1,21 +1,24 @@
 """FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.config import STATIC_DIR, CARTO_API_KEY, APP_VERSION
-from backend.app.database import init_db
+from backend.app.config import STATIC_DIR, CARTO_API_KEY, APP_VERSION, CORS_ORIGINS
+from backend.app.database import clean_expired_cache, init_db
 from backend.app.routers import geocode, grid, locations, weather
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize SQLite database and default seed
+    # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
+    clean_expired_cache()
     yield
 
 
@@ -26,14 +29,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware for development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS only when explicitly configured (CORS_ORIGINS). The API uses no cookies or auth,
+# so credentials are never allowed cross-origin.
+if CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Content-Type"],
+    )
 
 # Register API routers
 app.include_router(locations.router)

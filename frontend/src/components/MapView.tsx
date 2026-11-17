@@ -4,6 +4,7 @@ import { SavedLocation, WeatherForecastResponse, MapTileLayer } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay, SelectedGridPoint } from './WindOverlay';
 import { GridWindPoint } from '../api/client';
+import { escapeHtml } from '../utils/html';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -15,7 +16,7 @@ interface MapViewProps {
   selectedModel: string;
   windOverlayVisible: boolean;
   selectedGridPoint: SelectedGridPoint | null;
-  onChevronClick: (pt: GridWindPoint) => void;
+  onGridPointSelect: (pt: GridWindPoint) => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -28,12 +29,18 @@ export const MapView: React.FC<MapViewProps> = ({
   selectedModel,
   windOverlayVisible,
   selectedGridPoint,
-  onChevronClick,
+  onGridPointSelect,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef<Record<number, L.Marker>>({});
+
+  // Latest click handler, so marker click listeners never go stale (SCRUM-92).
+  const onSelectLocationRef = useRef(onSelectLocation);
+  useEffect(() => {
+    onSelectLocationRef.current = onSelectLocation;
+  }, [onSelectLocation]);
 
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
@@ -62,6 +69,8 @@ export const MapView: React.FC<MapViewProps> = ({
       mapInstanceRef.current = null;
       setMapInstance(null);
     };
+    // The Leaflet map is created once; selectedLocation only sets its initial center.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update Tile Layer whenever tileLayerType or cartoApiKey changes
@@ -157,9 +166,9 @@ export const MapView: React.FC<MapViewProps> = ({
 
       const popupContent = `
         <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
-          <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${loc.name}</div>
+          <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${escapeHtml(loc.name)}</div>
           <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">
-            ${[loc.admin1, loc.country].filter(Boolean).join(', ') || `${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°`}
+            ${escapeHtml([loc.admin1, loc.country].filter(Boolean).join(', ') || `${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°`)}
           </div>
           <div style="display: flex; gap: 8px; font-weight: 600;">
             <span style="color: #38bdf8;">💨 ${speedDisplay}</span>
@@ -167,16 +176,17 @@ export const MapView: React.FC<MapViewProps> = ({
             <span style="color: #4ade80;">🌡️ ${tempDisplay}</span>
           </div>
           <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">
-            🧭 ${windDirDisplay}
+            🧭 ${escapeHtml(windDirDisplay)}
           </div>
         </div>
       `;
 
       marker.bindPopup(popupContent);
-      marker.on('click', () => onSelectLocation(loc));
+      marker.on('click', () => onSelectLocationRef.current(loc));
       markersRef.current[loc.id] = marker;
     });
-  }, [locations, weatherMap, selectedLocation, onSelectLocation]);
+    // onSelectLocation is read through a ref so a new handler identity doesn't rebuild markers.
+  }, [locations, weatherMap, selectedLocation]);
 
   // Fly to selected location
   useEffect(() => {
@@ -204,7 +214,7 @@ export const MapView: React.FC<MapViewProps> = ({
         model={selectedModel}
         visible={windOverlayVisible}
         selectedPoint={selectedGridPoint}
-        onChevronClick={onChevronClick}
+        onGridPointSelect={onGridPointSelect}
       />
     </div>
   );

@@ -1,11 +1,10 @@
 """Grid weather service: fetch wind data for a lat/lon grid using Open-Meteo batch requests."""
 
-import json
 import time
 from typing import List, Optional, Tuple
 import httpx
 from backend.app.config import OPEN_METEO_FORECAST_URL, CACHE_TTL_SECONDS
-from backend.app.database import get_db_connection
+from backend.app.database import db_connection
 from backend.app.models import GridWindPoint
 
 # Round coordinates to this many decimal places for cache keys.
@@ -35,10 +34,18 @@ async def get_grid_wind(
         return []
 
     now = time.time()
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    results, missing = _read_cached_points(points, model, now)
+    if not missing:
+        return results
 
-    # Ensure grid cache table exists (migration-safe, idempotent).
+    # No DB connection is held during the HTTP call.
+    fetched = await _fetch_from_open_meteo(missing, model)
+    _store_points(fetched, model, now)
+    return results + fetched
+
+
+def _ensure_grid_cache_table(cursor) -> None:
+    """Create grid_weather_cache if needed (SCRUM-92 phase 3 moves this into init_db)."""
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS grid_weather_cache (
@@ -59,36 +66,44 @@ async def get_grid_wind(
     columns = {r["name"] for r in cursor.execute("PRAGMA table_info(grid_weather_cache)").fetchall()}
     if "temperature_f" not in columns:
         cursor.execute("ALTER TABLE grid_weather_cache ADD COLUMN temperature_f REAL")
-    conn.commit()
 
+
+def _read_cached_points(
+    points: List[Tuple[float, float]], model: str, now: float
+) -> Tuple[List[GridWindPoint], List[Tuple[float, float]]]:
+    """Split points into cached results and coordinates that still need fetching."""
     results: List[GridWindPoint] = []
     missing: List[Tuple[float, float]] = []  # original coords for missing cache entries
-
-    for lat, lon in points:
-        lk, lnk = _cache_key(lat, lon)
-        cursor.execute(
-            "SELECT wind_speed_knots, wind_direction_deg, temperature_f FROM grid_weather_cache "
-            "WHERE lat_key=? AND lon_key=? AND model=? AND expires_at>? AND temperature_f IS NOT NULL",
-            (lk, lnk, model, now),
-        )
-        row = cursor.fetchone()
-        if row:
-            results.append(
-                GridWindPoint(
-                    latitude=lat,
-                    longitude=lon,
-                    wind_speed_knots=row["wind_speed_knots"],
-                    wind_direction_deg=row["wind_direction_deg"],
-                    temperature_f=row["temperature_f"],
-                )
+    with db_connection() as conn:
+        cursor = conn.cursor()
+        _ensure_grid_cache_table(cursor)
+        for lat, lon in points:
+            lk, lnk = _cache_key(lat, lon)
+            cursor.execute(
+                "SELECT wind_speed_knots, wind_direction_deg, temperature_f FROM grid_weather_cache "
+                "WHERE lat_key=? AND lon_key=? AND model=? AND expires_at>? AND temperature_f IS NOT NULL",
+                (lk, lnk, model, now),
             )
-        else:
-            missing.append((lat, lon))
+            row = cursor.fetchone()
+            if row:
+                results.append(
+                    GridWindPoint(
+                        latitude=lat,
+                        longitude=lon,
+                        wind_speed_knots=row["wind_speed_knots"],
+                        wind_direction_deg=row["wind_direction_deg"],
+                        temperature_f=row["temperature_f"],
+                    )
+                )
+            else:
+                missing.append((lat, lon))
+    return results, missing
 
-    if missing:
-        fetched = await _fetch_from_open_meteo(missing, model)
-        expires_at = now + CACHE_TTL_SECONDS
 
+def _store_points(fetched: List[GridWindPoint], model: str, now: float) -> None:
+    expires_at = now + CACHE_TTL_SECONDS
+    with db_connection() as conn:
+        cursor = conn.cursor()
         for point in fetched:
             lk, lnk = _cache_key(point.latitude, point.longitude)
             cursor.execute(
@@ -105,12 +120,6 @@ async def get_grid_wind(
                 """,
                 (lk, lnk, model, now, expires_at, point.wind_speed_knots, point.wind_direction_deg, point.temperature_f),
             )
-            results.append(point)
-
-        conn.commit()
-
-    conn.close()
-    return results
 
 
 async def _fetch_from_open_meteo(

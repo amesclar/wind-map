@@ -14,7 +14,7 @@ interface WindOverlayProps {
   model: string;
   visible: boolean;
   selectedPoint: SelectedGridPoint | null;
-  onChevronClick: (pt: GridWindPoint) => void;
+  onGridPointSelect: (pt: GridWindPoint) => void;
 }
 
 const BARB_SPACING_PX = 80;
@@ -73,7 +73,7 @@ export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.Div
   });
 }
 
-export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick }: WindOverlayProps) {
+export function WindOverlay({ map, model, visible, selectedPoint, onGridPointSelect }: WindOverlayProps) {
   const markersRef = useRef<L.Marker[]>([]);
   const pointsRef = useRef<GridWindPoint[]>([]);
   const lastFetchKeyRef = useRef<string>('');
@@ -81,8 +81,8 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
 
   // Keep the callback in a ref so marker click handlers always call the latest
   // version without needing to be re-registered on every render.
-  const onChevronClickRef = useRef(onChevronClick);
-  useEffect(() => { onChevronClickRef.current = onChevronClick; }, [onChevronClick]);
+  const onGridPointSelectRef = useRef(onGridPointSelect);
+  useEffect(() => { onGridPointSelectRef.current = onGridPointSelect; }, [onGridPointSelect]);
 
   // Keep selectedPoint in a ref so icon updates don't require re-registering handlers.
   const selectedPointRef = useRef(selectedPoint);
@@ -104,7 +104,7 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
       }).addTo(map);
 
       // Handler reads from ref — always calls the latest callback, never stale.
-      marker.on('click', () => onChevronClickRef.current(pt));
+      marker.on('click', () => onGridPointSelectRef.current(pt));
       markersRef.current.push(marker);
     });
   }
@@ -126,15 +126,25 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
     if (fetchKey === lastFetchKeyRef.current) return;
     lastFetchKeyRef.current = fetchKey;
 
+    // Cancel the previous request; only the latest response may draw markers.
     abortRef.current?.abort();
-    abortRef.current = new AbortController();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     let points: GridWindPoint[];
     try {
-      points = await fetchWindGrid({ min_lat: minLat, max_lat: maxLat, min_lon: minLon, max_lon: maxLon, cols, rows, model });
-    } catch {
+      points = await fetchWindGrid(
+        { min_lat: minLat, max_lat: maxLat, min_lon: minLon, max_lon: maxLon, cols, rows, model },
+        { signal: controller.signal },
+      );
+    } catch (err) {
+      if (controller.signal.aborted) return; // superseded by a newer request
+      console.error('Failed to load wind grid:', err);
+      // Forget the key so the same viewport is retried on the next pan/zoom.
+      if (lastFetchKeyRef.current === fetchKey) lastFetchKeyRef.current = '';
       return;
     }
+    if (controller.signal.aborted || abortRef.current !== controller) return;
 
     pointsRef.current = points;
     renderMarkers(points);
@@ -151,7 +161,7 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
       const isSelected = isSamePoint(selectedPoint, pt.latitude, pt.longitude);
       marker.setIcon(buildGridBarbIcon(pt, isSelected));
     });
-  }, [selectedPoint]);
+  }, [map, visible, selectedPoint]);
 
   useEffect(() => {
     if (!map) return;
@@ -172,6 +182,10 @@ export function WindOverlay({ map, model, visible, selectedPoint, onChevronClick
       abortRef.current?.abort();
       lastFetchKeyRef.current = '';
     };
+    // `refresh` closes over map/model/visible, which are the dependencies here, so the
+    // listener is re-registered whenever they change. SCRUM-92 phase 5 (F5) moves this
+    // into a useWindGrid hook with a stable callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, model, visible]);
 
   return null;
