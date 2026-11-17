@@ -107,6 +107,7 @@ use a multi-stage Dockerfile:
 + Stage 1 (Node.js): Builds the frontend assets (e.g., Vite/React or static bundle).
 + Stage 2 (Python/FastAPI or Flask): Runs the backend API and serves the compiled static frontend files on port 5005.
 
++ Image size (SCRUM-102): the runtime stage uses `python:3.11-alpine` instead of `python:3.11-slim`, and Python dependencies are installed in a separate builder stage and copied into the runtime stage. The image dropped from 289 MB to 144 MB. `requirements.txt` holds runtime dependencies only; test tools (pytest, pytest-asyncio) are in `requirements-dev.txt`. The container still runs as root so that existing `wind_data` volumes (created by the previous image) remain writable.
 Docker: Multi-stage build producing a single lightweight image run via docker run -p 5005:5005 -v wind_data:/app/data wind-map
 
 # versioning (SCRUM-91)

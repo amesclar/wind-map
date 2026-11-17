@@ -15,9 +15,16 @@ COPY frontend/ ./
 RUN npm run build
 
 # ==========================================
-# Stage 2: Python Backend Runtime
+# Stage 2: Install Python dependencies (SCRUM-102)
 # ==========================================
-FROM python:3.11-slim AS runtime
+FROM python:3.11-alpine AS python-deps
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ==========================================
+# Stage 3: Python Backend Runtime (Alpine, no build tools or test deps)
+# ==========================================
+FROM python:3.11-alpine AS runtime
 WORKDIR /app
 
 # Environment variables
@@ -31,9 +38,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Create data and static directories
 RUN mkdir -p /app/data /app/static
 
-# Install python dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy only the installed packages (pip, wheel caches and build tooling stay behind)
+COPY --from=python-deps /install /usr/local
 
 # Copy compiled frontend from Stage 1
 COPY --from=frontend-builder /build/dist /app/static
@@ -50,4 +56,3 @@ VOLUME ["/app/data"]
 
 # Run FastAPI app with Uvicorn
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "5005"]
-

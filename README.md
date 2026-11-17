@@ -31,7 +31,7 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
 
 ```
 wind-map/
-├── Dockerfile                   # Multi-stage build (Node build -> Python runtime)
+├── Dockerfile                   # Multi-stage build (Node build -> Python deps -> Alpine runtime)
 ├── docker-compose.yml           # Optional compose configuration
 ├── requirements.txt             # Python backend dependencies (FastAPI, httpx, etc.)
 ├── backend/
@@ -113,8 +113,9 @@ docker stop wind-map && docker rm wind-map
    ```
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
+   (`requirements.txt` holds runtime dependencies only and is what the Docker image installs; `requirements-dev.txt` adds the test tools.)
 3. Run backend tests:
    ```bash
    pytest backend/tests
