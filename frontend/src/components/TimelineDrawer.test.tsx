@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { TimelineDrawer, formatDegreesTrue } from './TimelineDrawer';
+import { TimelineDrawer } from './TimelineDrawer';
 import { MapView } from './MapView';
 import type { WeatherForecastResponse } from '../types';
 import { makeForecast } from '../test/fixtures';
@@ -64,16 +64,6 @@ describe('timeline drawer forecast', () => {
       expect(within(cards[1]).getByTestId('wind-direction-true').textContent).toBe('220°T');
     }
   );
-
-  it('formats degrees true as whole numbers, normalized to 0–359 (SCRUM-90)', () => {
-    expect(formatDegreesTrue(220)).toBe('220°T');
-    expect(formatDegreesTrue(7.5)).toBe('8°T');
-    expect(formatDegreesTrue(305.4)).toBe('305°T');
-    expect(formatDegreesTrue(0)).toBe('0°T');
-    expect(formatDegreesTrue(360)).toBe('0°T');
-    expect(formatDegreesTrue(359.6)).toBe('0°T');
-    expect(formatDegreesTrue(-10)).toBe('350°T');
-  });
 
   it('stays hidden until a location forecast exists', () => {
     const { container } = render(

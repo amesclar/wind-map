@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   WeatherForecastResponse,
-  WeatherForecastPoint,
   SavedLocation,
   UnitSystem,
   WindSpeedUnit,
@@ -19,12 +18,13 @@ import {
   Zap,
 } from 'lucide-react';
 import { WindBarb, getTemperatureColor } from './WindBarb';
-
-/** Wind direction in whole degrees true, normalized to 0–359. */
-export function formatDegreesTrue(deg: number): string {
-  const rounded = Math.round(((deg % 360) + 360) % 360);
-  return `${rounded >= 360 ? 0 : rounded}°T`;
-}
+import { FORECAST_STEP_HOURS } from '../constants';
+import {
+  formatDegreesTrue,
+  formatSliceTime,
+  formatSpeed,
+  formatTemperature,
+} from '../utils/units';
 
 interface TimelineDrawerProps {
   selectedLocation?: SavedLocation | null;
@@ -59,53 +59,6 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
   if (!weatherData && !isLoading) {
     return null;
   }
-
-  const formatPointTime = (timeStr: string) => {
-    try {
-      const date = new Date(timeStr);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        hour: 'numeric',
-        hour12: true,
-      });
-    } catch {
-      return timeStr;
-    }
-  };
-
-  const getTemperatureDisplay = (pt: WeatherForecastPoint) => {
-    return unitSystem === 'imperial'
-      ? `${Math.round(pt.temperature_f)}°F`
-      : `${Math.round(pt.temperature_c)}°C`;
-  };
-
-  const getSpeedDisplay = (pt: WeatherForecastPoint) => {
-    switch (speedUnit) {
-      case 'kmh':
-        return `${pt.wind_speed_kmh} km/h`;
-      case 'mph':
-        return `${pt.wind_speed_mph} mph`;
-      case 'ms':
-        return `${pt.wind_speed_ms} m/s`;
-      case 'knots':
-      default:
-        return `${pt.wind_speed_knots} kt`;
-    }
-  };
-
-  const getGustDisplay = (pt: WeatherForecastPoint) => {
-    switch (speedUnit) {
-      case 'kmh':
-        return `${pt.wind_gust_kmh} km/h`;
-      case 'mph':
-        return `${pt.wind_gust_mph} mph`;
-      case 'ms':
-        return `${pt.wind_gust_ms} m/s`;
-      case 'knots':
-      default:
-        return `${pt.wind_gust_knots} kt`;
-    }
-  };
 
   return (
     <div
@@ -148,7 +101,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
           <div className="flex items-center gap-2 text-[11px]">
             <span className="px-2 py-0.5 rounded bg-dark-700 text-gray-300 flex items-center gap-1">
               <Clock className="w-3 h-3 text-sky-400" />
-              16 data points (3h intervals)
+              {weatherData.forecast.length} data points ({FORECAST_STEP_HOURS}h intervals)
             </span>
             {weatherData.cached ? (
               <span
@@ -197,10 +150,10 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                   {/* Time label */}
                   <div className="text-center w-full">
                     <div className="text-[11px] font-semibold text-gray-200">
-                      {isCurrent ? 'Now' : formatPointTime(pt.time)}
+                      {isCurrent ? 'Now' : formatSliceTime(pt.time)}
                     </div>
                     <div className="text-[9px] text-gray-500 font-mono">
-                      +{index * 3}h
+                      +{index * FORECAST_STEP_HOURS}h
                     </div>
                   </div>
 
@@ -217,19 +170,6 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                         size={46}
                         showLabel={false}
                       />
-                    ) : dirDisplay === 'cardinal' ? (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <Compass
-                          className="w-5 h-5"
-                          style={{
-                            color: tempColor,
-                            transform: `rotate(${pt.wind_direction_deg}deg)`,
-                          }}
-                        />
-                        <span className="text-xs font-bold font-mono text-gray-200">
-                          {pt.wind_direction_cardinal}
-                        </span>
-                      </div>
                     ) : (
                       <div className="flex flex-col items-center gap-0.5">
                         <Compass
@@ -239,9 +179,15 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                             transform: `rotate(${pt.wind_direction_deg}deg)`,
                           }}
                         />
-                        <span className="text-[11px] font-mono text-gray-200">
-                          {Math.round(pt.wind_direction_deg)}°
-                        </span>
+                        {dirDisplay === 'cardinal' ? (
+                          <span className="text-xs font-bold font-mono text-gray-200">
+                            {pt.wind_direction_cardinal}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-mono text-gray-200">
+                            {Math.round(pt.wind_direction_deg)}°
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -262,13 +208,13 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                     className="text-[11px] font-medium text-gray-300 flex items-center gap-1"
                   >
                     <Wind className="w-3 h-3 text-sky-400" />
-                    <span>{getSpeedDisplay(pt)}</span>
+                    <span>{formatSpeed(pt, 'speed', speedUnit)}</span>
                   </div>
 
                   {/* Wind gusts */}
                   <div className="text-[10px] text-orange-300 flex items-center gap-0.5">
                     <Zap className="w-2.5 h-2.5 text-orange-400" />
-                    <span>G {getGustDisplay(pt)}</span>
+                    <span>G {formatSpeed(pt, 'gust', speedUnit)}</span>
                   </div>
 
                   {/* Temperature with color coding */}
@@ -280,7 +226,7 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                       border: `1px solid ${tempColor}30`,
                     }}
                   >
-                    {getTemperatureDisplay(pt)}
+                    {formatTemperature(pt, unitSystem)}
                   </div>
 
                   {/* Humidity */}

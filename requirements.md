@@ -89,6 +89,8 @@ use a minimalist ui
 
 Frontend: React + Vite + Leaflet + TailwindCSS in dark minimalist style.
 + Location names and regions are HTML-escaped before being placed in map popups (SCRUM-92).
++ Map popups show wind speed, gust and temperature in the user's selected units, the same as the drawer (SCRUM-92). Formatting lives in `src/utils/units.ts`.
++ Frontend defaults (model, timezone, timezone list, map center, localStorage keys) are in `src/constants.ts`; API calls go through one `request()` helper in `src/api/client.ts` that throws `ApiError` with the HTTP status.
 + Wind grid requests are cancelled when superseded; only the latest response draws barbs, and a failed request is retried on the next pan/zoom (SCRUM-92).
 + Code quality (SCRUM-92): ESLint (`npm run lint`, TypeScript + React hooks rules, zero warnings allowed) and TypeScript `noUnusedLocals` / `noUnusedParameters`.
 + Refactoring plan and progress: `SCRUM-92-refactor-maintainability.md`.

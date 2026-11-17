@@ -19,8 +19,8 @@ import {
   fetchAppConfig,
   fetchPointWeather,
 } from './api/client';
-import type { GridWindPoint } from './api/client';
-import { SelectedGridPoint } from './components/WindOverlay';
+import type { GridWindPoint, SelectedGridPoint } from './types';
+import { DEFAULT_MODEL, DEFAULT_TIMEZONE, STORAGE_KEYS } from './constants';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { TimelineDrawer } from './components/TimelineDrawer';
@@ -31,21 +31,21 @@ export const App: React.FC = () => {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<SavedLocation | null>(null);
   const [models, setModels] = useState<WeatherModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('best_match');
-  const [timezone, setTimezone] = useState<string>('America/Los_Angeles');
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
+  const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE);
 
   // Map Tile & API Key settings
   const [tileLayerType, setTileLayerType] = useState<MapTileLayer>(() => {
-    return (localStorage.getItem('map_tile_layer') as MapTileLayer) || 'osm_dark';
+    return (localStorage.getItem(STORAGE_KEYS.tileLayer) as MapTileLayer) || 'osm_dark';
   });
   const [cartoApiKey, setCartoApiKey] = useState<string>(() => {
-    return localStorage.getItem('carto_api_key') || '';
+    return localStorage.getItem(STORAGE_KEYS.cartoApiKey) || '';
   });
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
 
   // Wind grid overlay visibility — default on, persisted to localStorage
   const [windOverlayVisible, setWindOverlayVisible] = useState<boolean>(() => {
-    const stored = localStorage.getItem('wind_overlay_visible');
+    const stored = localStorage.getItem(STORAGE_KEYS.windOverlayVisible);
     return stored === null ? true : stored === 'true';
   });
 
@@ -106,7 +106,7 @@ export const App: React.FC = () => {
     async function init() {
       try {
         const cfg = await fetchAppConfig();
-        if (cfg.carto_api_key && !localStorage.getItem('carto_api_key')) {
+        if (cfg.carto_api_key && !localStorage.getItem(STORAGE_KEYS.cartoApiKey)) {
           setCartoApiKey(cfg.carto_api_key);
           setTileLayerType('carto_dark');
         }
@@ -147,7 +147,7 @@ export const App: React.FC = () => {
         }
 
         // Use current selectedModel / timezone (defaults at mount time)
-        const allW = await fetchAllWeather('best_match', 'America/Los_Angeles');
+        const allW = await fetchAllWeather(DEFAULT_MODEL, DEFAULT_TIMEZONE);
         const mapObj: Record<number, WeatherForecastResponse> = {};
         allW.forEach((w) => { mapObj[w.location_id] = w; });
         setWeatherMap(mapObj);
@@ -262,27 +262,27 @@ export const App: React.FC = () => {
   const handleSaveCartoApiKey = (key: string) => {
     setCartoApiKey(key);
     if (key) {
-      localStorage.setItem('carto_api_key', key);
+      localStorage.setItem(STORAGE_KEYS.cartoApiKey, key);
       setTileLayerType('carto_dark');
-      localStorage.setItem('map_tile_layer', 'carto_dark');
+      localStorage.setItem(STORAGE_KEYS.tileLayer, 'carto_dark');
     } else {
-      localStorage.removeItem('carto_api_key');
+      localStorage.removeItem(STORAGE_KEYS.cartoApiKey);
     }
   };
 
   const handleChangeTileLayer = (layer: MapTileLayer) => {
     setTileLayerType(layer);
-    localStorage.setItem('map_tile_layer', layer);
+    localStorage.setItem(STORAGE_KEYS.tileLayer, layer);
   };
 
   const handleToggleWindOverlay = (visible: boolean) => {
     setWindOverlayVisible(visible);
-    localStorage.setItem('wind_overlay_visible', String(visible));
+    localStorage.setItem(STORAGE_KEYS.windOverlayVisible, String(visible));
   };
 
   const handleGridPointSelect = useCallback(async (pt: GridWindPoint) => {
     const requestId = ++weatherRequestRef.current;
-    setSelectedGridPoint({ latitude: pt.latitude, longitude: pt.longitude, wind_speed_knots: pt.wind_speed_knots });
+    setSelectedGridPoint({ latitude: pt.latitude, longitude: pt.longitude });
     // Clear the saved selection so the drawer header uses the point's own name/coordinates.
     setSelectedLocation(null);
     setIsTimelineLoading(true);
@@ -329,6 +329,8 @@ export const App: React.FC = () => {
           windOverlayVisible={windOverlayVisible}
           selectedGridPoint={selectedGridPoint}
           onGridPointSelect={handleGridPointSelect}
+          unitSystem={unitSystem}
+          speedUnit={speedUnit}
         />
 
         <TimelineDrawer

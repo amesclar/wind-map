@@ -15,6 +15,7 @@ import {
   GeocodeResult,
 } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
+import { TIMEZONES } from '../constants';
 
 interface NavbarProps {
   models: WeatherModel[];
@@ -34,17 +35,6 @@ interface NavbarProps {
   onOpenMapSettings: () => void;
   hasCartoKey: boolean;
 }
-
-const TIMEZONES = [
-  { id: 'America/Los_Angeles', label: 'Pacific (PT)' },
-  { id: 'America/Denver', label: 'Mountain (MT)' },
-  { id: 'America/Chicago', label: 'Central (CT)' },
-  { id: 'America/New_York', label: 'Eastern (ET)' },
-  { id: 'UTC', label: 'UTC' },
-  { id: 'Europe/London', label: 'London (GMT)' },
-  { id: 'Europe/Paris', label: 'Paris (CET)' },
-  { id: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-];
 
 export const Navbar: React.FC<NavbarProps> = ({
   models,

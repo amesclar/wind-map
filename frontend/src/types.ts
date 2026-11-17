@@ -58,5 +58,25 @@ export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
 
-
 export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard';
+
+/** Body of POST /api/locations. */
+export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' | 'admin1' | 'country'>;
+
+/** GET /api/config. */
+export interface AppConfig {
+  carto_api_key?: string;
+}
+
+/** One point of GET /api/weather/grid. */
+export interface GridWindPoint {
+  latitude: number;
+  longitude: number;
+  wind_speed_knots: number;
+  wind_direction_deg: number;
+  /** Current temperature in °F; colors the map barb like the drawer (SCRUM-89). */
+  temperature_f?: number | null;
+}
+
+/** The grid point whose barb is selected (highlighted) on the map. */
+export type SelectedGridPoint = Pick<GridWindPoint, 'latitude' | 'longitude'>;
