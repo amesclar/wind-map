@@ -40,6 +40,9 @@ const pointForecast = makeForecast(
   { speed: 14, gust: 20 },
 );
 
+/** Requests are cancellable: every data call receives `{ signal }`. */
+const withSignal = expect.objectContaining({ signal: expect.any(AbortSignal) });
+
 /** Pan the map so WindOverlay reloads the grid with `point`, then click that point's barb. */
 async function clickGridPoint(point: GridWindPoint): Promise<MockMarker> {
   vi.mocked(api.fetchWindGrid).mockResolvedValue([point]);
@@ -110,8 +113,10 @@ describe('App prediction drawer integration', () => {
     fireEvent.click(seattleBtn);
 
     // Verify drawer updates to Seattle with Seattle's forecast data
+    // Header switches on selection; the forecast arrives a moment later.
     await waitFor(() => {
       expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
+      expect(within(drawer).getAllByText('20 kt').length).toBeGreaterThan(0);
     });
 
     const forecastPoints = screen.getAllByTestId('forecast-point');
@@ -132,8 +137,10 @@ describe('App prediction drawer integration', () => {
     markerAt(seattle.latitude, seattle.longitude)!.fire('click');
 
     // Verify drawer displays Seattle predictions
+    // Header switches on selection; the forecast arrives a moment later.
     await waitFor(() => {
       expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
+      expect(within(drawer).getAllByText('20 kt').length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText('20 kt').length).toBeGreaterThan(0);
   });
@@ -214,9 +221,9 @@ describe('App prediction drawer integration', () => {
     )!;
     fireEvent.change(timezoneSelect, { target: { value: 'UTC' } });
 
-    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC'));
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', withSignal));
     expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
-    expect(api.fetchWeather).toHaveBeenCalledWith(1, 'best_match', 'UTC');
+    expect(api.fetchWeather).toHaveBeenCalledWith(1, 'best_match', 'UTC', withSignal);
   });
 
   it('does not rebuild saved-location markers when App re-renders with unchanged data (SCRUM-92)', async () => {
@@ -236,6 +243,39 @@ describe('App prediction drawer integration', () => {
     await waitFor(() => expect(within(drawer).getAllByText('SW').length).toBeGreaterThan(0));
 
     expect(L.marker.mock.calls.length).toBe(markerCalls);
+  });
+
+  it('reloads the forecast when the selected location is chosen again (SCRUM-92)', async () => {
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getAllByText('14 kt').length).toBeGreaterThan(0));
+    const before = vi.mocked(api.fetchWeather).mock.calls.filter((c) => c[0] === 1).length;
+
+    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
+    // The modal row (the drawer header also shows the name).
+    const removeButton = await screen.findByLabelText('Remove Oak Harbor, WA');
+    fireEvent.click(within(removeButton.parentElement!).getByText('Oak Harbor, WA'));
+
+    await waitFor(() =>
+      expect(vi.mocked(api.fetchWeather).mock.calls.filter((c) => c[0] === 1).length).toBe(before + 1),
+    );
+  });
+
+  it('selects the next location when the selected one is deleted (SCRUM-92)', async () => {
+    vi.mocked(api.deleteLocation).mockResolvedValue(undefined);
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+
+    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
+    fireEvent.click(await screen.findByLabelText('Remove Oak Harbor, WA'));
+
+    await waitFor(() => {
+      expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
+      expect(within(drawer).getAllByText('20 kt').length).toBeGreaterThan(0);
+    });
+    expect(api.deleteLocation).toHaveBeenCalledWith(1);
+    expect(markerAt(mockLocations[0].latitude, mockLocations[0].longitude)!.remove).toHaveBeenCalled();
   });
 
   it('shows map popups in the selected units (SCRUM-92)', async () => {
@@ -266,7 +306,7 @@ describe('App prediction drawer integration', () => {
     await clickGridPoint(gridPoint);
 
     await waitFor(() => {
-      expect(api.fetchPointWeather).toHaveBeenCalledWith(48.78, -121.94, 'best_match', 'America/Los_Angeles');
+      expect(api.fetchPointWeather).toHaveBeenCalledWith(48.78, -121.94, 'best_match', 'America/Los_Angeles', withSignal);
       expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy();
     });
     // Saved-location name is gone and coordinates come from the point forecast
@@ -320,9 +360,11 @@ describe('App prediction drawer integration', () => {
     fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
     fireEvent.click(await screen.findByText('Seattle, WA'));
 
-    await waitFor(() => expect(within(drawer).getByText('Seattle, WA')).toBeTruthy());
+    await waitFor(() => {
+      expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
+      expect(within(drawer).getAllByText('20 kt').length).toBeGreaterThan(0);
+    });
     expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();
-    expect(screen.getAllByText('20 kt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('G 30 kt').length).toBeGreaterThan(0);
 
     // Let any lingering async work settle; the grid barb selection must not override Seattle

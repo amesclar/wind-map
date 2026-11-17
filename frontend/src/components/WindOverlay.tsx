@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { fetchWindGrid } from '../api/client';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
+import { useLatest } from '../hooks/useLatest';
+import { useWindGrid } from '../hooks/useWindGrid';
 
 interface WindOverlayProps {
   map: L.Map | null;
@@ -10,16 +11,6 @@ interface WindOverlayProps {
   visible: boolean;
   selectedPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
-}
-
-const BARB_SPACING_PX = 80;
-const MAX_GRID_DIM = 30;
-
-function gridDimensions(map: L.Map): { cols: number; rows: number } {
-  const size = map.getSize();
-  const cols = Math.min(Math.max(2, Math.round(size.x / BARB_SPACING_PX)), MAX_GRID_DIM);
-  const rows = Math.min(Math.max(2, Math.round(size.y / BARB_SPACING_PX)), MAX_GRID_DIM);
-  return { cols, rows };
 }
 
 function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boolean {
@@ -69,119 +60,36 @@ export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.Div
 }
 
 export function WindOverlay({ map, model, visible, selectedPoint, onGridPointSelect }: WindOverlayProps) {
-  const markersRef = useRef<L.Marker[]>([]);
-  const pointsRef = useRef<GridWindPoint[]>([]);
-  const lastFetchKeyRef = useRef<string>('');
-  const abortRef = useRef<AbortController | null>(null);
+  const points = useWindGrid(map, model, visible);
+  // Each point is stored with its marker, so icon updates can't get out of step.
+  const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
+  const onSelectRef = useLatest(onGridPointSelect);
+  const selectedRef = useLatest(selectedPoint);
 
-  // Keep the callback in a ref so marker click handlers always call the latest
-  // version without needing to be re-registered on every render.
-  const onGridPointSelectRef = useRef(onGridPointSelect);
-  useEffect(() => { onGridPointSelectRef.current = onGridPointSelect; }, [onGridPointSelect]);
-
-  // Keep selectedPoint in a ref so icon updates don't require re-registering handlers.
-  const selectedPointRef = useRef(selectedPoint);
-  useEffect(() => { selectedPointRef.current = selectedPoint; }, [selectedPoint]);
-
-  function clearMarkers() {
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
-  }
-
-  function renderMarkers(points: GridWindPoint[]) {
+  // Draw one barb marker per grid point; replaced whenever the points change.
+  useEffect(() => {
     if (!map) return;
-    clearMarkers();
-    points.forEach((pt) => {
-      const isSelected = isSamePoint(selectedPointRef.current, pt.latitude, pt.longitude);
-      const marker = L.marker([pt.latitude, pt.longitude], {
-        icon: buildGridBarbIcon(pt, isSelected),
+    const entries = points.map((point) => {
+      const marker = L.marker([point.latitude, point.longitude], {
+        icon: buildGridBarbIcon(point, isSamePoint(selectedRef.current, point.latitude, point.longitude)),
         interactive: true,
       }).addTo(map);
-
-      // Handler reads from ref — always calls the latest callback, never stale.
-      marker.on('click', () => onGridPointSelectRef.current(pt));
-      markersRef.current.push(marker);
+      marker.on('click', () => onSelectRef.current(point));
+      return { point, marker };
     });
-  }
-
-  async function refresh() {
-    if (!map || !visible) {
-      clearMarkers();
-      pointsRef.current = [];
-      return;
-    }
-    const bounds = map.getBounds();
-    const { cols, rows } = gridDimensions(map);
-    const minLat = parseFloat(bounds.getSouth().toFixed(4));
-    const maxLat = parseFloat(bounds.getNorth().toFixed(4));
-    const minLon = parseFloat(bounds.getWest().toFixed(4));
-    const maxLon = parseFloat(bounds.getEast().toFixed(4));
-
-    const fetchKey = `${minLat},${maxLat},${minLon},${maxLon},${cols},${rows},${model}`;
-    if (fetchKey === lastFetchKeyRef.current) return;
-    lastFetchKeyRef.current = fetchKey;
-
-    // Cancel the previous request; only the latest response may draw markers.
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    let points: GridWindPoint[];
-    try {
-      points = await fetchWindGrid(
-        { min_lat: minLat, max_lat: maxLat, min_lon: minLon, max_lon: maxLon, cols, rows, model },
-        { signal: controller.signal },
-      );
-    } catch (err) {
-      if (controller.signal.aborted) return; // superseded by a newer request
-      console.error('Failed to load wind grid:', err);
-      // Forget the key so the same viewport is retried on the next pan/zoom.
-      if (lastFetchKeyRef.current === fetchKey) lastFetchKeyRef.current = '';
-      return;
-    }
-    if (controller.signal.aborted || abortRef.current !== controller) return;
-
-    pointsRef.current = points;
-    renderMarkers(points);
-  }
-
-  // Update icons when selected point changes — reads latest selectedPoint from ref,
-  // no need to re-register click handlers.
-  useEffect(() => {
-    if (!map || !visible || pointsRef.current.length === 0) return;
-    // Only update the icon of affected markers rather than rebuilding all of them.
-    markersRef.current.forEach((marker, i) => {
-      const pt = pointsRef.current[i];
-      if (!pt) return;
-      const isSelected = isSamePoint(selectedPoint, pt.latitude, pt.longitude);
-      marker.setIcon(buildGridBarbIcon(pt, isSelected));
-    });
-  }, [map, visible, selectedPoint]);
-
-  useEffect(() => {
-    if (!map) return;
-    if (!visible) {
-      clearMarkers();
-      pointsRef.current = [];
-      lastFetchKeyRef.current = '';
-      return;
-    }
-    refresh();
-    map.on('moveend', refresh);
-    map.on('zoomend', refresh);
+    entriesRef.current = entries;
     return () => {
-      map.off('moveend', refresh);
-      map.off('zoomend', refresh);
-      clearMarkers();
-      pointsRef.current = [];
-      abortRef.current?.abort();
-      lastFetchKeyRef.current = '';
+      entries.forEach(({ marker }) => marker.remove());
+      if (entriesRef.current === entries) entriesRef.current = [];
     };
-    // `refresh` closes over map/model/visible, which are the dependencies here, so the
-    // listener is re-registered whenever they change. SCRUM-92 phase 5 (F5) moves this
-    // into a useWindGrid hook with a stable callback.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, model, visible]);
+  }, [map, points, selectedRef, onSelectRef]);
+
+  // Highlight the selected point without recreating markers.
+  useEffect(() => {
+    entriesRef.current.forEach(({ point, marker }) => {
+      marker.setIcon(buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude)));
+    });
+  }, [selectedPoint]);
 
   return null;
 }

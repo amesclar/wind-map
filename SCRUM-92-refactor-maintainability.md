@@ -21,7 +21,7 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 | 3. Backend structure | ✅ Done | `feature/SCRUM-92-refactor-phase-3` |
 | 4. Backend service split | ✅ Done (B3; B7 not started) | `feature/SCRUM-92-refactor-phase-4` |
 | 5a. Frontend: API client and formatters (F4, F3) | ✅ Done | `feature/SCRUM-92-refactor-phase-5a` |
-| 5b. Frontend: App hooks, selection, Leaflet layers (F1, F2, F5) | Not started | |
+| 5b. Frontend: App hooks, selection, Leaflet layers (F1, F2, F5) | ✅ Done | `feature/SCRUM-92-refactor-phase-5b` (built on 5a) |
 
 ### Phase 1: what was done
 
@@ -141,6 +141,28 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 **Test changes:** the "markers aren't rebuilt" test now changes the direction display instead of the speed unit, since popups now depend on the speed unit.
 
 **Results:** frontend 120 passed (was 103). Backend 120 passed. `lint` and `typecheck` are clean, and the container builds and serves the app.
+
+### Phase 5b: what was done
+
+| Item | Change | Tests |
+|---|---|---|
+| F1. Settings hooks | `useLocalStorageState(key, parse, serialize)` replaces three hand-written initialisers and three "set state and write localStorage" handlers, and tolerates disabled storage. `useMapSettings()` covers the tile layer (an unknown stored value falls back to OSM dark), the CARTO key and the overlay. A server-provided key applies for the session only, as before, and never overrides the user's key. `useUnitPreferences()` covers the unit toggle. | `hooks/useSettings.test.ts` (9 tests) |
+| F1. Data hooks | `useLocations()` handles load, add ("first" for current location, "last" for search) and remove. `useAllWeather(model, tz)` is one effect for the map markers, which removes the phase 1 "skip the first run" workaround. `useDrawerForecast(selection, model, tz, { refreshToken })` is one effect keyed on selection, model, timezone and the refresh token. It replaces the `weatherRequestRef` counter, two effects with suppressed lint warnings, and the explicit reload calls in three handlers. A newer request aborts the previous one, so outdated responses are dropped and the HTTP request is cancelled. | `hooks/useForecast.test.ts` (9), `hooks/useLocations.test.ts` (4) |
+| F1. App.tsx | 348 → 214 lines; it only wires the hooks to the components. Startup is one readable sequence (config → models → locations → position), with geolocation wrapped in a promise. | Existing `App.test.tsx`, plus new tests: choosing the selected location again reloads it; deleting the selected location selects the next one |
+| F2. One selection | `Selection = { kind: 'saved', location } \| { kind: 'point', latitude, longitude }` replaces `selectedLocation` plus `selectedGridPoint` plus the "clear one when setting the other" rules. Both values are derived from it. | Existing SCRUM-88/89 tests |
+| F5. Saved-location markers | MapView updates markers in place by location id (`setIcon`, `setPopupContent`, `setLatLng`). Only added or deleted locations create or remove markers, and all markers are removed on unmount. The icon and popup builders are pure, exported functions. The tile layer comes from `mapTiles.ts` (`tileLayerConfig`) instead of three branches, and the effect now removes its layer on cleanup. | `MapView.test.tsx`: in-place update, delete, unmount. `mapTiles.test.ts` |
+| F5. Wind grid | New `hooks/useWindGrid.ts` handles fetching, deduplication, abort and retry. The `refresh` listener is defined inside the effect, so its lint suppression is gone. WindOverlay only draws: each point is stored with its marker (no index pairing), and selection changes update icons without recreating markers. `useLatest` replaces the hand-written callback refs. | `WindOverlay.component.test.tsx` (unchanged, still passing), `gridDimensions` test |
+
+**Notes:**
+- **Lint suppressions:** 4 → 2. The two left are run-once effects (startup, and creating the Leaflet map), each with its reason.
+- **Mutation checks:** I broke each of these in turn: the drawer's stale-response guard, the same-location reload, the in-place marker update, the session-only server key, and the grid abort on cleanup. Each made at least one test fail.
+- **Test fixes:** two tests checked the drawer's forecast as soon as the header changed. They now wait for the forecast, which arrives a moment later; this is the same race as phase 2's Miami test. Call assertions now include the `{ signal }` argument.
+- **Not done:**
+  - Changing `generateWindBarbSvg` to an options object would touch every call site and test for little gain.
+  - Type-checking the config files (`vite.config.ts` and others) is still open.
+  - B7 is optional.
+
+**Results:** frontend 147 passed (was 120). Backend 120 passed. `lint` and `typecheck` are clean. The container builds and serves the app with no errors in its log.
 
 ---
 

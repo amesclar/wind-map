@@ -50,10 +50,15 @@ wind-map/
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
-    │   ├── components/          # MapView, WindBarb, TimelineDrawer, Navbar, etc.
-    │   ├── api/                 # Typed API client
+    │   ├── components/          # MapView, WindOverlay, WindBarb, TimelineDrawer, Navbar, modals, mapTiles.ts
+    │   ├── hooks/               # useMapSettings, useUnitPreferences, useLocations, useAllWeather,
+    │   │                        # useDrawerForecast, useWindGrid, useLocalStorageState, useLatest
+    │   ├── api/                 # Typed API client (one request() helper, ApiError)
+    │   ├── utils/               # units.ts (display formatting), html.ts (escaping)
+    │   ├── test/                # Shared Leaflet mock, fixtures, test setup
+    │   ├── constants.ts         # Defaults, timezone list, storage keys
     │   ├── types.ts             # TypeScript interfaces
-    │   └── App.tsx              # Core state management
+    │   └── App.tsx              # Wires the hooks to the components
     ├── package.json             # React, Leaflet, TailwindCSS, Vite
     └── vite.config.ts           # Dev proxy configuration
 ```

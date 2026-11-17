@@ -6,6 +6,8 @@ import { WindOverlay } from './WindOverlay';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
+import { useLatest } from '../hooks/useLatest';
+import { tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
@@ -22,6 +24,65 @@ interface MapViewProps {
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
+}
+
+interface LocationMarker {
+  location: SavedLocation;
+  marker: L.Marker;
+}
+
+const LOCATION_BARB_SIZE = 44;
+const SELECTED_LOCATION_BARB_SIZE = 52;
+// Drawn until a location's forecast has loaded.
+const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
+
+/** Saved-location marker: a labelled wind barb, larger and glowing when selected. */
+export function buildLocationIcon(weather: WeatherForecastResponse | undefined, isSelected: boolean): L.DivIcon {
+  const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
+  const current = weather?.current;
+  const svg = generateWindBarbSvg(
+    current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
+    current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
+    current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
+    size,
+    true,
+  );
+  const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
+  return L.divIcon({
+    className: 'wind-barb-marker',
+    html: `<div class="relative cursor-pointer transition-transform duration-200 ${glow}">${svg}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+/** Popup HTML for a saved location. All location text is escaped. */
+export function buildLocationPopup(
+  loc: SavedLocation,
+  weather: WeatherForecastResponse | undefined,
+  unitSystem: UnitSystem,
+  speedUnit: WindSpeedUnit,
+): string {
+  const current = weather?.current;
+  const temp = current ? formatTemperature(current, unitSystem) : '--';
+  const speed = current ? formatSpeed(current, 'speed', speedUnit) : '--';
+  const gust = current ? formatSpeed(current, 'gust', speedUnit) : '--';
+  const direction = current ? formatDirection(current) : '--';
+  const region =
+    [loc.admin1, loc.country].filter(Boolean).join(', ') ||
+    `${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°`;
+  return `
+    <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
+      <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${escapeHtml(loc.name)}</div>
+      <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">${escapeHtml(region)}</div>
+      <div style="display: flex; gap: 8px; font-weight: 600;">
+        <span style="color: #38bdf8;">💨 ${speed}</span>
+        <span style="color: #fb923c;">⚡ G: ${gust}</span>
+        <span style="color: #4ade80;">🌡️ ${temp}</span>
+      </div>
+      <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">🧭 ${escapeHtml(direction)}</div>
+    </div>
+  `;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -41,13 +102,10 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const markersRef = useRef<Record<number, L.Marker>>({});
+  const markersRef = useRef(new Map<number, LocationMarker>());
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
-  const onSelectLocationRef = useRef(onSelectLocation);
-  useEffect(() => {
-    onSelectLocationRef.current = onSelectLocation;
-  }, [onSelectLocation]);
+  const onSelectLocationRef = useLatest(onSelectLocation);
 
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
@@ -80,118 +138,66 @@ export const MapView: React.FC<MapViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update Tile Layer whenever tileLayerType or cartoApiKey changes
+  // Swap the base tile layer when the layer or CARTO key changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-
-    if (tileLayerRef.current) {
-      tileLayerRef.current.remove();
-      tileLayerRef.current = null;
-    }
-
-    let newLayer: L.TileLayer;
-
-    if (tileLayerType === 'carto_dark') {
-      const trimmedKey = cartoApiKey.trim();
-      const url = trimmedKey
-        ? `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${encodeURIComponent(trimmedKey)}`
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-
-      newLayer = L.tileLayer(url, {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      });
-    } else if (tileLayerType === 'osm_dark') {
-      newLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        className: 'osm-dark-tiles',
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      });
-    } else {
-      newLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      });
-    }
-
-    newLayer.addTo(map);
-    tileLayerRef.current = newLayer;
+    const { url, options } = tileLayerConfig(tileLayerType, cartoApiKey);
+    const layer = L.tileLayer(url, options);
+    layer.addTo(map);
+    tileLayerRef.current = layer;
+    return () => {
+      layer.remove();
+      if (tileLayerRef.current === layer) tileLayerRef.current = null;
+    };
   }, [tileLayerType, cartoApiKey]);
 
-  // Update wind barb markers whenever locations or weather data changes
+  // Saved-location markers, updated in place by location id (SCRUM-92): only added or
+  // removed locations create or remove markers; the rest get a new icon and popup.
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
+    const markers = markersRef.current;
+    const ids = new Set(locations.map((loc) => loc.id));
 
-    Object.values(markersRef.current).forEach((marker) => marker.remove());
-    markersRef.current = {};
+    markers.forEach((entry, id) => {
+      if (!ids.has(id)) {
+        entry.marker.remove();
+        markers.delete(id);
+      }
+    });
 
     locations.forEach((loc) => {
       const weather = weatherMap[loc.id];
-      const isSelected = selectedLocation?.id === loc.id;
-
-      const speedKnots = weather?.current?.wind_speed_knots ?? 10;
-      const dirDeg = weather?.current?.wind_direction_deg ?? 180;
-      const tempF = weather?.current?.temperature_f ?? 50;
-      const current = weather?.current;
-      const tempDisplay = current ? formatTemperature(current, unitSystem) : '--';
-      const speedDisplay = current ? formatSpeed(current, 'speed', speedUnit) : '--';
-      const gustDisplay = current ? formatSpeed(current, 'gust', speedUnit) : '--';
-      const windDirDisplay = current ? formatDirection(current) : '--';
-
-      const svgIconHtml = generateWindBarbSvg(
-        speedKnots,
-        dirDeg,
-        tempF,
-        isSelected ? 52 : 44,
-        true
-      );
-
-      const customIcon = L.divIcon({
-        className: 'wind-barb-marker',
-        html: `
-          <div class="relative cursor-pointer transition-transform duration-200 ${
-            isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : ''
-          }">
-            ${svgIconHtml}
-          </div>
-        `,
-        iconSize: [isSelected ? 52 : 44, isSelected ? 52 : 44],
-        iconAnchor: [isSelected ? 26 : 22, isSelected ? 26 : 22],
-      });
-
-      const marker = L.marker([loc.latitude, loc.longitude], {
-        icon: customIcon,
-      }).addTo(map);
-
-      const popupContent = `
-        <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
-          <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">${escapeHtml(loc.name)}</div>
-          <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">
-            ${escapeHtml([loc.admin1, loc.country].filter(Boolean).join(', ') || `${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°`)}
-          </div>
-          <div style="display: flex; gap: 8px; font-weight: 600;">
-            <span style="color: #38bdf8;">💨 ${speedDisplay}</span>
-            <span style="color: #fb923c;">⚡ G: ${gustDisplay}</span>
-            <span style="color: #4ade80;">🌡️ ${tempDisplay}</span>
-          </div>
-          <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">
-            🧭 ${escapeHtml(windDirDisplay)}
-          </div>
-        </div>
-      `;
-
-      marker.bindPopup(popupContent);
-      marker.on('click', () => onSelectLocationRef.current(loc));
-      markersRef.current[loc.id] = marker;
+      const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id);
+      const popup = buildLocationPopup(loc, weather, unitSystem, speedUnit);
+      const existing = markers.get(loc.id);
+      if (existing) {
+        existing.location = loc;
+        existing.marker.setLatLng([loc.latitude, loc.longitude]);
+        existing.marker.setIcon(icon);
+        existing.marker.setPopupContent(popup);
+        return;
+      }
+      const entry: LocationMarker = {
+        location: loc,
+        marker: L.marker([loc.latitude, loc.longitude], { icon }).addTo(map),
+      };
+      entry.marker.bindPopup(popup);
+      // Reads the entry and handler at click time, so neither goes stale.
+      entry.marker.on('click', () => onSelectLocationRef.current(entry.location));
+      markers.set(loc.id, entry);
     });
-    // onSelectLocation is read through a ref so a new handler identity doesn't rebuild markers.
-  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit]);
+  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit, onSelectLocationRef]);
+
+  // Remove all saved-location markers when the map goes away
+  useEffect(() => {
+    const markers = markersRef.current;
+    return () => {
+      markers.forEach((entry) => entry.marker.remove());
+      markers.clear();
+    };
+  }, []);
 
   // Fly to selected location
   useEffect(() => {
@@ -203,8 +209,7 @@ export const MapView: React.FC<MapViewProps> = ({
       easeLinearity: 0.25,
     });
 
-    const marker = markersRef.current[selectedLocation.id];
-    if (marker) marker.openPopup();
+    markersRef.current.get(selectedLocation.id)?.marker.openPopup();
   }, [selectedLocation]);
 
   return (

@@ -25,6 +25,8 @@ export interface MockMarker {
   on: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
   setIcon: ReturnType<typeof vi.fn>;
+  setLatLng: ReturnType<typeof vi.fn>;
+  setPopupContent: ReturnType<typeof vi.fn>;
   openPopup: ReturnType<typeof vi.fn>;
 }
 
@@ -68,6 +70,14 @@ function makeMarker(latlng: [number, number], options: Record<string, unknown> =
   marker.remove = vi.fn();
   marker.setIcon = vi.fn((icon: unknown) => {
     marker.icon = icon;
+    return marker;
+  });
+  marker.setLatLng = vi.fn((latlng: [number, number]) => {
+    marker.latlng = latlng;
+    return marker;
+  });
+  marker.setPopupContent = vi.fn((html: string) => {
+    marker.popupHtml = html;
     return marker;
   });
   marker.openPopup = vi.fn();
