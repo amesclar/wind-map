@@ -1,46 +1,44 @@
-"""Geocoding service using Open-Meteo Geocoding API."""
+"""Geocoding service using the Open-Meteo Geocoding API."""
 
 from typing import List
-import httpx
-from backend.app.config import OPEN_METEO_GEOCODING_URL
+
+from backend.app.config import (
+    OPEN_METEO_GEOCODING_RETRIES,
+    OPEN_METEO_GEOCODING_TIMEOUT_SECONDS,
+    OPEN_METEO_GEOCODING_URL,
+)
 from backend.app.models import GeocodeResult
+from backend.app.services import open_meteo
+
+MIN_QUERY_LENGTH = 2
 
 
 async def search_locations(query: str, count: int = 10) -> List[GeocodeResult]:
+    """Search places by name. Returns [] for short queries or no matches.
+    Raises httpx.HTTPError when the geocoder is unavailable (SCRUM-92: the router
+    reports that as 502, so it isn't confused with "no matches")."""
     query = query.strip()
-    if not query or len(query) < 2:
+    if len(query) < MIN_QUERY_LENGTH:
         return []
 
-    params = {
-        "name": query,
-        "count": count,
-        "language": "en",
-        "format": "json",
-    }
-
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        try:
-            response = await client.get(OPEN_METEO_GEOCODING_URL, params=params)
-            response.raise_for_status()
-            data = response.json()
-        except Exception:
-            return []
+    params = {"name": query, "count": count, "language": "en", "format": "json"}
+    data = await open_meteo.get_json(
+        OPEN_METEO_GEOCODING_URL,
+        params,
+        timeout=OPEN_METEO_GEOCODING_TIMEOUT_SECONDS,
+        retries=OPEN_METEO_GEOCODING_RETRIES,
+    )
 
     results = []
-    items = data.get("results") or []
-    for item in items:
-        name = item.get("name", "")
-        admin1 = item.get("admin1")
-        country = item.get("country")
+    for item in data.get("results") or []:
         lat = item.get("latitude")
         lon = item.get("longitude")
-
         if lat is None or lon is None:
             continue
 
-        parts = [p for p in [name, admin1, country] if p]
-        display_name = ", ".join(parts)
-
+        name = item.get("name", "")
+        admin1 = item.get("admin1")
+        country = item.get("country")
         results.append(
             GeocodeResult(
                 name=name,
@@ -48,8 +46,7 @@ async def search_locations(query: str, count: int = 10) -> List[GeocodeResult]:
                 longitude=float(lon),
                 admin1=admin1,
                 country=country,
-                display_name=display_name,
+                display_name=", ".join(p for p in (name, admin1, country) if p),
             )
         )
     return results
-

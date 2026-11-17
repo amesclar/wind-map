@@ -64,7 +64,7 @@ def insert_grid_row(
     temperature_f: float | None = 55.0,
     expires_in: float = 3600,
 ) -> None:
-    """Seed grid_weather_cache (use with the `grid_cache_table` fixture). Negative `expires_in` = expired."""
+    """Seed grid_weather_cache. Negative `expires_in` = expired."""
     now = time.time()
     with db_connection() as conn:
         conn.execute(

@@ -3,9 +3,10 @@
 import logging
 from typing import List, Dict
 import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from backend.app import locations_repo
 from backend.app.config import AVAILABLE_MODELS
-from backend.app.database import db_connection
+from backend.app.dependencies import model_param, timezone_param
 from backend.app.models import WeatherForecastResponse
 from backend.app.services.weather_service import get_weather
 
@@ -27,13 +28,11 @@ def list_models() -> List[Dict[str, str]]:
 @router.get("", response_model=WeatherForecastResponse)
 async def get_location_weather(
     location_id: int = Query(..., description="ID of saved location"),
-    model: str = Query("best_match", description="Weather forecast model"),
-    timezone: str = Query("America/Los_Angeles", description="Timezone name"),
+    model: str = Depends(model_param),
+    timezone: str = Depends(timezone_param),
 ) -> WeatherForecastResponse:
-    with db_connection() as conn:
-        row = conn.execute("SELECT * FROM locations WHERE id = ?;", (location_id,)).fetchone()
-
-    if not row:
+    location = locations_repo.get_location(location_id)
+    if not location:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Location with id {location_id} not found",
@@ -41,10 +40,10 @@ async def get_location_weather(
 
     try:
         return await get_weather(
-            location_id=row["id"],
-            location_name=row["name"],
-            latitude=row["latitude"],
-            longitude=row["longitude"],
+            location_id=location.id,
+            location_name=location.name,
+            latitude=location.latitude,
+            longitude=location.longitude,
             model=model,
             timezone=timezone,
         )
@@ -55,27 +54,24 @@ async def get_location_weather(
 
 @router.get("/all", response_model=List[WeatherForecastResponse])
 async def get_all_locations_weather(
-    model: str = Query("best_match", description="Weather forecast model"),
-    timezone: str = Query("America/Los_Angeles", description="Timezone name"),
+    model: str = Depends(model_param),
+    timezone: str = Depends(timezone_param),
 ) -> List[WeatherForecastResponse]:
-    with db_connection() as conn:
-        rows = conn.execute("SELECT * FROM locations ORDER BY id ASC;").fetchall()
-
     results: List[WeatherForecastResponse] = []
-    for row in rows:
+    for location in sorted(locations_repo.list_locations(), key=lambda loc: loc.id):
         try:
             fc = await get_weather(
-                location_id=row["id"],
-                location_name=row["name"],
-                latitude=row["latitude"],
-                longitude=row["longitude"],
+                location_id=location.id,
+                location_name=location.name,
+                latitude=location.latitude,
+                longitude=location.longitude,
                 model=model,
                 timezone=timezone,
             )
             results.append(fc)
         except httpx.HTTPError:
             # One failing location must not hide the others; it is logged, not swallowed.
-            logger.exception("Open-Meteo forecast request failed for location %s; skipping", row["id"])
+            logger.exception("Open-Meteo forecast request failed for location %s; skipping", location.id)
             continue
     return results
 
@@ -84,8 +80,8 @@ async def get_all_locations_weather(
 async def get_point_weather(
     lat: float = Query(..., ge=-90, le=90, description="Latitude"),
     lon: float = Query(..., ge=-180, le=180, description="Longitude"),
-    model: str = Query("best_match", description="Weather forecast model"),
-    timezone: str = Query("America/Los_Angeles", description="Timezone name"),
+    model: str = Depends(model_param),
+    timezone: str = Depends(timezone_param),
 ) -> WeatherForecastResponse:
     """
     Return a full forecast for an arbitrary lat/lon point (no saved location needed).

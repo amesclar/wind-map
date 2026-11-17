@@ -17,13 +17,12 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from backend.app import database  # noqa: E402
 from backend.app.main import app  # noqa: E402
-from backend.app.services.grid_weather_service import _ensure_grid_cache_table  # noqa: E402
 from factories import http_response  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _test_db(monkeypatch, tmp_path):
-    """Give every test its own empty, initialised SQLite file."""
+    """Give every test its own empty SQLite file with the full schema (init_db creates every table)."""
     monkeypatch.setattr(database, "DATABASE_PATH", tmp_path / "test.db")
     database.init_db()
 
@@ -32,13 +31,6 @@ def _test_db(monkeypatch, tmp_path):
 def client():
     with TestClient(app) as c:
         yield c
-
-
-@pytest.fixture
-def grid_cache_table(_test_db):
-    """Create the lazily-created grid_weather_cache table using the app's own DDL."""
-    with database.db_connection() as conn:
-        _ensure_grid_cache_table(conn.cursor())
 
 
 class OpenMeteoStub:

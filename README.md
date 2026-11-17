@@ -37,12 +37,15 @@ wind-map/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI application & static asset server
-│   │   ├── config.py            # Configuration settings & defaults
-│   │   ├── database.py          # SQLite schema, migrations & seed
+│   │   ├── config.py            # Settings & named constants (defaults, forecast shape, limits, timeouts)
+│   │   ├── database.py          # All table definitions, versioned migrations (PRAGMA user_version) & seed
+│   │   ├── locations_repo.py    # Data access for saved locations
+│   │   ├── dependencies.py      # Shared query params (model validation, timezone)
+│   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, geocode)
-│   │   └── services/            # Open-Meteo forecast & geocoding services
-│   └── tests/                   # Backend pytest suite (API & weather cache tests)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, geocode)
+│   │   └── services/            # open_meteo.py (shared HTTP client), forecast, grid & geocoding services
+│   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
     │   ├── components/          # MapView, WindBarb, TimelineDrawer, Navbar, etc.
@@ -146,6 +149,8 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/weather/grid`   | Get current wind for a lat/lon bounding box grid (powers the wind barb overlay) |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
+
+The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.
 
 ---
 

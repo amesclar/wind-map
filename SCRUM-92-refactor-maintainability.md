@@ -18,7 +18,7 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 |---|---|---|
 | 1. Fixes and guard rails | ✅ Done | `feature/SCRUM-92-refactor-phase-1` |
 | 2. Test foundations | ✅ Done | `feature/SCRUM-92-refactor-phase-2` (built on phase 1) |
-| 3. Backend structure | Not started | |
+| 3. Backend structure | ✅ Done | `feature/SCRUM-92-refactor-phase-3` |
 | 4. Backend service split | Not started | |
 | 5. Frontend structure | Not started | |
 
@@ -72,6 +72,27 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 - **New dev dependency.** `@types/node` was added as a frontend devDependency, for test files that use `node:fs`.
 
 **Results:** backend 75 passed (61 kept, 14 new), and the suite also passes when run from another directory, from each file alone, and without touching `data/`. Test code went from 1,201 to 1,104 lines despite the new tests. Frontend 103 passed (was 85). `lint` and `typecheck` are clean.
+
+### Phase 3: what was done
+
+| Item | Change | Tests |
+|---|---|---|
+| B1. One schema | `database.py` defines all four tables. `init_db` creates them, and services no longer run DDL or `PRAGMA table_info`/`ALTER TABLE` per request. `PRAGMA user_version` (`SCHEMA_VERSION = 1`) drives migrations: on upgrade the three cache tables are dropped and recreated, and `locations` is kept. That removes the old grid table without `temperature_f`, and old point rows stored in `weather_cache` under `location_id 0`. | `test_database.py`: every table and the version are created; `init_db` is idempotent and keeps data; an unversioned old DB is upgraded with locations kept and caches reset |
+| B2. Repository and FK | New `locations_repo.py` (`list_locations`, `get_location`, `create_or_get_location`, `delete_location`). The locations and weather routers no longer contain SQL. `PRAGMA foreign_keys = ON` on every connection, so deleting a location cascades to its `weather_cache` rows and the manual delete is gone. | `test_api.py`: cascade delete, 404 on unknown delete and weather, near-duplicate returns the existing location. `test_database.py`: foreign keys enforced |
+| B4. Shared client | New `services/open_meteo.py`: `get_json(url, params, timeout, retries)` and `forecast_params(model)` (the `wind_speed_unit` and `models` rule). Forecast, grid and geocoding all use it, and invalid JSON is raised as an `httpx` error (502, not 500). | `test_open_meteo.py` |
+| B4. Units and cache keys | New `units.py`: `as_float`, `c_to_f`, `knots_to_units`, `deg_to_cardinal`, `coord_key`. These replace the two °C→°F copies, the two cache-key functions and precision constants, and the doubled knots conversions in `build_weather_point`. The grid cache is written with one `executemany`. | `test_units.py`; existing forecast and grid tests |
+| B5. Settings and validation | `config.py` has named constants: `DEFAULT_MODEL`, `DEFAULT_TIMEZONE`, `FORECAST_POINTS`/`FORECAST_STEP_HOURS`/`FORECAST_DAYS` (with an import-time check that they fit), `COORD_CACHE_PRECISION`, `GRID_MAX_DIM`, `DUPLICATE_LOCATION_RADIUS_DEG`, and Open-Meteo timeouts and retries. New `dependencies.py` validates `model` against `/api/weather/models` on all four weather endpoints (422, no upstream call). | `test_weather.py`: unknown model gives 422 on every endpoint; every listed model is accepted |
+| B6. Error policy | The geocoder no longer swallows failures. The service raises, and `/api/geocode` returns 502 with a fixed message and logs the error. The search box behaves as before, since the client already treats non-OK as "no results". A grid response with the wrong number of points is now an upstream error instead of being silently truncated. | `test_geocode.py`: raises on outage or 5xx; router 502 without internal detail |
+
+**Notes:**
+- **API changes, all intentional and documented in `requirements.md` and `README.md`:**
+  - An unknown `model` returns 422 (before: forwarded to Open-Meteo, then 502).
+  - Geocoder outages return 502 (before: 200 with `[]`).
+- **Migration on the real data volume.** The container upgraded from version 0 to 1 once. All 8 saved locations were kept, the caches were reset, and a restart didn't migrate again.
+- **`/api/weather/all`** still fetches locations one after another. Running them in parallel is a performance change, not maintainability, so it's left out.
+- **Test patch point.** The test stub still patches `httpx.AsyncClient.get`. Every call now goes through `open_meteo.get_json`, so that one function is the only place that touches httpx.
+
+**Results:** backend 109 passed (was 75; 34 new). Frontend 103 passed, unchanged. `pyflakes backend` is clean.
 
 ---
 

@@ -1,6 +1,9 @@
 """Weather service and caching tests."""
 from unittest.mock import patch
 
+import httpx
+import pytest
+
 from fastapi.testclient import TestClient
 
 from backend.app.database import get_db_connection
@@ -203,3 +206,38 @@ def test_all_weather_skips_and_logs_failed_location(client, open_meteo, caplog):
     assert resp.status_code == 200
     assert resp.json() == []
     assert "skipping" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 3: model validation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/weather?location_id=1&model=not_a_model",
+        "/api/weather/all?model=not_a_model",
+        "/api/weather/point?lat=48&lon=-122&model=not_a_model",
+        "/api/weather/grid?min_lat=47&max_lat=48&min_lon=-123&max_lon=-122&cols=2&rows=2&model=not_a_model",
+    ],
+)
+def test_unknown_model_is_rejected_without_calling_open_meteo(client, open_meteo, path):
+    resp = client.get(path)
+    assert resp.status_code == 422
+    assert "best_match" in resp.json()["detail"]
+    assert open_meteo.call_count == 0
+
+
+def test_every_listed_model_is_accepted(client, open_meteo):
+    open_meteo.respond(forecast_payload())
+    for model in [m["id"] for m in client.get("/api/weather/models").json()]:
+        assert client.get(f"/api/weather/point?lat=48&lon=-122&model={model}").status_code == 200
+
+
+def test_invalid_json_from_open_meteo_is_502(client, monkeypatch):
+    async def fake_get(self, url, **kwargs):
+        return httpx.Response(200, content=b"<html>", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    resp = client.get("/api/weather/point?lat=48&lon=-122")
+    assert resp.status_code == 502
