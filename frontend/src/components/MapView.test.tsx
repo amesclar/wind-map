@@ -64,3 +64,33 @@ describe('MapView saved-location markers', () => {
     expect(second).toHaveBeenCalledWith(loc);
   });
 });
+
+describe('MapView saved-location marker updates (SCRUM-92)', () => {
+  it('updates markers in place, and only adds or removes changed locations', async () => {
+    const { makeForecast } = await import('../test/fixtures');
+    const oak = makeLocation();
+    const seattle = makeLocation({ id: 2, name: 'Seattle, WA', latitude: 47.6, longitude: -122.3 });
+    const { rerender } = render(<MapView {...baseProps} locations={[oak, seattle]} />);
+    expect(createdMarkers).toHaveLength(2);
+    const [oakMarker, seattleMarker] = createdMarkers;
+
+    // New weather updates the existing markers' icon and popup.
+    const weatherMap = { 1: makeForecast({}, { speed: 25 }) };
+    rerender(<MapView {...baseProps} locations={[oak, seattle]} weatherMap={weatherMap} />);
+    expect(createdMarkers).toHaveLength(2);
+    expect(oakMarker.setIcon).toHaveBeenCalled();
+    expect(oakMarker.popupHtml).toContain('25 kt');
+
+    // Removing a location removes only its marker.
+    rerender(<MapView {...baseProps} locations={[oak]} weatherMap={weatherMap} />);
+    expect(seattleMarker.remove).toHaveBeenCalled();
+    expect(oakMarker.remove).not.toHaveBeenCalled();
+    expect(createdMarkers).toHaveLength(2);
+  });
+
+  it('removes its markers on unmount', () => {
+    const { unmount } = render(<MapView {...baseProps} locations={[makeLocation()]} />);
+    unmount();
+    expect(createdMarkers[0].remove).toHaveBeenCalled();
+  });
+});

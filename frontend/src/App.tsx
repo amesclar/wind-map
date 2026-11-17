@@ -1,300 +1,145 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  SavedLocation,
-  WeatherModel,
-  WeatherForecastResponse,
-  UnitSystem,
-  WindSpeedUnit,
-  WindDirDisplay,
-  GeocodeResult,
-  MapTileLayer,
-} from './types';
-import {
-  fetchLocations,
-  addLocation,
-  deleteLocation,
-  fetchModels,
-  fetchWeather,
-  fetchAllWeather,
-  fetchAppConfig,
-  fetchPointWeather,
-} from './api/client';
-import type { GridWindPoint, SelectedGridPoint } from './types';
-import { DEFAULT_MODEL, DEFAULT_TIMEZONE, STORAGE_KEYS } from './constants';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModel } from './types';
+import { fetchAppConfig, fetchModels } from './api/client';
+import { DEFAULT_MODEL, DEFAULT_TIMEZONE } from './constants';
+import { useMapSettings, useUnitPreferences } from './hooks/useSettings';
+import { useLocations } from './hooks/useLocations';
+import { type Selection, useAllWeather, useDrawerForecast } from './hooks/useForecast';
+import { useLatest } from './hooks/useLatest';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { TimelineDrawer } from './components/TimelineDrawer';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 
+const GEOLOCATION_TIMEOUT_MS = 4000;
+
+/** Resolve with the user's position, or null if unavailable/denied/timed out. */
+function getCurrentPosition(): Promise<GeolocationPosition | null> {
+  if (!navigator.geolocation) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
+      timeout: GEOLOCATION_TIMEOUT_MS,
+    });
+  });
+}
+
 export const App: React.FC = () => {
-  const [locations, setLocations] = useState<SavedLocation[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<SavedLocation | null>(null);
   const [models, setModels] = useState<WeatherModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE);
+  const mapSettings = useMapSettings();
+  const units = useUnitPreferences();
+  const { locations, load: loadLocations, add: addLocation, remove: removeLocation } = useLocations();
 
-  // Map Tile & API Key settings
-  const [tileLayerType, setTileLayerType] = useState<MapTileLayer>(() => {
-    return (localStorage.getItem(STORAGE_KEYS.tileLayer) as MapTileLayer) || 'osm_dark';
+  // What the drawer shows: one saved location or one map point (never both).
+  const [selection, setSelection] = useState<Selection | null>(null);
+  // Bumped to reload the drawer when the same location is selected again.
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  const allWeather = useAllWeather(selectedModel, timezone);
+  const drawer = useDrawerForecast(selection, selectedModel, timezone, {
+    refreshToken,
+    onSavedForecast: allWeather.put, // keep the map marker in step with the drawer
   });
-  const [cartoApiKey, setCartoApiKey] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEYS.cartoApiKey) || '';
-  });
+
+  const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
 
-  // Wind grid overlay visibility — default on, persisted to localStorage
-  const [windOverlayVisible, setWindOverlayVisible] = useState<boolean>(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.windOverlayVisible);
-    return stored === null ? true : stored === 'true';
-  });
-
-  // Selected ephemeral grid point (grid barb click) — cleared when a saved location is selected
-  const [selectedGridPoint, setSelectedGridPoint] = useState<SelectedGridPoint | null>(null);
-
-  // Units
-  const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
-  const [speedUnit, setSpeedUnit] = useState<WindSpeedUnit>('knots');
-  const [dirDisplay, setDirDisplay] = useState<WindDirDisplay>('barb');
-
-  // Weather data
-  const [weatherMap, setWeatherMap] = useState<Record<number, WeatherForecastResponse>>({});
-  const [selectedWeather, setSelectedWeather] = useState<WeatherForecastResponse | null>(null);
-  const [isTimelineLoading, setIsTimelineLoading] = useState(false);
-
-  // Monotonic id of the latest drawer weather request; stale responses are dropped.
-  const weatherRequestRef = useRef(0);
-
-  // Modals
-  const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
-
-  // Load weather for a specific location (drives the timeline drawer)
-  const loadWeatherForLocation = useCallback(
-    async (locationId: number, model: string, tz: string) => {
-      const requestId = ++weatherRequestRef.current;
-      setIsTimelineLoading(true);
-      try {
-        const data = await fetchWeather(locationId, model, tz);
-        setWeatherMap((prev) => ({ ...prev, [locationId]: data }));
-        // Ignore stale responses (e.g. a grid barb was clicked while this was in flight)
-        if (requestId === weatherRequestRef.current) setSelectedWeather(data);
-      } catch (err) {
-        console.error('Failed to load weather:', err);
-      } finally {
-        if (requestId === weatherRequestRef.current) setIsTimelineLoading(false);
-      }
-    },
-    []
+  const selectedLocation = selection?.kind === 'saved' ? selection.location : null;
+  const selectedGridPoint = useMemo<SelectedGridPoint | null>(
+    () => (selection?.kind === 'point' ? { latitude: selection.latitude, longitude: selection.longitude } : null),
+    [selection],
   );
 
-  // Refresh wind barb markers for all saved locations (background, no loading state)
-  const loadAllWeather = useCallback(async (model: string, tz: string) => {
-    try {
-      const allW = await fetchAllWeather(model, tz);
-      setWeatherMap((prev) => {
-        const updated = { ...prev };
-        allW.forEach((w) => { updated[w.location_id] = w; });
-        return updated;
-      });
-    } catch (err) {
-      console.error('Failed to refresh all weather:', err);
-    }
-  }, []);
+  const selectionRef = useLatest(selection);
+  const selectSaved = useCallback(
+    (location: SavedLocation) => {
+      const current = selectionRef.current;
+      if (current?.kind === 'saved' && current.location.id === location.id) {
+        setRefreshToken((n) => n + 1); // same location: reload instead of a no-op
+      }
+      setSelection({ kind: 'saved', location });
+    },
+    [selectionRef],
+  );
 
-  // Initial load: config, models, locations, weather for all markers
+  // Startup: config, models, saved locations, then the user's position.
+  const { applyServerConfig } = mapSettings;
   useEffect(() => {
+    let cancelled = false;
     async function init() {
       try {
-        const cfg = await fetchAppConfig();
-        if (cfg.carto_api_key && !localStorage.getItem(STORAGE_KEYS.cartoApiKey)) {
-          setCartoApiKey(cfg.carto_api_key);
-          setTileLayerType('carto_dark');
-        }
-
+        applyServerConfig(await fetchAppConfig());
         const availableModels = await fetchModels();
-        setModels(availableModels);
+        if (!cancelled) setModels(availableModels);
 
-        const saved = await fetchLocations();
-        setLocations(saved);
-
-        const initialLoc = saved.length > 0 ? saved[0] : null;
-
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-              try {
-                const userLoc = await addLocation({
-                  name: 'My Current Location',
-                  latitude: pos.coords.latitude,
-                  longitude: pos.coords.longitude,
-                });
-                setLocations((prev) => {
-                  const exists = prev.some((l) => l.id === userLoc.id);
-                  return exists ? prev : [userLoc, ...prev];
-                });
-                setSelectedLocation(userLoc);
-              } catch {
-                if (initialLoc) setSelectedLocation(initialLoc);
-              }
-            },
-            () => {
-              if (initialLoc) setSelectedLocation(initialLoc);
-            },
-            { timeout: 4000 }
-          );
-        } else if (initialLoc) {
-          setSelectedLocation(initialLoc);
+        const saved = await loadLocations();
+        const fallback = saved[0] ?? null;
+        const position = await getCurrentPosition();
+        if (cancelled) return;
+        if (!position) {
+          if (fallback) setSelection({ kind: 'saved', location: fallback });
+          return;
         }
-
-        // Use current selectedModel / timezone (defaults at mount time)
-        const allW = await fetchAllWeather(DEFAULT_MODEL, DEFAULT_TIMEZONE);
-        const mapObj: Record<number, WeatherForecastResponse> = {};
-        allW.forEach((w) => { mapObj[w.location_id] = w; });
-        setWeatherMap(mapObj);
-
-        if (initialLoc && mapObj[initialLoc.id] && weatherRequestRef.current === 0) {
-          setSelectedWeather(mapObj[initialLoc.id]);
+        try {
+          const here = await addLocation(
+            { name: 'My Current Location', latitude: position.coords.latitude, longitude: position.coords.longitude },
+            'first',
+          );
+          if (!cancelled) setSelection({ kind: 'saved', location: here });
+        } catch {
+          if (!cancelled && fallback) setSelection({ kind: 'saved', location: fallback });
         }
       } catch (err) {
         console.error('Initialization error:', err);
       }
     }
     init();
+    return () => {
+      cancelled = true;
+    };
+    // Startup runs once. applyServerConfig changes identity when the user saves a CARTO
+    // key, and re-running startup then would re-add "My Current Location".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Whenever the selected location changes, refresh its forecast
-  useEffect(() => {
-    if (selectedLocation) {
-      loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
-    }
-    // Intentionally keyed on the location id only: model/timezone changes are handled by
-    // the effect below. Replaced by useForecast in SCRUM-92 phase 5 (F1).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLocation?.id, loadWeatherForLocation]);
-
-  // When model or timezone changes, refresh both the drawer and all markers.
-  // Skipped on mount: init() already loads all weather (SCRUM-92: avoid a duplicate fetch).
-  const isFirstModelTzRun = useRef(true);
-  useEffect(() => {
-    if (isFirstModelTzRun.current) {
-      isFirstModelTzRun.current = false;
-      return;
-    }
-    if (selectedLocation) {
-      loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
-    }
-    loadAllWeather(selectedModel, timezone);
-    // Intentionally not keyed on selectedLocation: selection changes are handled by the
-    // effect above. Replaced by useForecast in SCRUM-92 phase 5 (F1).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModel, timezone, loadWeatherForLocation, loadAllWeather]);
-
-  const handleSelectLocation = (loc: SavedLocation) => {
-    setSelectedGridPoint(null); // clear ephemeral grid barb selection
-    if (weatherMap[loc.id]) setSelectedWeather(weatherMap[loc.id]);
-    if (selectedLocation?.id === loc.id) {
-      loadWeatherForLocation(loc.id, selectedModel, timezone);
-    } else {
-      setSelectedLocation(loc);
-    }
-  };
-
-  const handleSelectAndAddLocation = async (result: GeocodeResult) => {
-    try {
-      const created = await addLocation({
-        name: result.name,
-        latitude: result.latitude,
-        longitude: result.longitude,
-        admin1: result.admin1,
-        country: result.country,
-      });
-      setLocations((prev) => {
-        const filtered = prev.filter((l) => l.id !== created.id);
-        return [...filtered, created];
-      });
-      setSelectedGridPoint(null);
-      if (selectedLocation?.id === created.id) {
-        // Same location (e.g. the backend matched an existing one): the selection effect
-        // won't fire, so refresh explicitly.
-        loadWeatherForLocation(created.id, selectedModel, timezone);
-      } else {
-        // The selectedLocation effect loads the forecast (SCRUM-92: avoid a duplicate fetch).
-        setSelectedLocation(created);
+  const handleSelectAndAddLocation = useCallback(
+    async (result: GeocodeResult) => {
+      try {
+        const created = await addLocation({
+          name: result.name,
+          latitude: result.latitude,
+          longitude: result.longitude,
+          admin1: result.admin1,
+          country: result.country,
+        });
+        selectSaved(created);
+      } catch (err) {
+        console.error('Failed to add location:', err);
       }
-    } catch (err) {
-      console.error('Failed to add location:', err);
-    }
-  };
+    },
+    [addLocation, selectSaved],
+  );
 
-  const handleDeleteLocation = async (id: number) => {
-    try {
-      await deleteLocation(id);
-      setLocations((prev) => prev.filter((l) => l.id !== id));
-      setWeatherMap((prev) => {
-        const copy = { ...prev };
-        delete copy[id];
-        return copy;
-      });
-      if (selectedLocation?.id === id) {
-        const remaining = locations.filter((l) => l.id !== id);
-        if (remaining.length > 0) {
-          setSelectedLocation(remaining[0]);
-        } else {
-          setSelectedLocation(null);
-          setSelectedWeather(null);
+  const handleDeleteLocation = useCallback(
+    async (id: number) => {
+      try {
+        const remaining = await removeLocation(id);
+        allWeather.remove(id);
+        if (selectedLocation?.id === id) {
+          setSelection(remaining[0] ? { kind: 'saved', location: remaining[0] } : null);
         }
+      } catch (err) {
+        console.error('Failed to delete location:', err);
       }
-    } catch (err) {
-      console.error('Failed to delete location:', err);
-    }
-  };
+    },
+    [removeLocation, allWeather, selectedLocation?.id],
+  );
 
-  const handleToggleUnitSystem = () => {
-    if (unitSystem === 'imperial') {
-      setUnitSystem('metric');
-      setSpeedUnit('kmh');
-    } else {
-      setUnitSystem('imperial');
-      setSpeedUnit('knots');
-    }
-  };
-
-  const handleSaveCartoApiKey = (key: string) => {
-    setCartoApiKey(key);
-    if (key) {
-      localStorage.setItem(STORAGE_KEYS.cartoApiKey, key);
-      setTileLayerType('carto_dark');
-      localStorage.setItem(STORAGE_KEYS.tileLayer, 'carto_dark');
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.cartoApiKey);
-    }
-  };
-
-  const handleChangeTileLayer = (layer: MapTileLayer) => {
-    setTileLayerType(layer);
-    localStorage.setItem(STORAGE_KEYS.tileLayer, layer);
-  };
-
-  const handleToggleWindOverlay = (visible: boolean) => {
-    setWindOverlayVisible(visible);
-    localStorage.setItem(STORAGE_KEYS.windOverlayVisible, String(visible));
-  };
-
-  const handleGridPointSelect = useCallback(async (pt: GridWindPoint) => {
-    const requestId = ++weatherRequestRef.current;
-    setSelectedGridPoint({ latitude: pt.latitude, longitude: pt.longitude });
-    // Clear the saved selection so the drawer header uses the point's own name/coordinates.
-    setSelectedLocation(null);
-    setIsTimelineLoading(true);
-    try {
-      const data = await fetchPointWeather(pt.latitude, pt.longitude, selectedModel, timezone);
-      if (requestId === weatherRequestRef.current) setSelectedWeather(data);
-    } catch (err) {
-      console.error('Failed to load point weather:', err);
-    } finally {
-      if (requestId === weatherRequestRef.current) setIsTimelineLoading(false);
-    }
-  }, [selectedModel, timezone]);
+  const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
+    setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
@@ -304,42 +149,42 @@ export const App: React.FC = () => {
         onSelectModel={setSelectedModel}
         timezone={timezone}
         onSelectTimezone={setTimezone}
-        unitSystem={unitSystem}
-        onToggleUnitSystem={handleToggleUnitSystem}
-        speedUnit={speedUnit}
-        onSelectSpeedUnit={setSpeedUnit}
-        dirDisplay={dirDisplay}
-        onSelectDirDisplay={setDirDisplay}
+        unitSystem={units.unitSystem}
+        onToggleUnitSystem={units.toggleUnitSystem}
+        speedUnit={units.speedUnit}
+        onSelectSpeedUnit={units.setSpeedUnit}
+        dirDisplay={units.dirDisplay}
+        onSelectDirDisplay={units.setDirDisplay}
         savedLocationsCount={locations.length}
         onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
-        hasCartoKey={Boolean(cartoApiKey)}
+        hasCartoKey={Boolean(mapSettings.cartoApiKey)}
       />
 
       <main className="flex-1 relative w-full h-[calc(100vh-56px)]">
         <MapView
           locations={locations}
           selectedLocation={selectedLocation}
-          onSelectLocation={handleSelectLocation}
-          weatherMap={weatherMap}
-          tileLayerType={tileLayerType}
-          cartoApiKey={cartoApiKey}
+          onSelectLocation={selectSaved}
+          weatherMap={allWeather.weatherMap}
+          tileLayerType={mapSettings.tileLayer}
+          cartoApiKey={mapSettings.cartoApiKey}
           selectedModel={selectedModel}
-          windOverlayVisible={windOverlayVisible}
+          windOverlayVisible={mapSettings.windOverlayVisible}
           selectedGridPoint={selectedGridPoint}
           onGridPointSelect={handleGridPointSelect}
-          unitSystem={unitSystem}
-          speedUnit={speedUnit}
+          unitSystem={units.unitSystem}
+          speedUnit={units.speedUnit}
         />
 
         <TimelineDrawer
           selectedLocation={selectedLocation}
-          weatherData={selectedWeather}
-          isLoading={isTimelineLoading}
-          unitSystem={unitSystem}
-          speedUnit={speedUnit}
-          dirDisplay={dirDisplay}
+          weatherData={drawer.forecast}
+          isLoading={drawer.isLoading}
+          unitSystem={units.unitSystem}
+          speedUnit={units.speedUnit}
+          dirDisplay={units.dirDisplay}
         />
       </main>
 
@@ -348,19 +193,19 @@ export const App: React.FC = () => {
         onClose={() => setIsLocationsModalOpen(false)}
         locations={locations}
         selectedLocationId={selectedLocation?.id ?? null}
-        onSelectLocation={handleSelectLocation}
+        onSelectLocation={selectSaved}
         onDeleteLocation={handleDeleteLocation}
       />
 
       <MapSettingsModal
         isOpen={isMapSettingsOpen}
         onClose={() => setIsMapSettingsOpen(false)}
-        tileLayer={tileLayerType}
-        onChangeTileLayer={handleChangeTileLayer}
-        cartoApiKey={cartoApiKey}
-        onSaveCartoApiKey={handleSaveCartoApiKey}
-        windOverlayVisible={windOverlayVisible}
-        onToggleWindOverlay={handleToggleWindOverlay}
+        tileLayer={mapSettings.tileLayer}
+        onChangeTileLayer={mapSettings.setTileLayer}
+        cartoApiKey={mapSettings.cartoApiKey}
+        onSaveCartoApiKey={mapSettings.saveCartoApiKey}
+        windOverlayVisible={mapSettings.windOverlayVisible}
+        onToggleWindOverlay={mapSettings.setWindOverlayVisible}
       />
     </div>
   );
