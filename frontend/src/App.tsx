@@ -49,7 +49,7 @@ export const App: React.FC = () => {
     return stored === null ? true : stored === 'true';
   });
 
-  // Selected ephemeral grid point (chevron click) — cleared when a saved location is selected
+  // Selected ephemeral grid point (grid barb click) — cleared when a saved location is selected
   const [selectedGridPoint, setSelectedGridPoint] = useState<SelectedGridPoint | null>(null);
 
   // Units
@@ -76,7 +76,7 @@ export const App: React.FC = () => {
       try {
         const data = await fetchWeather(locationId, model, tz);
         setWeatherMap((prev) => ({ ...prev, [locationId]: data }));
-        // Ignore stale responses (e.g. a chevron was clicked while this was in flight)
+        // Ignore stale responses (e.g. a grid barb was clicked while this was in flight)
         if (requestId === weatherRequestRef.current) setSelectedWeather(data);
       } catch (err) {
         console.error('Failed to load weather:', err);
@@ -167,18 +167,30 @@ export const App: React.FC = () => {
     if (selectedLocation) {
       loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
     }
+    // Intentionally keyed on the location id only: model/timezone changes are handled by
+    // the effect below. Replaced by useForecast in SCRUM-92 phase 5 (F1).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation?.id, loadWeatherForLocation]);
 
-  // When model or timezone changes, refresh both the drawer and all markers
+  // When model or timezone changes, refresh both the drawer and all markers.
+  // Skipped on mount: init() already loads all weather (SCRUM-92: avoid a duplicate fetch).
+  const isFirstModelTzRun = useRef(true);
   useEffect(() => {
+    if (isFirstModelTzRun.current) {
+      isFirstModelTzRun.current = false;
+      return;
+    }
     if (selectedLocation) {
       loadWeatherForLocation(selectedLocation.id, selectedModel, timezone);
     }
     loadAllWeather(selectedModel, timezone);
+    // Intentionally not keyed on selectedLocation: selection changes are handled by the
+    // effect above. Replaced by useForecast in SCRUM-92 phase 5 (F1).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel, timezone, loadWeatherForLocation, loadAllWeather]);
 
   const handleSelectLocation = (loc: SavedLocation) => {
-    setSelectedGridPoint(null); // clear ephemeral chevron selection
+    setSelectedGridPoint(null); // clear ephemeral grid barb selection
     if (weatherMap[loc.id]) setSelectedWeather(weatherMap[loc.id]);
     if (selectedLocation?.id === loc.id) {
       loadWeatherForLocation(loc.id, selectedModel, timezone);
@@ -200,8 +212,15 @@ export const App: React.FC = () => {
         const filtered = prev.filter((l) => l.id !== created.id);
         return [...filtered, created];
       });
-      setSelectedLocation(created);
-      loadWeatherForLocation(created.id, selectedModel, timezone);
+      setSelectedGridPoint(null);
+      if (selectedLocation?.id === created.id) {
+        // Same location (e.g. the backend matched an existing one): the selection effect
+        // won't fire, so refresh explicitly.
+        loadWeatherForLocation(created.id, selectedModel, timezone);
+      } else {
+        // The selectedLocation effect loads the forecast (SCRUM-92: avoid a duplicate fetch).
+        setSelectedLocation(created);
+      }
     } catch (err) {
       console.error('Failed to add location:', err);
     }
@@ -261,7 +280,7 @@ export const App: React.FC = () => {
     localStorage.setItem('wind_overlay_visible', String(visible));
   };
 
-  const handleChevronClick = useCallback(async (pt: GridWindPoint) => {
+  const handleGridPointSelect = useCallback(async (pt: GridWindPoint) => {
     const requestId = ++weatherRequestRef.current;
     setSelectedGridPoint({ latitude: pt.latitude, longitude: pt.longitude, wind_speed_knots: pt.wind_speed_knots });
     // Clear the saved selection so the drawer header uses the point's own name/coordinates.
@@ -309,7 +328,7 @@ export const App: React.FC = () => {
           selectedModel={selectedModel}
           windOverlayVisible={windOverlayVisible}
           selectedGridPoint={selectedGridPoint}
-          onChevronClick={handleChevronClick}
+          onGridPointSelect={handleGridPointSelect}
         />
 
         <TimelineDrawer

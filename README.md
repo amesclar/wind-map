@@ -127,6 +127,8 @@ docker stop wind-map && docker rm wind-map
    ```
 3. Open **http://localhost:5173** (API requests are automatically proxied to port 5005).
 
+Cross-origin API access is off by default. If you call the API from another origin, set `CORS_ORIGINS` (comma-separated), e.g. `CORS_ORIGINS=http://localhost:3000`.
+
 ---
 
 ## REST API Reference
@@ -190,4 +192,7 @@ pytest backend/tests
 
 # Frontend
 cd frontend && npm run test -- --run
+
+# Frontend lint (TypeScript + React hooks rules, zero warnings)
+cd frontend && npm run lint
 ```

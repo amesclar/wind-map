@@ -45,12 +45,16 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Automatically expand drawer whenever a new location is selected or a chevron is clicked
+  // Automatically expand drawer whenever a new location is selected or a grid barb is clicked
+  // Keyed on which place is shown, not on every forecast refresh.
+  const placeKey = weatherData
+    ? `${weatherData.location_id}:${weatherData.latitude}:${weatherData.longitude}`
+    : null;
   useEffect(() => {
-    if (weatherData) {
+    if (placeKey) {
       setIsCollapsed(false);
     }
-  }, [weatherData?.location_id, weatherData?.latitude, weatherData?.longitude]);
+  }, [placeKey]);
 
   if (!weatherData && !isLoading) {
     return null;

@@ -101,3 +101,22 @@ def test_weather_models_list(client):
     assert "gfs_seamless" in model_ids
     assert "icon_seamless" in model_ids
 
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 1: CORS is off unless CORS_ORIGINS is set
+# ---------------------------------------------------------------------------
+
+def test_parse_cors_origins():
+    from backend.app.config import parse_cors_origins
+
+    assert parse_cors_origins(None) == []
+    assert parse_cors_origins("") == []
+    assert parse_cors_origins(" http://a:5173 , ,http://b ") == ["http://a:5173", "http://b"]
+
+
+def test_cross_origin_requests_get_no_cors_headers_by_default(client):
+    resp = client.get("/api/health", headers={"Origin": "https://evil.example"})
+    assert resp.status_code == 200
+    assert "access-control-allow-origin" not in resp.headers
+    assert "access-control-allow-credentials" not in resp.headers

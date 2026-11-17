@@ -1,9 +1,13 @@
 """Grid weather router: returns current wind for a lat/lon bounding box."""
 
+import logging
 from typing import List
+import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from backend.app.models import GridWindPoint
 from backend.app.services.grid_weather_service import get_grid_wind
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/weather/grid", tags=["grid"])
 
@@ -44,8 +48,9 @@ async def get_wind_grid(
 
     try:
         return await get_grid_wind(points, model=model)
-    except Exception as exc:
+    except httpx.HTTPError as exc:
+        logger.exception("Open-Meteo grid request failed (%d points)", len(points))
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch grid wind data: {str(exc)}",
-        )
+            detail="Failed to fetch grid wind data from Open-Meteo",
+        ) from exc

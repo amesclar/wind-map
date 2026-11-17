@@ -329,9 +329,57 @@ describe('App prediction drawer integration', () => {
     expect(forecastPoints).toHaveLength(16);
     expect(screen.getAllByText('18 kt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('G 26 kt').length).toBeGreaterThan(0);
+
+    // SCRUM-92: the new location's forecast is fetched once, not twice
+    await new Promise((r) => setTimeout(r, 0));
+    const miamiCalls = (api.fetchWeather as any).mock.calls.filter((c: any[]) => c[0] === 3);
+    expect(miamiCalls).toHaveLength(1);
   });
 
-  it('updates prediction drawer when clicking a grid chevron (SCRUM-88)', async () => {
+  it('fetches all-locations weather once on initial load (SCRUM-92)', async () => {
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refreshes all weather and the drawer when the timezone changes (SCRUM-92)', async () => {
+    const { container } = render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+    (api.fetchAllWeather as any).mockClear();
+    (api.fetchWeather as any).mockClear();
+
+    const timezoneSelect = Array.from(container.querySelectorAll('select')).find((s) =>
+      Array.from(s.options).some((o) => o.value === 'UTC'),
+    )!;
+    fireEvent.change(timezoneSelect, { target: { value: 'UTC' } });
+
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC'));
+    expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
+    expect(api.fetchWeather).toHaveBeenCalledWith(1, 'best_match', 'UTC');
+  });
+
+  it('does not rebuild saved-location markers when App re-renders with unchanged data (SCRUM-92)', async () => {
+    const L = (await import('leaflet')).default as any;
+    const { container } = render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 0));
+    const markerCalls = L.marker.mock.calls.length;
+
+    // Changing the speed unit re-renders App (new handler identities) but changes no map data
+    const speedSelect = Array.from(container.querySelectorAll('select')).find((s) =>
+      Array.from(s.options).some((o) => o.value === 'mph'),
+    )!;
+    fireEvent.change(speedSelect, { target: { value: 'mph' } });
+    await waitFor(() => expect(screen.getAllByText(/mph/).length).toBeGreaterThan(0));
+
+    expect(L.marker.mock.calls.length).toBe(markerCalls);
+  });
+
+  it('updates prediction drawer when clicking a grid barb (SCRUM-88)', async () => {
     render(<App />);
 
     const drawer = await screen.findByTestId('timeline-drawer');
@@ -369,7 +417,7 @@ describe('App prediction drawer integration', () => {
     expect(within(drawer).getByText(/48\.78°,\s*-121\.94°/)).toBeTruthy();
   });
 
-  it('ignores a slow saved-location response that resolves after a chevron click (SCRUM-88)', async () => {
+  it('ignores a slow saved-location response that resolves after a grid barb click (SCRUM-88)', async () => {
     // Seattle's forecast stays pending until we resolve it manually
     let resolveSeattle!: (w: WeatherForecastResponse) => void;
     (api.fetchWeather as any).mockImplementation((id: number) => {
@@ -386,7 +434,7 @@ describe('App prediction drawer integration', () => {
     fireEvent.click(await screen.findByText('Seattle, WA'));
     await waitFor(() => expect(resolveSeattle).toBeDefined());
 
-    // Load a grid point and click its chevron while Seattle is still pending
+    // Load a grid point and click its barb while Seattle is still pending
     const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
     (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
     const L = (await import('leaflet')).default as any;
@@ -405,7 +453,7 @@ describe('App prediction drawer integration', () => {
 
     await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
 
-    // The stale Seattle response arrives late and must not overwrite the chevron forecast
+    // The stale Seattle response arrives late and must not overwrite the grid barb forecast
     resolveSeattle(mockForecast2);
     await new Promise((r) => setTimeout(r, 0));
 
@@ -414,12 +462,12 @@ describe('App prediction drawer integration', () => {
     expect(within(drawer).queryByText('Oak Harbor, WA')).toBeNull();
   });
 
-  it('shows the saved location name and forecast when selected after a chevron click (SCRUM-88 regression)', async () => {
+  it('shows the saved location name and forecast when selected after a grid barb click (SCRUM-88 regression)', async () => {
     render(<App />);
     const drawer = await screen.findByTestId('timeline-drawer');
     await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
 
-    // Click a grid chevron first
+    // Click a grid barb first
     const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
     (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
     const L = (await import('leaflet')).default as any;
@@ -446,7 +494,7 @@ describe('App prediction drawer integration', () => {
     expect(screen.getAllByText('20 kt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('G 30 kt').length).toBeGreaterThan(0);
 
-    // Let any lingering async work settle; the chevron selection must not override Seattle
+    // Let any lingering async work settle; the grid barb selection must not override Seattle
     await new Promise((r) => setTimeout(r, 0));
     expect(within(drawer).getByText('Seattle, WA')).toBeTruthy();
     expect(within(drawer).queryByText('48.78°N, 121.94°W')).toBeNull();

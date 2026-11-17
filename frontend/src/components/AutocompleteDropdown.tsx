@@ -30,7 +30,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
         const matches = await searchGeocode(query);
         setResults(matches);
         setIsOpen(matches.length > 0);
-      } catch (err) {
+      } catch {
         setResults([]);
       } finally {
         setIsLoading(false);

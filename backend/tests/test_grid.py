@@ -558,3 +558,19 @@ def test_grid_endpoint_includes_temperature_f(client):
         )
     assert resp.status_code == 200
     assert all(p["temperature_f"] == 59.0 for p in resp.json())
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 1: specific error handling
+# ---------------------------------------------------------------------------
+
+def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client):
+    error = httpx.ConnectError("secret-host.internal", request=httpx.Request("GET", "https://x"))
+    with patch("httpx.AsyncClient.get", side_effect=error):
+        resp = client.get(
+            "/api/weather/grid",
+            params={"min_lat": 47, "max_lat": 48, "min_lon": -123, "max_lon": -122, "cols": 2, "rows": 2},
+        )
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "Failed to fetch grid wind data from Open-Meteo"
+    assert "secret-host" not in resp.text
