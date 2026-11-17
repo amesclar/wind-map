@@ -121,6 +121,8 @@ locate the project in /Users/fredames/Projects/wind-map
 
 include gitignore, dockerignore, requirements.txt, Dockerfile
 
+branching (SCRUM-94): work happens on ticket branches (`feature/PROJ-123-...` or `fix/PROJ-123-...`) merged into `develop`, and `develop` is merged into `master` for releases. A ticket branch is deleted locally and on GitHub as soon as it is merged into `develop` or `master`, after confirming it is fully merged. `develop` and `master` are never deleted. Rules: `.kiro/steering/commit-rules.md`.
+
 # testing and documentation
 Testing & Docs: Unit and integration tests (pytest for backend, frontend component tests) with comprehensive README.md.
 + Backend test setup (SCRUM-92): `backend/tests/conftest.py` gives every test its own temporary SQLite file (never the repo's `data/` directory, and independent of the working directory) and blocks real Open-Meteo calls; tests configure responses through the `open_meteo` fixture. Payload builders live in `backend/tests/factories.py`.

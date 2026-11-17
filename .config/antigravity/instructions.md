@@ -5,6 +5,7 @@ You must strictly adhere to the following three quality rules for every task exe
 ## 1. Git Commit & Ticket Rules
 - Every single git commit message and PR title generated must be prefixed with a valid project ticket number (e.g., `PROJ-123:` or `[PROJ-123]`).
 - Extract the ticket number from the user's initial prompt or active branch name.
+- After a `feature/...` or `fix/...` branch is merged into `develop` or `master`, delete it locally (`git branch -d`) and on `origin` (`git push origin --delete`). First confirm it is fully merged (`git merge-base --is-ancestor <branch> origin/<target>`), and retarget any PR that uses it as its base. Never delete `develop` or `master`; if a branch isn't fully merged, don't delete it and ask.
 
 ## 2. Automated Testing Policy
 - For every code modification, you must automatically create or update the corresponding tests.
