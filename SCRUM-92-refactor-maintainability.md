@@ -19,7 +19,7 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 | 1. Fixes and guard rails | ✅ Done | `feature/SCRUM-92-refactor-phase-1` |
 | 2. Test foundations | ✅ Done | `feature/SCRUM-92-refactor-phase-2` (built on phase 1) |
 | 3. Backend structure | ✅ Done | `feature/SCRUM-92-refactor-phase-3` |
-| 4. Backend service split | Not started | |
+| 4. Backend service split | ✅ Done (B3; B7 not started) | `feature/SCRUM-92-refactor-phase-4` |
 | 5. Frontend structure | Not started | |
 
 ### Phase 1: what was done
@@ -93,6 +93,35 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 - **Test patch point.** The test stub still patches `httpx.AsyncClient.get`. Every call now goes through `open_meteo.get_json`, so that one function is the only place that touches httpx.
 
 **Results:** backend 109 passed (was 75; 34 new). Frontend 103 passed, unchanged. `pyflakes backend` is clean.
+
+### Phase 4: what was done
+
+`get_weather` was a 168-line function doing six jobs with an `is_point` flag. It is now four small pieces:
+
+| Piece | File | What it does |
+|---|---|---|
+| `parse_forecast(raw) -> ParsedForecast` | `services/forecast_parser.py` | Pure: Open-Meteo dict in, current conditions plus 16 slices out. It replaces the seven parallel `hourly_x[idx] if idx < len(hourly_x) else 0` lines with one `_at(series, idx)` helper and a loop over `FORECAST_VARIABLES`. `build_weather_point` moved here. |
+| `SavedLocationCache` / `PointCache` | `services/forecast_cache.py` | One class per cache table, each with `get(now)` and `put(payload, now)`. They replace the two near-identical SELECT/UPSERT pairs. |
+| `fetch_forecast(lat, lon, model, tz)` | `services/weather_service.py` | HTTP only, through the shared client. |
+| `get_location_forecast(location, …)` / `get_point_forecast(lat, lon, …)` | `services/weather_service.py` | Pick the cache and identity, then run cache → fetch → parse → store (`_get_forecast`). The routers call these instead of passing the magic `location_id=0`, and the point display name (`point_name`) moved out of the router. `POINT_LOCATION_ID` names the `0`. |
+
+**Bug found and fixed: timezone missing from cache keys.**
+- **Problem.** Both forecast caches were keyed without the timezone, but Open-Meteo returns times in the requested timezone. After a timezone change, the drawer showed the previous timezone's times for up to 30 minutes.
+- **Fix.** Both keys now include the timezone (`SCHEMA_VERSION = 2`, so the caches reset on upgrade).
+- **Evidence.** The new test fails on `develop` for both saved locations and map points. Live, switching Pacific → Tokyo now returns Tokyo times, and repeating the request is a cache hit.
+
+**Also changed:** a saved-location cache hit now reports the location's current name. Before, it used the name stored with the cached payload.
+
+**Correction to the review:** B3 said `curr.get("time", "")[:13]` raises `TypeError` when `time` is `None`. It doesn't, because the old code checked `curr.get("time")` first. The new parser test covers that case without claiming a fix.
+
+**Tests:**
+- `test_forecast_parser.py` (7 tests, no mocks): start at the current hour; 3-hour steps; slice 0 is the current conditions; unknown or missing current time; short series; missing variables; empty response.
+- `test_weather.py`: the timezone keys, and the cache hit reporting the current name.
+- `test_database.py`: the upgrade from schema version 1 to 2.
+
+**Not done: B7** (moving SQLite calls off the event loop, and batching grid cache reads). Current traffic doesn't need it; it can be its own change if wanted.
+
+**Results:** backend 120 passed (was 109). Frontend 103 passed. `pyflakes backend` is clean. The container upgraded the real volume from 1 to 2 once, and all 8 locations were kept.
 
 ---
 

@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 from backend.app.database import get_db_connection
 from backend.app.main import app
-from backend.app.services.weather_service import build_weather_point, deg_to_cardinal
+from backend.app.services.forecast_parser import build_weather_point
+from backend.app.units import deg_to_cardinal
 from factories import forecast_payload, upstream_error
 
 POINT = "/api/weather/point?lat=48.78&lon=-121.94"
@@ -194,7 +195,7 @@ def test_point_weather_upstream_failure_is_502_without_internal_detail(client, o
 def test_programming_errors_are_500_not_502():
     """Non-HTTP errors (bugs) must not be reported as an upstream failure."""
     with TestClient(app, raise_server_exceptions=False) as c:
-        with patch("backend.app.routers.weather.get_weather", side_effect=KeyError("bug")):
+        with patch("backend.app.routers.weather.get_point_forecast", side_effect=KeyError("bug")):
             resp = c.get("/api/weather/point?lat=48.0&lon=-122.0")
     assert resp.status_code == 500
 
@@ -241,3 +242,39 @@ def test_invalid_json_from_open_meteo_is_502(client, monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     resp = client.get("/api/weather/point?lat=48&lon=-122")
     assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-92 phase 4: forecast caches are keyed by timezone
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("path", ["/api/weather?location_id=1", "/api/weather/point?lat=48.78&lon=-121.94"])
+def test_changing_timezone_does_not_serve_the_other_timezones_cache(client, open_meteo, path):
+    """Hourly times come back in the requested timezone; a cached Pacific forecast must
+    not be returned for UTC (it was, for up to 30 minutes)."""
+    open_meteo.respond(forecast_payload())
+
+    pacific = client.get(f"{path}&timezone=America/Los_Angeles").json()
+    utc = client.get(f"{path}&timezone=UTC").json()
+    utc_again = client.get(f"{path}&timezone=UTC").json()
+
+    assert pacific["cached"] is False
+    assert utc["cached"] is False and utc["timezone"] == "UTC"
+    assert open_meteo.call_count == 2
+    assert open_meteo.last_params["timezone"] == "UTC"
+    assert utc_again["cached"] is True and utc_again["timezone"] == "UTC"
+
+
+def test_saved_location_cache_hit_reports_current_location_details(client, open_meteo):
+    """Identity fields come from the request, not the cached payload."""
+    from backend.app.database import db_connection
+
+    open_meteo.respond(forecast_payload())
+    client.get("/api/weather?location_id=1")
+    with db_connection() as conn:
+        conn.execute("UPDATE locations SET name = 'Renamed' WHERE id = 1;")
+
+    hit = client.get("/api/weather?location_id=1").json()
+
+    assert hit["cached"] is True
+    assert hit["location_name"] == "Renamed"

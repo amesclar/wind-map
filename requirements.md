@@ -17,8 +17,9 @@ provide a button to list saved locations with minus sign buttons for removal
 wind data should include wind speed, wind gust, and wind direction
 
 cache weather data with 30min TTL
-+ Saved locations are cached in `weather_cache` keyed by (location_id, model).
-+ Ad-hoc map points (`GET /api/weather/point`, location_id 0) are cached in `point_weather_cache` keyed by (lat, lon rounded to 2 decimals, model), so different points never share a cached forecast (SCRUM-88). Cached responses always carry the requested point's name and coordinates. Old (0, model) rows in `weather_cache` are no longer read.
++ Saved locations are cached in `weather_cache` keyed by (location_id, model, timezone).
++ Ad-hoc map points (`GET /api/weather/point`, location_id 0) are cached in `point_weather_cache` keyed by (lat, lon rounded to 2 decimals, model, timezone), so different points never share a cached forecast (SCRUM-88).
++ The timezone is part of both keys (SCRUM-92) because forecast times are returned in the requested timezone; changing the timezone fetches a new forecast instead of serving one cached for another timezone. Cached responses always carry the requested point's name and coordinates. Old (0, model) rows in `weather_cache` are no longer read.
 
 # map data
 use an open-source map library (e.g., Leaflet.js with OpenStreetMap or CartoDB)

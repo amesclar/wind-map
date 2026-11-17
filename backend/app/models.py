@@ -49,8 +49,12 @@ class WeatherForecastPoint(BaseModel):
     weather_code: int
 
 
+# location_id reported for ad-hoc map points (not a saved location).
+POINT_LOCATION_ID = 0
+
+
 class WeatherForecastResponse(BaseModel):
-    location_id: int
+    location_id: int  # POINT_LOCATION_ID for ad-hoc map points
     location_name: str
     latitude: float
     longitude: float

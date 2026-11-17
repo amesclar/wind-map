@@ -8,7 +8,7 @@ from backend.app import locations_repo
 from backend.app.config import AVAILABLE_MODELS
 from backend.app.dependencies import model_param, timezone_param
 from backend.app.models import WeatherForecastResponse
-from backend.app.services.weather_service import get_weather
+from backend.app.services.weather_service import get_location_forecast, get_point_forecast
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,7 @@ async def get_location_weather(
         )
 
     try:
-        return await get_weather(
-            location_id=location.id,
-            location_name=location.name,
-            latitude=location.latitude,
-            longitude=location.longitude,
-            model=model,
-            timezone=timezone,
-        )
+        return await get_location_forecast(location, model=model, timezone=timezone)
     except httpx.HTTPError as exc:
         logger.exception("Open-Meteo forecast request failed for location %s", location_id)
         raise upstream_error("Failed to fetch weather forecast from Open-Meteo") from exc
@@ -60,15 +53,7 @@ async def get_all_locations_weather(
     results: List[WeatherForecastResponse] = []
     for location in sorted(locations_repo.list_locations(), key=lambda loc: loc.id):
         try:
-            fc = await get_weather(
-                location_id=location.id,
-                location_name=location.name,
-                latitude=location.latitude,
-                longitude=location.longitude,
-                model=model,
-                timezone=timezone,
-            )
-            results.append(fc)
+            results.append(await get_location_forecast(location, model=model, timezone=timezone))
         except httpx.HTTPError:
             # One failing location must not hide the others; it is logged, not swallowed.
             logger.exception("Open-Meteo forecast request failed for location %s; skipping", location.id)
@@ -88,16 +73,8 @@ async def get_point_weather(
     Used by the wind grid overlay barb click to populate the drawer ephemerally.
     location_id is 0 and location_name is the formatted coordinates.
     """
-    location_name = f"{abs(lat):.2f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.2f}°{'E' if lon >= 0 else 'W'}"
     try:
-        return await get_weather(
-            location_id=0,
-            location_name=location_name,
-            latitude=lat,
-            longitude=lon,
-            model=model,
-            timezone=timezone,
-        )
+        return await get_point_forecast(lat, lon, model=model, timezone=timezone)
     except httpx.HTTPError as exc:
         logger.exception("Open-Meteo point forecast request failed for %s,%s", lat, lon)
         raise upstream_error("Failed to fetch point weather forecast from Open-Meteo") from exc

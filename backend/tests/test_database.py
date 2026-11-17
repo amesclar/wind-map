@@ -18,7 +18,7 @@ from backend.app.database import (
     init_db,
 )
 from backend.app.main import app
-from backend.app.services.weather_service import get_weather
+from backend.app.services.weather_service import get_point_forecast
 from factories import insert_grid_row, upstream_error
 
 def _is_closed(conn: sqlite3.Connection) -> bool:
@@ -48,7 +48,7 @@ def test_db_connection_rolls_back_and_closes_on_error():
 
 
 @pytest.mark.asyncio
-async def test_get_weather_closes_connections_when_open_meteo_fails(open_meteo):
+async def test_point_forecast_closes_connections_when_open_meteo_fails(open_meteo):
     """An upstream failure used to leak the connection opened for the cache read."""
     opened: list[sqlite3.Connection] = []
     real = database.get_db_connection
@@ -61,7 +61,7 @@ async def test_get_weather_closes_connections_when_open_meteo_fails(open_meteo):
     open_meteo.fail(upstream_error("down"))
     with patch.object(database, "get_db_connection", side_effect=tracking):
         with pytest.raises(httpx.HTTPError):
-            await get_weather(0, "pt", 48.0, -122.0)
+            await get_point_forecast(48.0, -122.0)
 
     assert opened, "expected at least one connection"
     assert all(_is_closed(c) for c in opened)
@@ -71,13 +71,13 @@ def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
     now = time.time()
     with db_connection() as conn:
         conn.execute(
-            "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
-            "VALUES (1, 'a', ?, ?, '{}'), (1, 'b', ?, ?, '{}');",
+            "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
+            "VALUES (1, 'a', 'UTC', ?, ?, '{}'), (1, 'b', 'UTC', ?, ?, '{}');",
             (now, now - 1, now, now + 600),
         )
         for lat, expires_in in ((1, -1), (2, 600)):
             conn.execute(
-                "INSERT INTO point_weather_cache VALUES (?, ?, 'm', ?, ?, '{}');",
+                "INSERT INTO point_weather_cache VALUES (?, ?, 'm', 'UTC', ?, ?, '{}');",
                 (lat, lat, now, now + expires_in),
             )
     insert_grid_row(1, 1, "m", expires_in=-1)
@@ -93,8 +93,8 @@ def test_startup_cleans_expired_cache():
 
     with db_connection() as conn:
         conn.execute(
-            "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
-            "VALUES (1, 'a', 0, 1, '{}');"
+            "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
+            "VALUES (1, 'a', 'UTC', 0, 1, '{}');"
         )
     with TestClient(app):  # entering a TestClient runs the startup lifespan
         pass
@@ -124,8 +124,8 @@ def test_init_db_is_idempotent_and_keeps_data():
     with db_connection() as conn:
         conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES ('Keep', 1, 2);")
         conn.execute(
-            "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
-            "VALUES (1, 'best_match', 0, 9999999999, '{}');"
+            "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
+            "VALUES (1, 'best_match', 'UTC', 0, 9999999999, '{}');"
         )
     init_db()
     with db_connection() as conn:
@@ -166,6 +166,25 @@ def test_foreign_keys_are_enforced():
     with pytest.raises(sqlite3.IntegrityError):
         with db_connection() as conn:
             conn.execute(
-                "INSERT INTO weather_cache (location_id, model, cached_at, expires_at, payload_json) "
-                "VALUES (999, 'best_match', 0, 1, '{}');"
+                "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
+                "VALUES (999, 'best_match', 'UTC', 0, 1, '{}');"
             )
+
+
+def test_upgrade_from_version_1_adds_timezone_to_forecast_cache_keys():
+    with db_connection() as conn:
+        conn.execute("DROP TABLE weather_cache;")
+        conn.execute(
+            "CREATE TABLE weather_cache (id INTEGER PRIMARY KEY, location_id INTEGER, model TEXT, "
+            "cached_at REAL, expires_at REAL, payload_json TEXT, UNIQUE(location_id, model));"
+        )
+        conn.execute("INSERT INTO weather_cache VALUES (1, 1, 'best_match', 0, 9999999999, '{}');")
+        conn.execute("PRAGMA user_version = 1;")
+
+    init_db()
+
+    with db_connection() as conn:
+        assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+        assert "timezone" in _columns(conn, "weather_cache")
+        assert "timezone" in _columns(conn, "point_weather_cache")
+        assert conn.execute("SELECT COUNT(*) AS n FROM weather_cache;").fetchone()["n"] == 0

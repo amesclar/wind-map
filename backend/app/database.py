@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 # upgrade (they only hold data that is refetched within 30 minutes). Changes to
 # `locations` need an explicit, data-preserving step in `_migrate`.
 #   0 → 1 (SCRUM-92): all tables created here; grid cache has temperature_f.
-SCHEMA_VERSION = 1
+#   1 → 2 (SCRUM-92): forecast caches keyed by timezone too.
+SCHEMA_VERSION = 2
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -32,30 +33,33 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 """
 
-# Forecast cache for saved locations, keyed by (location_id, model).
+# Forecast cache for saved locations, keyed by (location_id, model, timezone).
 WEATHER_CACHE_DDL = """
 CREATE TABLE IF NOT EXISTS weather_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     location_id INTEGER NOT NULL,
     model TEXT NOT NULL,
+    timezone TEXT NOT NULL,
     cached_at REAL NOT NULL,
     expires_at REAL NOT NULL,
     payload_json TEXT NOT NULL,
-    UNIQUE(location_id, model),
+    UNIQUE(location_id, model, timezone),
     FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 """
 
-# Forecast cache for ad-hoc map points (grid barb clicks), keyed by rounded coordinates.
+# Forecast cache for ad-hoc map points (grid barb clicks), keyed by rounded
+# coordinates, model and timezone.
 POINT_CACHE_DDL = """
 CREATE TABLE IF NOT EXISTS point_weather_cache (
     lat_key      REAL NOT NULL,
     lon_key      REAL NOT NULL,
     model        TEXT NOT NULL,
+    timezone     TEXT NOT NULL,
     cached_at    REAL NOT NULL,
     expires_at   REAL NOT NULL,
     payload_json TEXT NOT NULL,
-    PRIMARY KEY (lat_key, lon_key, model)
+    PRIMARY KEY (lat_key, lon_key, model, timezone)
 );
 """
 
