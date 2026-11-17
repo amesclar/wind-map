@@ -1,124 +1,12 @@
-import React from 'react';
-import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import App from './App';
-import type { WeatherForecastPoint, WeatherForecastResponse, SavedLocation } from './types';
+import type { WeatherForecastResponse } from './types';
+import type { GridWindPoint } from './api/client';
+import { makeForecast, makeLocation } from './test/fixtures';
+import { currentMap, markerAt, resetLeafletMock, type MockMarker } from './test/leafletMock';
 
-// Mock Leaflet
-const mockMarkerInstances: Record<string, any> = {};
-vi.mock('leaflet', () => {
-  const layer = () => ({
-    addTo: vi.fn(),
-    remove: vi.fn(),
-  });
-  return {
-    default: {
-      map: vi.fn(() => ({
-        remove: vi.fn(),
-        flyTo: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        getBounds: vi.fn(() => ({
-          getSouth: () => 47.0,
-          getNorth: () => 49.0,
-          getWest: () => -123.0,
-          getEast: () => -121.0,
-        })),
-        getSize: vi.fn(() => ({ x: 800, y: 600 })),
-      })),
-      control: {
-        zoom: vi.fn(() => ({ addTo: vi.fn() })),
-      },
-      tileLayer: vi.fn(layer),
-      divIcon: vi.fn((opts: any) => ({ ...opts })),
-      marker: vi.fn((coords: [number, number]) => {
-        const key = `${coords[0]},${coords[1]}`;
-        const instance = {
-          addTo: vi.fn().mockReturnThis(),
-          bindPopup: vi.fn().mockReturnThis(),
-          on: vi.fn(function (this: any, event: string, handler: Function) {
-            instance._handlers = instance._handlers || {};
-            instance._handlers[event] = handler;
-            return this;
-          }),
-          remove: vi.fn(),
-          setIcon: vi.fn(),
-          openPopup: vi.fn(),
-          _handlers: {} as Record<string, Function>,
-        };
-        mockMarkerInstances[key] = instance;
-        return instance;
-      }),
-    },
-  };
-});
-
-function createMockPoint(index: number, speed = 12, gust = 18): WeatherForecastPoint {
-  return {
-    time: `2026-11-15T${String((index * 3) % 24).padStart(2, '0')}:00`,
-    temperature_c: 12,
-    temperature_f: 53.6,
-    wind_speed_knots: speed,
-    wind_speed_kmh: Math.round(speed * 1.852 * 10) / 10,
-    wind_speed_mph: Math.round(speed * 1.15078 * 10) / 10,
-    wind_speed_ms: Math.round(speed * 0.514444 * 10) / 10,
-    wind_gust_knots: gust,
-    wind_gust_kmh: Math.round(gust * 1.852 * 10) / 10,
-    wind_gust_mph: Math.round(gust * 1.15078 * 10) / 10,
-    wind_gust_ms: Math.round(gust * 0.514444 * 10) / 10,
-    wind_direction_deg: 220,
-    wind_direction_cardinal: 'SW',
-    humidity: 64,
-    weather_code: 1,
-  };
-}
-
-const mockLocations: SavedLocation[] = [
-  {
-    id: 1,
-    name: 'Oak Harbor, WA',
-    latitude: 48.2939,
-    longitude: -122.6064,
-    admin1: 'Washington',
-    country: 'United States',
-    is_default: true,
-  },
-  {
-    id: 2,
-    name: 'Seattle, WA',
-    latitude: 47.6062,
-    longitude: -122.3321,
-    admin1: 'Washington',
-    country: 'United States',
-    is_default: false,
-  },
-];
-
-const mockForecast1: WeatherForecastResponse = {
-  location_id: 1,
-  location_name: 'Oak Harbor, WA',
-  latitude: 48.2939,
-  longitude: -122.6064,
-  model: 'best_match',
-  timezone: 'America/Los_Angeles',
-  cached: false,
-  cached_at: 0,
-  current: createMockPoint(0, 14, 22),
-  forecast: Array.from({ length: 16 }, (_, i) => createMockPoint(i, 14, 22)),
-};
-
-const mockForecast2: WeatherForecastResponse = {
-  location_id: 2,
-  location_name: 'Seattle, WA',
-  latitude: 47.6062,
-  longitude: -122.3321,
-  model: 'best_match',
-  timezone: 'America/Los_Angeles',
-  cached: true,
-  cached_at: 0,
-  current: createMockPoint(0, 20, 30),
-  forecast: Array.from({ length: 16 }, (_, i) => createMockPoint(i, 20, 30)),
-};
+vi.mock('leaflet', () => import('./test/leafletMock'));
 
 vi.mock('./api/client', () => ({
   fetchLocations: vi.fn(),
@@ -129,59 +17,49 @@ vi.mock('./api/client', () => ({
   fetchAllWeather: vi.fn(),
   fetchAppConfig: vi.fn(),
   searchGeocode: vi.fn(),
-  fetchWindGrid: vi.fn().mockResolvedValue([]),
-  fetchPointWeather: vi.fn().mockResolvedValue({
-    location_id: 0,
-    location_name: '48.78°N, 121.94°W',
-    latitude: 48.78,
-    longitude: -121.94,
-    model: 'best_match',
-    timezone: 'America/Los_Angeles',
-    cached: false,
-    cached_at: 0,
-    current: {
-      time: '2026-11-15T17:00',
-      temperature_c: 10,
-      temperature_f: 50,
-      wind_speed_knots: 14,
-      wind_speed_kmh: 26,
-      wind_speed_mph: 16,
-      wind_speed_ms: 7.2,
-      wind_gust_knots: 20,
-      wind_gust_kmh: 37,
-      wind_gust_mph: 23,
-      wind_gust_ms: 10.3,
-      wind_direction_deg: 220,
-      wind_direction_cardinal: 'SW',
-      humidity: 65,
-      weather_code: 1,
-    },
-    forecast: Array.from({ length: 16 }, (_, i) => ({
-      time: `2026-11-15T${String((17 + i * 3) % 24).padStart(2, '0')}:00`,
-      temperature_c: 10,
-      temperature_f: 50,
-      wind_speed_knots: 14,
-      wind_speed_kmh: 26,
-      wind_speed_mph: 16,
-      wind_speed_ms: 7.2,
-      wind_gust_knots: 20,
-      wind_gust_kmh: 37,
-      wind_gust_mph: 23,
-      wind_gust_ms: 10.3,
-      wind_direction_deg: 220,
-      wind_direction_cardinal: 'SW',
-      humidity: 65,
-      weather_code: 1,
-    })),
-  }),
+  fetchWindGrid: vi.fn(),
+  fetchPointWeather: vi.fn(),
 }));
 
 import * as api from './api/client';
 
+const mockLocations = [
+  makeLocation(),
+  makeLocation({ id: 2, name: 'Seattle, WA', latitude: 47.6062, longitude: -122.3321, is_default: false }),
+];
+
+const mockForecast1 = makeForecast({}, { speed: 14, gust: 22 });
+
+const mockForecast2 = makeForecast(
+  { location_id: 2, location_name: 'Seattle, WA', latitude: 47.6062, longitude: -122.3321, cached: true },
+  { speed: 20, gust: 30 },
+);
+
+const pointForecast = makeForecast(
+  { location_id: 0, location_name: '48.78°N, 121.94°W', latitude: 48.78, longitude: -121.94 },
+  { speed: 14, gust: 20 },
+);
+
+/** Pan the map so WindOverlay reloads the grid with `point`, then click that point's barb. */
+async function clickGridPoint(point: GridWindPoint): Promise<MockMarker> {
+  vi.mocked(api.fetchWindGrid).mockResolvedValue([point]);
+  const map = currentMap();
+  // New bounds give a new fetch key, so the grid reloads.
+  map.bounds = { south: 46.0, north: 50.0, west: -124.0, east: -120.0 };
+  map.fire('moveend');
+  let marker: MockMarker | undefined;
+  await waitFor(() => {
+    marker = markerAt(point.latitude, point.longitude);
+    expect(marker).toBeDefined();
+  });
+  marker!.fire('click');
+  return marker!;
+}
+
 describe('App prediction drawer integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(mockMarkerInstances).forEach((k) => delete mockMarkerInstances[k]);
+    resetLeafletMock();
 
     // Ensure geolocation doesn't hang in tests
     Object.defineProperty(globalThis.navigator, 'geolocation', {
@@ -198,10 +76,8 @@ describe('App prediction drawer integration', () => {
       if (id === 2) return Promise.resolve(mockForecast2);
       return Promise.resolve(mockForecast1);
     });
-  });
-
-  afterEach(() => {
-    cleanup();
+    (api.fetchWindGrid as any).mockResolvedValue([]);
+    (api.fetchPointWeather as any).mockResolvedValue(pointForecast);
   });
 
   it('displays prediction drawer with forecast points on initial load', async () => {
@@ -250,14 +126,10 @@ describe('App prediction drawer integration', () => {
     const drawer = await screen.findByTestId('timeline-drawer');
     expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy();
 
-    // Wait for markers to be rendered
-    const seattleMarkerKey = `${mockLocations[1].latitude},${mockLocations[1].longitude}`;
-    await waitFor(() => {
-      expect(mockMarkerInstances[seattleMarkerKey]).toBeDefined();
-    });
-
-    // Trigger marker click callback
-    mockMarkerInstances[seattleMarkerKey]._handlers['click']();
+    // Wait for markers to be rendered, then click Seattle's
+    const seattle = mockLocations[1];
+    await waitFor(() => expect(markerAt(seattle.latitude, seattle.longitude)).toBeDefined());
+    markerAt(seattle.latitude, seattle.longitude)!.fire('click');
 
     // Verify drawer displays Seattle predictions
     await waitFor(() => {
@@ -276,28 +148,12 @@ describe('App prediction drawer integration', () => {
       display_name: 'Miami, Florida, United States',
     };
 
-    const newLocationSaved: SavedLocation = {
-      id: 3,
-      name: 'Miami',
-      latitude: 25.7617,
-      longitude: -80.1918,
-      admin1: 'Florida',
-      country: 'United States',
-      is_default: false,
-    };
-
-    const mockForecastMiami: WeatherForecastResponse = {
-      location_id: 3,
-      location_name: 'Miami',
-      latitude: 25.7617,
-      longitude: -80.1918,
-      model: 'best_match',
-      timezone: 'America/Los_Angeles',
-      cached: false,
-      cached_at: 0,
-      current: createMockPoint(0, 18, 26),
-      forecast: Array.from({ length: 16 }, (_, i) => createMockPoint(i, 18, 26)),
-    };
+    const miami = { id: 3, name: 'Miami', latitude: 25.7617, longitude: -80.1918 };
+    const newLocationSaved = makeLocation({ ...miami, admin1: 'Florida', is_default: false });
+    const mockForecastMiami = makeForecast(
+      { location_id: 3, location_name: 'Miami', latitude: miami.latitude, longitude: miami.longitude },
+      { speed: 18, gust: 26 },
+    );
 
     (api.searchGeocode as any).mockResolvedValue([newLocationGeocode]);
     (api.addLocation as any).mockResolvedValue(newLocationSaved);
@@ -320,9 +176,11 @@ describe('App prediction drawer integration', () => {
     const dropdownResult = await screen.findByText('Miami');
     fireEvent.click(dropdownResult);
 
-    // Verify drawer updates to Miami with Miami predictions
+    // Verify drawer updates to Miami with Miami predictions. The header switches as soon as
+    // the location is selected; the forecast arrives a moment later, so wait for both.
     await waitFor(() => {
       expect(within(drawer).getByText('Miami')).toBeTruthy();
+      expect(within(drawer).getAllByText('18 kt').length).toBeGreaterThan(0);
     });
 
     const forecastPoints = screen.getAllByTestId('forecast-point');
@@ -362,7 +220,7 @@ describe('App prediction drawer integration', () => {
   });
 
   it('does not rebuild saved-location markers when App re-renders with unchanged data (SCRUM-92)', async () => {
-    const L = (await import('leaflet')).default as any;
+    const L = vi.mocked((await import('leaflet')).default);
     const { container } = render(<App />);
     const drawer = await screen.findByTestId('timeline-drawer');
     await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
@@ -389,24 +247,7 @@ describe('App prediction drawer integration', () => {
     expect(api.fetchPointWeather).not.toHaveBeenCalled();
 
     const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
-    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
-
-    // Trigger a grid refresh by invoking the map 'moveend' handler registered by WindOverlay
-    const L = (await import('leaflet')).default as any;
-    const mapInstance = L.map.mock.results[0].value;
-    // Change the bounds so the fetch key differs and the grid reloads
-    mapInstance.getBounds.mockReturnValue({
-      getSouth: () => 46.0,
-      getNorth: () => 50.0,
-      getWest: () => -124.0,
-      getEast: () => -120.0,
-    });
-    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
-
-    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
-    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
-
-    mockMarkerInstances[key]._handlers['click']();
+    await clickGridPoint(gridPoint);
 
     await waitFor(() => {
       expect(api.fetchPointWeather).toHaveBeenCalledWith(48.78, -121.94, 'best_match', 'America/Los_Angeles');
@@ -436,20 +277,7 @@ describe('App prediction drawer integration', () => {
 
     // Load a grid point and click its barb while Seattle is still pending
     const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
-    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
-    const L = (await import('leaflet')).default as any;
-    const mapInstance = L.map.mock.results[0].value;
-    mapInstance.getBounds.mockReturnValue({
-      getSouth: () => 46.0,
-      getNorth: () => 50.0,
-      getWest: () => -124.0,
-      getEast: () => -120.0,
-    });
-    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
-
-    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
-    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
-    mockMarkerInstances[key]._handlers['click']();
+    await clickGridPoint(gridPoint);
 
     await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
 
@@ -469,20 +297,7 @@ describe('App prediction drawer integration', () => {
 
     // Click a grid barb first
     const gridPoint = { latitude: 48.78, longitude: -121.94, wind_speed_knots: 14, wind_direction_deg: 220 };
-    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
-    const L = (await import('leaflet')).default as any;
-    const mapInstance = L.map.mock.results[0].value;
-    mapInstance.getBounds.mockReturnValue({
-      getSouth: () => 46.0,
-      getNorth: () => 50.0,
-      getWest: () => -124.0,
-      getEast: () => -120.0,
-    });
-    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
-
-    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
-    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
-    mockMarkerInstances[key]._handlers['click']();
+    await clickGridPoint(gridPoint);
     await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
 
     // Now explicitly select the saved location Seattle
@@ -536,27 +351,13 @@ describe('App prediction drawer integration', () => {
     const drawer = await screen.findByTestId('timeline-drawer');
     await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
 
-    (api.fetchWindGrid as any).mockResolvedValue([gridPoint]);
-    const L = (await import('leaflet')).default as any;
-    const mapInstance = L.map.mock.results[0].value;
-    mapInstance.getBounds.mockReturnValue({
-      getSouth: () => 46.0,
-      getNorth: () => 50.0,
-      getWest: () => -124.0,
-      getEast: () => -120.0,
-    });
-    mapInstance.on.mock.calls.filter((c: any[]) => c[0] === 'moveend').forEach((c: any[]) => c[1]());
-
-    const key = `${gridPoint.latitude},${gridPoint.longitude}`;
-    await waitFor(() => expect(mockMarkerInstances[key]).toBeDefined());
-    const marker = mockMarkerInstances[key];
-    marker._handlers['click']();
+    const marker = await clickGridPoint(gridPoint);
 
     await waitFor(() => expect(within(drawer).getByText('48.78°N, 121.94°W')).toBeTruthy());
 
     // The marker icon is switched to the selected (highlighted) barb
     await waitFor(() => expect(marker.setIcon).toHaveBeenCalled());
-    const selectedHtml: string = marker.setIcon.mock.calls.at(-1)[0].html;
+    const selectedHtml = (marker.setIcon.mock.calls.at(-1)![0] as { html: string }).html;
     expect(selectedHtml).toContain('data-selected="true"');
 
     const signature = (root: ParentNode) => {

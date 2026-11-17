@@ -1,13 +1,13 @@
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import { readAppVersion } from './appVersion';
+import { defineConfig, mergeConfig } from 'vitest/config';
+import viteConfig from './vite.config';
 
-export default defineConfig({
-  plugins: [react()],
-  define: {
-    __APP_VERSION__: JSON.stringify(readAppVersion()),
-  },
-  test: {
-    environment: 'jsdom',
-  },
-});
+// Reuses plugins and `define` (__APP_VERSION__) from vite.config.ts (SCRUM-92).
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      environment: 'jsdom',
+      setupFiles: ['./src/test/setup.ts'],
+    },
+  }),
+);

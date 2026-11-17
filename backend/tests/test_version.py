@@ -1,14 +1,10 @@
 """SCRUM-91: app version comes from the project-root VERSION file."""
 
 import json
-import os
 import re
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_PATH", "./data/test_wind_map.db")
-os.environ.setdefault("DATA_DIR", "./data")
 
-from fastapi.testclient import TestClient
 
 from backend.app.config import APP_VERSION, VERSION_FILE, read_app_version
 from backend.app.main import app
@@ -30,9 +26,8 @@ def test_backend_reads_version_file():
     assert app.version == _version_file()
 
 
-def test_health_endpoint_reports_version():
-    with TestClient(app) as client:
-        body = client.get("/api/health").json()
+def test_health_endpoint_reports_version(client):
+    body = client.get("/api/health").json()
     assert body == {"status": "ok", "version": _version_file()}
 
 
