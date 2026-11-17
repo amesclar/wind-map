@@ -30,7 +30,8 @@ describe('timeline drawer forecast', () => {
     expect(screen.getAllByText('G 18 kt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('54°F').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SW').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('64%').length).toBeGreaterThan(0);
+    // Humidity is not shown in the drawer (SCRUM-97)
+    expect(screen.queryByText('64%')).toBeNull();
   });
 
   it.each(['barb', 'cardinal', 'deg'] as const)(

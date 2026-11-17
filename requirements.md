@@ -57,6 +57,7 @@ Wind Grid Overlay (SCRUM-86, SCRUM-89): A continuous grid of wind barbs covering
 + Hard limits of 30 cols × 30 rows prevent runaway API requests.
 
 Drawer: Bottom timeline showing 16 time slices (every 3h for 48h) in Pacific Time by default.
++ Each slice shows temperature and wind only; relative humidity is no longer displayed in the drawer (SCRUM-97). The API still returns `humidity` in forecast points.
 + Each slice shows the wind direction in whole degrees true (e.g. "220°T", normalized to 0–359) directly below the wind barb (or direction display) and above the wind speed, regardless of the selected wind direction display (SCRUM-90).
 + The first ("Now") slice uses Open-Meteo "current" conditions rather than the top-of-hour hourly value (SCRUM-89); the remaining 15 slices are hourly values at +3h steps.
 
