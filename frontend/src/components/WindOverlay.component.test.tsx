@@ -1,34 +1,19 @@
-import { render, cleanup, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type L from 'leaflet';
 import { WindOverlay } from './WindOverlay';
 import * as api from '../api/client';
 import type { GridWindPoint } from '../api/client';
+import { createdMarkers as created, resetLeafletMock } from '../test/leafletMock';
 
 // SCRUM-92 phase 1 (F): grid requests are cancellable, stale responses are dropped,
 // and a failed request is retried for the same viewport.
 
-const created: { latlng: [number, number]; remove: ReturnType<typeof vi.fn> }[] = [];
-
-vi.mock('leaflet', () => ({
-  default: {
-    divIcon: vi.fn((opts: any) => ({ ...opts })),
-    marker: vi.fn((latlng: [number, number]) => {
-      const instance: any = {
-        latlng,
-        addTo: vi.fn(() => instance),
-        on: vi.fn(() => instance),
-        remove: vi.fn(),
-        setIcon: vi.fn(),
-      };
-      created.push(instance);
-      return instance;
-    }),
-  },
-}));
+vi.mock('leaflet', () => import('../test/leafletMock'));
 
 vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn() }));
 
+// WindOverlay only needs bounds, size and event registration from the map.
 function fakeMap() {
   const handlers: Record<string, () => void> = {};
   const map = {
@@ -61,13 +46,12 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
-  created.length = 0;
+  resetLeafletMock();
   vi.mocked(api.fetchWindGrid).mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  cleanup();
   vi.restoreAllMocks();
 });
 

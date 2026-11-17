@@ -1,78 +1,13 @@
-import React from 'react';
-import { render, screen, within, cleanup } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TimelineDrawer, formatDegreesTrue } from './TimelineDrawer';
 import { MapView } from './MapView';
-import type { WeatherForecastPoint, WeatherForecastResponse } from '../types';
+import type { WeatherForecastResponse } from '../types';
+import { makeForecast } from '../test/fixtures';
 
-vi.mock('leaflet', () => {
-  const layer = () => ({
-    addTo: vi.fn(),
-    remove: vi.fn(),
-  });
-  return {
-    default: {
-      map: vi.fn(() => ({
-        remove: vi.fn(),
-        flyTo: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        getBounds: vi.fn(() => ({
-          getSouth: () => 47.0,
-          getNorth: () => 49.0,
-          getWest: () => -123.0,
-          getEast: () => -121.0,
-        })),
-        getSize: vi.fn(() => ({ x: 800, y: 600 })),
-      })),
-      control: {
-        zoom: vi.fn(() => ({ addTo: vi.fn() })),
-      },
-      tileLayer: vi.fn(layer),
-      divIcon: vi.fn(() => ({})),
-      marker: vi.fn(() => ({
-        addTo: vi.fn().mockReturnThis(),
-        bindPopup: vi.fn().mockReturnThis(),
-        on: vi.fn().mockReturnThis(),
-        remove: vi.fn(),
-        openPopup: vi.fn(),
-      })),
-    },
-  };
-});
+vi.mock('leaflet', () => import('../test/leafletMock'));
 
-function point(index: number): WeatherForecastPoint {
-  return {
-    time: `2026-11-15T${String(index * 3).padStart(2, '0')}:00`,
-    temperature_c: 12,
-    temperature_f: 53.6,
-    wind_speed_knots: 12,
-    wind_speed_kmh: 22.2,
-    wind_speed_mph: 13.8,
-    wind_speed_ms: 6.2,
-    wind_gust_knots: 18,
-    wind_gust_kmh: 33.3,
-    wind_gust_mph: 20.7,
-    wind_gust_ms: 9.3,
-    wind_direction_deg: 220,
-    wind_direction_cardinal: 'SW',
-    humidity: 64,
-    weather_code: 1,
-  };
-}
-
-const forecast: WeatherForecastResponse = {
-  location_id: 1,
-  location_name: 'Oak Harbor, WA',
-  latitude: 48.2939,
-  longitude: -122.6064,
-  model: 'best_match',
-  timezone: 'America/Los_Angeles',
-  cached: false,
-  cached_at: 0,
-  current: point(0),
-  forecast: Array.from({ length: 16 }, (_, index) => point(index)),
-};
+const forecast = makeForecast();
 
 describe('timeline drawer forecast', () => {
   it('renders every 3-hour forecast point', () => {
@@ -98,7 +33,7 @@ describe('timeline drawer forecast', () => {
     expect(screen.getAllByText('64%').length).toBeGreaterThan(0);
   });
 
-  it.each(['barb', 'cardinal', 'degrees'] as const)(
+  it.each(['barb', 'cardinal', 'deg'] as const)(
     'shows degrees true below the barb and above the wind speed on every card (%s display) (SCRUM-90)',
     (dirDisplay) => {
       const data: WeatherForecastResponse = {
@@ -127,7 +62,6 @@ describe('timeline drawer forecast', () => {
       });
       expect(within(cards[0]).getByTestId('wind-direction-true').textContent).toBe('305°T');
       expect(within(cards[1]).getByTestId('wind-direction-true').textContent).toBe('220°T');
-      cleanup();
     }
   );
 
@@ -165,6 +99,8 @@ describe('timeline drawer forecast', () => {
         cartoApiKey=""
         selectedModel="best_match"
         windOverlayVisible={false}
+        selectedGridPoint={null}
+        onGridPointSelect={() => {}}
       />
     );
 

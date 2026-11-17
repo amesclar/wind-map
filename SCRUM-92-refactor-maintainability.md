@@ -17,7 +17,7 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 | Phase | Status | Branch |
 |---|---|---|
 | 1. Fixes and guard rails | ✅ Done | `feature/SCRUM-92-refactor-phase-1` |
-| 2. Test foundations | Not started | |
+| 2. Test foundations | ✅ Done | `feature/SCRUM-92-refactor-phase-2` (built on phase 1) |
 | 3. Backend structure | Not started | |
 | 4. Backend service split | Not started | |
 | 5. Frontend structure | Not started | |
@@ -49,6 +49,29 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 - **Dev tooling.** `pyflakes` was installed in the local `.venv` only. ESLint packages are frontend devDependencies; they don't affect the Docker image's runtime stage.
 
 **Results:** backend 61 passed (was 48). Frontend 85 passed (was 74). `npm run lint` and `tsc` are clean. The Docker image builds and runs.
+
+### Phase 2: what was done
+
+| Item | Change |
+|---|---|
+| B8. Backend fixtures | New `backend/tests/conftest.py`. It points `DATA_DIR`/`DATABASE_PATH` at a temp directory before the app is imported, and gives each test its own SQLite file through `monkeypatch`, replacing the three DROP TABLE fixtures. It also provides one `client` fixture, and a `grid_cache_table` fixture that uses the app's own DDL instead of a copy. |
+| B8. Network guard | An autouse `open_meteo` stub replaces `httpx.AsyncClient.get` in every test. Unconfigured, any call fails with "unexpected Open-Meteo call". Tests use `.respond()`, `.respond_sequence()` and `.fail()`, and inspect `.calls`, `.call_count` and `.last_params`. |
+| B8. Factories | New `backend/tests/factories.py`: `forecast_payload`, `grid_item`, `grid_payload`, `http_response`, `upstream_error`, `insert_grid_row`. |
+| B8. Weak tests | Removed the `dur2 < 0.2` timing assertion. Removed the no-op `weather_cache` wipe, and each point now asserts `cached is False`. Cache-hit tests assert Open-Meteo wasn't called again, instead of relying on "no patch active". |
+| B8. Geocoder tests | New `test_geocode.py` (14 tests): result mapping, skipping items without coordinates, short queries, current failure behavior (`[]`), and the router's 422 limits. |
+| F8. Leaflet mock | New `frontend/src/test/leafletMock.ts`, used by `App`, `TimelineDrawer`, `MapView` and `WindOverlay.component` tests via `vi.mock('leaflet', () => import('./test/leafletMock'))`. It records markers (`markerAt`, `createdMarkers`, `marker.fire('click')`, `popupHtml`) and maps (`currentMap()`, `map.bounds`, `map.fire('moveend')`). The four copies of "load the grid and click a barb" in `App.test.tsx` are one `clickGridPoint()` helper. |
+| F8. Fixtures | New `frontend/src/test/fixtures.ts`: `makePoint`, `makeForecast`, `makeLocation`. |
+| F8. Setup and config | New `src/test/setup.ts` registers `cleanup()` once, and the manual `cleanup()` calls are removed. `vitest.config.ts` now uses `mergeConfig` with `vite.config.ts` instead of repeating its plugins and `define` (F7). |
+| F7 (part). Test type-checking | New `tsconfig.test.json` and an `npm run typecheck` script that checks both app and test files. It found 4 errors, now fixed. One was a real test bug: `TimelineDrawer.test` used the direction display `'degrees'`, but the valid value is `'deg'`, so that case only passed because "degrees" is the fallback branch. |
+| F8. Coverage gaps | New tests for `AutocompleteDropdown` (debounce, min length, click and Enter, failure, click outside), `SavedLocationsModal` (list, empty state, select, delete, close) and `Navbar` (counts, buttons, selects, unit toggle). There's also a MapView test that a new click handler neither rebuilds markers nor goes stale. |
+
+**Notes:**
+- **Racy test fixed.** The "add location by typing" test checked Miami's forecast as soon as the header changed, before the forecast had loaded. It now waits for both, and passed 5 runs in a row.
+- **Test patch point.** The backend stub still patches `httpx.AsyncClient.get`; B4 (phase 3) adds a shared client to patch instead. Only `conftest.py` will need to change.
+- **Config files not type-checked.** `vite.config.ts`, `vitest.config.ts` and `appVersion.ts` still sit outside `typecheck`. This is small and left for phase 5.
+- **New dev dependency.** `@types/node` was added as a frontend devDependency, for test files that use `node:fs`.
+
+**Results:** backend 75 passed (61 kept, 14 new), and the suite also passes when run from another directory, from each file alone, and without touching `data/`. Test code went from 1,201 to 1,104 lines despite the new tests. Frontend 103 passed (was 85). `lint` and `typecheck` are clean.
 
 ---
 

@@ -1,39 +1,6 @@
 """API endpoint tests using FastAPI TestClient."""
 
-import os
-import pytest
-from fastapi.testclient import TestClient
-
-# Use temporary test database
-os.environ["DATABASE_PATH"] = "./data/test_wind_map.db"
-os.environ["DATA_DIR"] = "./data"
-
-from backend.app.database import init_db, get_db_connection
-from backend.app.main import app
-
-
-@pytest.fixture(autouse=True)
-def setup_test_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS weather_cache;")
-    cursor.execute("DROP TABLE IF EXISTS locations;")
-    conn.commit()
-    conn.close()
-    init_db()
-    yield
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS weather_cache;")
-    cursor.execute("DROP TABLE IF EXISTS locations;")
-    conn.commit()
-    conn.close()
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
+from backend.app.config import parse_cors_origins
 
 
 def test_health_check(client):
@@ -108,8 +75,6 @@ def test_weather_models_list(client):
 # ---------------------------------------------------------------------------
 
 def test_parse_cors_origins():
-    from backend.app.config import parse_cors_origins
-
     assert parse_cors_origins(None) == []
     assert parse_cors_origins("") == []
     assert parse_cors_origins(" http://a:5173 , ,http://b ") == ["http://a:5173", "http://b"]

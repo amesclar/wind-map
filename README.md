@@ -195,4 +195,9 @@ cd frontend && npm run test -- --run
 
 # Frontend lint (TypeScript + React hooks rules, zero warnings)
 cd frontend && npm run lint
+
+# Frontend type check, including test files
+cd frontend && npm run typecheck
 ```
+
+Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.

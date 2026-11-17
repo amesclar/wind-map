@@ -1,92 +1,23 @@
 """Tests for the wind grid endpoint and grid_weather_service."""
 
-import os
 import time
+
 import pytest
-import httpx
-from unittest.mock import patch, AsyncMock
-from fastapi.testclient import TestClient
 
-os.environ["DATABASE_PATH"] = "./data/test_wind_map.db"
-os.environ["DATA_DIR"] = "./data"
-
-from backend.app.database import init_db, get_db_connection
-from backend.app.main import app
-from backend.app.models import GridWindPoint
+from backend.app.database import db_connection, get_db_connection
 from backend.app.services.grid_weather_service import (
-    get_grid_wind,
+    CACHE_PRECISION,
     _cache_key,
     _fetch_from_open_meteo,
-    CACHE_PRECISION,
+    get_grid_wind,
 )
+from factories import grid_item, grid_payload, insert_grid_row, upstream_error
+
+BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_open_meteo_item(speed: float = 10.0, direction: float = 180.0, temp_c: float = 10.0) -> dict:
-    return {"current": {"wind_speed_10m": speed, "wind_direction_10m": direction, "temperature_2m": temp_c}}
-
-
-def _mock_response(items: list) -> httpx.Response:
-    """Build a mock httpx.Response returning `items` as JSON."""
-    payload = items if len(items) > 1 else items[0]
-    return httpx.Response(
-        status_code=200,
-        json=payload,
-        request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# DB fixture — wipes and recreates grid_weather_cache between every test
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def setup_test_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS grid_weather_cache;")
-    cur.execute("DROP TABLE IF EXISTS weather_cache;")
-    cur.execute("DROP TABLE IF EXISTS locations;")
-    conn.commit()
-    conn.close()
-    init_db()
-    # grid table is created lazily by the service on first use; force it now
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS grid_weather_cache (
-            lat_key  REAL NOT NULL,
-            lon_key  REAL NOT NULL,
-            model    TEXT NOT NULL,
-            cached_at  REAL NOT NULL,
-            expires_at REAL NOT NULL,
-            wind_speed_knots REAL NOT NULL,
-            wind_direction_deg REAL NOT NULL,
-            temperature_f REAL,
-            PRIMARY KEY (lat_key, lon_key, model)
-        );
-        """
-    )
-    conn.commit()
-    conn.close()
-    yield
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS grid_weather_cache;")
-    cur.execute("DROP TABLE IF EXISTS weather_cache;")
-    cur.execute("DROP TABLE IF EXISTS locations;")
-    conn.commit()
-    conn.close()
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
+def grid_params(**overrides) -> dict:
+    return {**BBOX, "cols": 2, "rows": 2, **overrides}
 
 
 # ---------------------------------------------------------------------------
@@ -113,13 +44,12 @@ def test_cache_key_same_for_nearby_points():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_fetch_single_point_dict_response():
+async def test_fetch_single_point_dict_response(open_meteo):
     """Open-Meteo returns a plain dict for a single point; service wraps it correctly."""
     pts = [(48.29, -122.60)]
-    mock_resp = _mock_response([_make_open_meteo_item(15.0, 220.0)])
+    open_meteo.respond(grid_payload(grid_item(15.0, 220.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await _fetch_from_open_meteo(pts, "best_match")
 
     assert len(result) == 1
     assert result[0].latitude == 48.29
@@ -129,18 +59,12 @@ async def test_fetch_single_point_dict_response():
 
 
 @pytest.mark.asyncio
-async def test_fetch_multiple_points_array_response():
+async def test_fetch_multiple_points_array_response(open_meteo):
     """Open-Meteo returns a JSON array for multiple points."""
     pts = [(48.0, -122.0), (47.0, -121.0), (46.0, -120.0)]
-    items = [
-        _make_open_meteo_item(5.0, 90.0),
-        _make_open_meteo_item(20.0, 180.0),
-        _make_open_meteo_item(35.0, 270.0),
-    ]
-    mock_resp = _mock_response(items)
+    open_meteo.respond(grid_payload(grid_item(5.0, 90.0), grid_item(20.0, 180.0), grid_item(35.0, 270.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await _fetch_from_open_meteo(pts, "best_match")
 
     assert len(result) == 3
     assert result[0].wind_speed_knots == 5.0
@@ -152,52 +76,36 @@ async def test_fetch_multiple_points_array_response():
 
 
 @pytest.mark.asyncio
-async def test_fetch_handles_null_wind_values():
+async def test_fetch_handles_null_wind_values(open_meteo):
     """None values from Open-Meteo should default to 0.0, not raise."""
     pts = [(48.0, -122.0)]
     item = {"current": {"wind_speed_10m": None, "wind_direction_10m": None}}
-    mock_resp = _mock_response([item])
+    open_meteo.respond(grid_payload(item))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await _fetch_from_open_meteo(pts, "best_match")
 
     assert result[0].wind_speed_knots == 0.0
     assert result[0].wind_direction_deg == 0.0
 
 
 @pytest.mark.asyncio
-async def test_fetch_non_best_match_model_adds_models_param():
+async def test_fetch_non_best_match_model_adds_models_param(open_meteo):
     """A non-default model should be forwarded in the Open-Meteo request params."""
-    pts = [(48.0, -122.0)]
-    mock_resp = _mock_response([_make_open_meteo_item()])
-    captured = {}
+    open_meteo.respond(grid_payload(grid_item()))
 
-    async def fake_get(self_or_url, url=None, **kwargs):
-        # httpx calls client.get(url, params=...) so the url lands in self_or_url
-        captured["params"] = kwargs.get("params", {})
-        return mock_resp
+    await _fetch_from_open_meteo([(48.0, -122.0)], "ecmwf_ifs04")
 
-    with patch("httpx.AsyncClient.get", new=fake_get):
-        await _fetch_from_open_meteo(pts, "ecmwf_ifs04")
-
-    assert captured["params"].get("models") == "ecmwf_ifs04"
+    assert open_meteo.last_params.get("models") == "ecmwf_ifs04"
 
 
 @pytest.mark.asyncio
-async def test_fetch_best_match_omits_models_param():
+async def test_fetch_best_match_omits_models_param(open_meteo):
     """best_match should NOT add a 'models' key to the request."""
-    pts = [(48.0, -122.0)]
-    mock_resp = _mock_response([_make_open_meteo_item()])
-    captured = {}
+    open_meteo.respond(grid_payload(grid_item()))
 
-    async def fake_get(self_or_url, url=None, **kwargs):
-        captured["params"] = kwargs.get("params", {})
-        return mock_resp
+    await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
 
-    with patch("httpx.AsyncClient.get", new=fake_get):
-        await _fetch_from_open_meteo(pts, "best_match")
-
-    assert "models" not in captured["params"]
+    assert "models" not in open_meteo.last_params
 
 
 # ---------------------------------------------------------------------------
@@ -205,27 +113,26 @@ async def test_fetch_best_match_omits_models_param():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_empty_input():
+async def test_get_grid_wind_empty_input(open_meteo):
     result = await get_grid_wind([])
     assert result == []
+    assert open_meteo.call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_cache_miss_then_hit():
+async def test_get_grid_wind_cache_miss_then_hit(open_meteo):
     pts = [(48.0, -122.0), (47.0, -121.0)]
-    items = [_make_open_meteo_item(12.0, 200.0), _make_open_meteo_item(8.0, 100.0)]
-    mock_resp = _mock_response(items)
+    open_meteo.respond(grid_payload(grid_item(12.0, 200.0), grid_item(8.0, 100.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
-        # First call: cache miss → one HTTP request
-        result1 = await get_grid_wind(pts, "best_match")
-        assert mock_get.call_count == 1
-        assert len(result1) == 2
+    # First call: cache miss → one HTTP request
+    result1 = await get_grid_wind(pts, "best_match")
+    assert open_meteo.call_count == 1
+    assert len(result1) == 2
 
-        # Second call: both points are cached → no HTTP request
-        result2 = await get_grid_wind(pts, "best_match")
-        assert mock_get.call_count == 1  # still 1
-        assert len(result2) == 2
+    # Second call: both points are cached → no HTTP request
+    result2 = await get_grid_wind(pts, "best_match")
+    assert open_meteo.call_count == 1  # still 1
+    assert len(result2) == 2
 
     # Values are consistent across cache miss and hit
     speeds_first = {round(p.wind_speed_knots, 1) for p in result1}
@@ -234,29 +141,17 @@ async def test_get_grid_wind_cache_miss_then_hit():
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_partial_cache_hit():
+async def test_get_grid_wind_partial_cache_hit(open_meteo, grid_cache_table):
     """When some points are cached and others are not, only missing points are fetched."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    now = time.time()
-    # Pre-seed one point into the cache
-    cur.execute(
-        """
-        INSERT INTO grid_weather_cache
-            (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg, temperature_f)
-        VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0, 55.0)
-        """,
-        (now, now + 3600),
-    )
-    conn.commit()
-    conn.close()
+    insert_grid_row(48.0, -122.0, speed=7.0, direction=90.0, temperature_f=55.0)  # pre-seed one point
 
     pts = [(48.0, -122.0), (47.0, -121.0)]  # first is cached, second is not
-    mock_resp = _mock_response([_make_open_meteo_item(25.0, 270.0)])
+    open_meteo.respond(grid_payload(grid_item(25.0, 270.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
-        result = await get_grid_wind(pts, "best_match")
-        assert mock_get.call_count == 1  # fetched only the missing point
+    result = await get_grid_wind(pts, "best_match")
+
+    assert open_meteo.call_count == 1  # fetched only the missing point
+    assert open_meteo.last_params["latitude"] == "47.0"
 
     speeds = {round(p.wind_speed_knots, 1) for p in result}
     assert 7.0 in speeds   # from cache
@@ -264,84 +159,51 @@ async def test_get_grid_wind_partial_cache_hit():
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_expired_cache_refetches():
+async def test_get_grid_wind_expired_cache_refetches(open_meteo, grid_cache_table):
     """An expired cache entry should trigger a fresh API call."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    past = time.time() - 10  # already expired
-    cur.execute(
-        """
-        INSERT INTO grid_weather_cache
-            (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg)
-        VALUES (48.0, -122.0, 'best_match', ?, ?, 3.0, 45.0)
-        """,
-        (past, past),
-    )
-    conn.commit()
-    conn.close()
+    insert_grid_row(48.0, -122.0, speed=3.0, direction=45.0, expires_in=-10)  # already expired
 
     pts = [(48.0, -122.0)]
-    mock_resp = _mock_response([_make_open_meteo_item(18.0, 180.0)])
+    open_meteo.respond(grid_payload(grid_item(18.0, 180.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        result = await get_grid_wind(pts, "best_match")
+    result = await get_grid_wind(pts, "best_match")
 
     # Stale value (3.0) replaced by fresh value (18.0)
     assert result[0].wind_speed_knots == 18.0
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_different_models_cached_independently():
+async def test_get_grid_wind_different_models_cached_independently(open_meteo):
     """Cache entries are keyed by (lat, lon, model); same point with different model is a miss."""
     pts = [(48.0, -122.0)]
-    mock_resp = _mock_response([_make_open_meteo_item(10.0, 90.0)])
+    open_meteo.respond(grid_payload(grid_item(10.0, 90.0)))
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
-        await get_grid_wind(pts, "best_match")
-        assert mock_get.call_count == 1
+    await get_grid_wind(pts, "best_match")
+    assert open_meteo.call_count == 1
 
-        await get_grid_wind(pts, "ecmwf_ifs04")
-        assert mock_get.call_count == 2  # different model → cache miss
+    await get_grid_wind(pts, "ecmwf_ifs04")
+    assert open_meteo.call_count == 2  # different model → cache miss
 
 
 # ---------------------------------------------------------------------------
 # Integration: GET /api/weather/grid
 # ---------------------------------------------------------------------------
 
-def test_grid_endpoint_returns_correct_point_count(client):
+def test_grid_endpoint_returns_correct_point_count(client, open_meteo):
     """cols × rows must equal the number of returned points."""
-    mock_items = [_make_open_meteo_item(10.0, 180.0)] * 6
-    mock_resp = _mock_response(mock_items)
+    open_meteo.respond([grid_item(10.0, 180.0)] * 6)
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        resp = client.get(
-            "/api/weather/grid",
-            params={
-                "min_lat": 47.0, "max_lat": 49.0,
-                "min_lon": -123.0, "max_lon": -121.0,
-                "cols": 3, "rows": 2,
-            },
-        )
+    resp = client.get("/api/weather/grid", params=grid_params(cols=3, rows=2))
 
     assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 6  # 3 cols × 2 rows
+    assert len(resp.json()) == 6  # 3 cols × 2 rows
 
 
-def test_grid_endpoint_point_coordinates_span_bbox(client):
+def test_grid_endpoint_point_coordinates_span_bbox(client, open_meteo):
     """Corner points should coincide with the requested bounding box."""
-    mock_items = [_make_open_meteo_item()] * 4
-    mock_resp = _mock_response(mock_items)
+    open_meteo.respond([grid_item()] * 4)
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        resp = client.get(
-            "/api/weather/grid",
-            params={
-                "min_lat": 47.0, "max_lat": 49.0,
-                "min_lon": -123.0, "max_lon": -121.0,
-                "cols": 2, "rows": 2,
-            },
-        )
+    resp = client.get("/api/weather/grid", params=grid_params())
 
     assert resp.status_code == 200
     data = resp.json()
@@ -351,20 +213,11 @@ def test_grid_endpoint_point_coordinates_span_bbox(client):
     assert -123.0 in lons and -121.0 in lons
 
 
-def test_grid_endpoint_response_schema(client):
+def test_grid_endpoint_response_schema(client, open_meteo):
     """Every returned point must contain latitude, longitude, wind_speed_knots, wind_direction_deg."""
-    mock_items = [_make_open_meteo_item(14.5, 225.0)] * 4
-    mock_resp = _mock_response(mock_items)
+    open_meteo.respond([grid_item(14.5, 225.0)] * 4)
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp):
-        resp = client.get(
-            "/api/weather/grid",
-            params={
-                "min_lat": 47.0, "max_lat": 49.0,
-                "min_lon": -123.0, "max_lon": -121.0,
-                "cols": 2, "rows": 2,
-            },
-        )
+    resp = client.get("/api/weather/grid", params=grid_params())
 
     assert resp.status_code == 200
     for point in resp.json():
@@ -374,110 +227,59 @@ def test_grid_endpoint_response_schema(client):
         assert "wind_direction_deg" in point
 
 
-def test_grid_endpoint_rejects_inverted_lat(client):
-    resp = client.get(
-        "/api/weather/grid",
-        params={
-            "min_lat": 49.0, "max_lat": 47.0,  # inverted
-            "min_lon": -123.0, "max_lon": -121.0,
-            "cols": 2, "rows": 2,
-        },
-    )
+def test_grid_endpoint_rejects_inverted_lat(client, open_meteo):
+    resp = client.get("/api/weather/grid", params=grid_params(min_lat=49.0, max_lat=47.0))
     assert resp.status_code == 422
+    assert open_meteo.call_count == 0
 
 
-def test_grid_endpoint_rejects_inverted_lon(client):
-    resp = client.get(
-        "/api/weather/grid",
-        params={
-            "min_lat": 47.0, "max_lat": 49.0,
-            "min_lon": -121.0, "max_lon": -123.0,  # inverted
-            "cols": 2, "rows": 2,
-        },
-    )
+def test_grid_endpoint_rejects_inverted_lon(client, open_meteo):
+    resp = client.get("/api/weather/grid", params=grid_params(min_lon=-121.0, max_lon=-123.0))
     assert resp.status_code == 422
+    assert open_meteo.call_count == 0
 
 
-def test_grid_endpoint_rejects_cols_above_max(client):
-    resp = client.get(
-        "/api/weather/grid",
-        params={
-            "min_lat": 47.0, "max_lat": 49.0,
-            "min_lon": -123.0, "max_lon": -121.0,
-            "cols": 31, "rows": 2,  # 31 > MAX_COLS=30
-        },
-    )
+def test_grid_endpoint_rejects_cols_above_max(client, open_meteo):
+    resp = client.get("/api/weather/grid", params=grid_params(cols=31))  # 31 > MAX_COLS=30
     assert resp.status_code == 422
+    assert open_meteo.call_count == 0
 
 
-def test_grid_endpoint_rejects_rows_above_max(client):
-    resp = client.get(
-        "/api/weather/grid",
-        params={
-            "min_lat": 47.0, "max_lat": 49.0,
-            "min_lon": -123.0, "max_lon": -121.0,
-            "cols": 2, "rows": 31,  # 31 > MAX_ROWS=30
-        },
-    )
+def test_grid_endpoint_rejects_rows_above_max(client, open_meteo):
+    resp = client.get("/api/weather/grid", params=grid_params(rows=31))  # 31 > MAX_ROWS=30
     assert resp.status_code == 422
+    assert open_meteo.call_count == 0
 
 
-def test_grid_endpoint_requires_all_bbox_params(client):
-    # Missing max_lat
-    resp = client.get(
-        "/api/weather/grid",
-        params={
-            "min_lat": 47.0,
-            "min_lon": -123.0, "max_lon": -121.0,
-            "cols": 2, "rows": 2,
-        },
-    )
+def test_grid_endpoint_requires_all_bbox_params(client, open_meteo):
+    params = grid_params()
+    del params["max_lat"]
+    resp = client.get("/api/weather/grid", params=params)
     assert resp.status_code == 422
+    assert open_meteo.call_count == 0
 
 
-def test_grid_endpoint_uses_model_param(client):
+def test_grid_endpoint_uses_model_param(client, open_meteo):
     """The model query param must be forwarded to the Open-Meteo request."""
-    mock_items = [_make_open_meteo_item()] * 4
-    mock_resp = _mock_response(mock_items)
-    captured = {}
+    open_meteo.respond([grid_item()] * 4)
 
-    async def fake_get(self_or_url, url=None, **kwargs):
-        captured["params"] = kwargs.get("params", {})
-        return mock_resp
-
-    with patch("httpx.AsyncClient.get", new=fake_get):
-        resp = client.get(
-            "/api/weather/grid",
-            params={
-                "min_lat": 47.0, "max_lat": 49.0,
-                "min_lon": -123.0, "max_lon": -121.0,
-                "cols": 2, "rows": 2,
-                "model": "gfs_seamless",
-            },
-        )
+    resp = client.get("/api/weather/grid", params=grid_params(model="gfs_seamless"))
 
     assert resp.status_code == 200
-    assert captured["params"].get("models") == "gfs_seamless"
+    assert open_meteo.last_params.get("models") == "gfs_seamless"
 
 
-def test_grid_endpoint_second_request_served_from_cache(client):
+def test_grid_endpoint_second_request_served_from_cache(client, open_meteo):
     """A second identical request must not trigger a second HTTP call."""
-    mock_items = [_make_open_meteo_item(9.0, 135.0)] * 4
-    mock_resp = _mock_response(mock_items)
+    open_meteo.respond([grid_item(9.0, 135.0)] * 4)
 
-    bbox_params = {
-        "min_lat": 47.0, "max_lat": 49.0,
-        "min_lon": -123.0, "max_lon": -121.0,
-        "cols": 2, "rows": 2,
-    }
+    r1 = client.get("/api/weather/grid", params=grid_params())
+    r2 = client.get("/api/weather/grid", params=grid_params())
 
-    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
-        r1 = client.get("/api/weather/grid", params=bbox_params)
-        r2 = client.get("/api/weather/grid", params=bbox_params)
-        assert mock_get.call_count == 1  # only one real HTTP request
-
+    assert open_meteo.call_count == 1  # only one real HTTP request
     assert r1.status_code == 200
     assert r2.status_code == 200
+    assert r2.json() == r1.json()
 
 
 # ---------------------------------------------------------------------------
@@ -485,61 +287,53 @@ def test_grid_endpoint_second_request_served_from_cache(client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_fetch_returns_temperature_f_and_requests_temperature():
+async def test_fetch_returns_temperature_f_and_requests_temperature(open_meteo):
     """Grid points carry current temperature in °F, converted like the drawer (1 decimal)."""
-    captured = {}
-    mock_resp = _mock_response([_make_open_meteo_item(12.0, 200.0, temp_c=12.3)])
+    open_meteo.respond(grid_payload(grid_item(12.0, 200.0, temp_c=12.3)))
 
-    async def fake_get(self_or_url, url=None, **kwargs):
-        captured["params"] = kwargs.get("params", {})
-        return mock_resp
+    result = await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
 
-    with patch("httpx.AsyncClient.get", new=fake_get):
-        result = await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
-
-    assert "temperature_2m" in captured["params"]["current"]
+    assert "temperature_2m" in open_meteo.last_params["current"]
     assert result[0].temperature_f == round(12.3 * 9 / 5 + 32, 1)  # 54.1
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_caches_temperature():
+async def test_get_grid_wind_caches_temperature(open_meteo):
     pts = [(48.0, -122.0)]
-    with patch("httpx.AsyncClient.get", return_value=_mock_response([_make_open_meteo_item(12.0, 200.0, temp_c=20.0)])):
-        first = await get_grid_wind(pts, "best_match")
-    # Second call is served from cache (no patch active) and keeps the temperature.
+    open_meteo.respond(grid_payload(grid_item(12.0, 200.0, temp_c=20.0)))
+
+    first = await get_grid_wind(pts, "best_match")
+    # Second call is served from cache and keeps the temperature.
     second = await get_grid_wind(pts, "best_match")
+
+    assert open_meteo.call_count == 1
     assert first[0].temperature_f == 68.0
     assert second[0].temperature_f == 68.0
 
 
 @pytest.mark.asyncio
-async def test_get_grid_wind_migrates_old_table_and_refetches_rows_without_temperature():
+async def test_get_grid_wind_migrates_old_table_and_refetches_rows_without_temperature(open_meteo):
     """An existing cache table without temperature_f gains the column; old rows are refetched."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS grid_weather_cache;")
-    cur.execute(
-        """
-        CREATE TABLE grid_weather_cache (
-            lat_key REAL NOT NULL, lon_key REAL NOT NULL, model TEXT NOT NULL,
-            cached_at REAL NOT NULL, expires_at REAL NOT NULL,
-            wind_speed_knots REAL NOT NULL, wind_direction_deg REAL NOT NULL,
-            PRIMARY KEY (lat_key, lon_key, model)
-        );
-        """
-    )
     now = time.time()
-    cur.execute(
-        "INSERT INTO grid_weather_cache VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0)",
-        (now, now + 3600),
-    )
-    conn.commit()
-    conn.close()
+    with db_connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE grid_weather_cache (
+                lat_key REAL NOT NULL, lon_key REAL NOT NULL, model TEXT NOT NULL,
+                cached_at REAL NOT NULL, expires_at REAL NOT NULL,
+                wind_speed_knots REAL NOT NULL, wind_direction_deg REAL NOT NULL,
+                PRIMARY KEY (lat_key, lon_key, model)
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO grid_weather_cache VALUES (48.0, -122.0, 'best_match', ?, ?, 7.0, 90.0)",
+            (now, now + 3600),
+        )
 
-    mock_resp = _mock_response([_make_open_meteo_item(9.0, 100.0, temp_c=0.0)])
-    with patch("httpx.AsyncClient.get", return_value=mock_resp) as mock_get:
-        result = await get_grid_wind([(48.0, -122.0)], "best_match")
-        assert mock_get.call_count == 1  # old row has no temperature → cache miss
+    open_meteo.respond(grid_payload(grid_item(9.0, 100.0, temp_c=0.0)))
+    result = await get_grid_wind([(48.0, -122.0)], "best_match")
+    assert open_meteo.call_count == 1  # old row has no temperature → cache miss
 
     assert result[0].temperature_f == 32.0
     assert result[0].wind_speed_knots == 9.0
@@ -549,13 +343,14 @@ async def test_get_grid_wind_migrates_old_table_and_refetches_rows_without_tempe
     assert "temperature_f" in cols
 
 
-def test_grid_endpoint_includes_temperature_f(client):
-    mock_items = [_make_open_meteo_item(14.5, 225.0, temp_c=15.0)] * 4
-    with patch("httpx.AsyncClient.get", return_value=_mock_response(mock_items)):
-        resp = client.get(
-            "/api/weather/grid",
-            params={"min_lat": 47, "max_lat": 48, "min_lon": -123, "max_lon": -122, "cols": 2, "rows": 2},
-        )
+def test_grid_endpoint_includes_temperature_f(client, open_meteo):
+    open_meteo.respond([grid_item(14.5, 225.0, temp_c=15.0)] * 4)
+
+    resp = client.get(
+        "/api/weather/grid",
+        params={"min_lat": 47, "max_lat": 48, "min_lon": -123, "max_lon": -122, "cols": 2, "rows": 2},
+    )
+
     assert resp.status_code == 200
     assert all(p["temperature_f"] == 59.0 for p in resp.json())
 
@@ -564,13 +359,11 @@ def test_grid_endpoint_includes_temperature_f(client):
 # SCRUM-92 phase 1: specific error handling
 # ---------------------------------------------------------------------------
 
-def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client):
-    error = httpx.ConnectError("secret-host.internal", request=httpx.Request("GET", "https://x"))
-    with patch("httpx.AsyncClient.get", side_effect=error):
-        resp = client.get(
-            "/api/weather/grid",
-            params={"min_lat": 47, "max_lat": 48, "min_lon": -123, "max_lon": -122, "cols": 2, "rows": 2},
-        )
+def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, open_meteo):
+    open_meteo.fail(upstream_error("secret-host.internal"))
+
+    resp = client.get("/api/weather/grid", params=grid_params())
+
     assert resp.status_code == 502
     assert resp.json()["detail"] == "Failed to fetch grid wind data from Open-Meteo"
     assert "secret-host" not in resp.text

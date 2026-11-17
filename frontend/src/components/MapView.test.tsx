@@ -1,46 +1,12 @@
-import { render, cleanup } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
-import type { SavedLocation } from '../types';
+import { makeLocation } from '../test/fixtures';
+import { createdMarkers, resetLeafletMock } from '../test/leafletMock';
 
-const popups: string[] = [];
+vi.mock('leaflet', () => import('../test/leafletMock'));
 
-vi.mock('leaflet', () => {
-  const layer = () => ({ addTo: vi.fn(), remove: vi.fn() });
-  return {
-    default: {
-      map: vi.fn(() => ({
-        remove: vi.fn(),
-        flyTo: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        getBounds: vi.fn(() => ({ getSouth: () => 47, getNorth: () => 49, getWest: () => -123, getEast: () => -121 })),
-        getSize: vi.fn(() => ({ x: 800, y: 600 })),
-      })),
-      control: { zoom: vi.fn(() => ({ addTo: vi.fn() })) },
-      tileLayer: vi.fn(layer),
-      divIcon: vi.fn(() => ({})),
-      marker: vi.fn(() => {
-        const instance: any = {
-          addTo: vi.fn(() => instance),
-          bindPopup: vi.fn((html: string) => {
-            popups.push(html);
-            return instance;
-          }),
-          on: vi.fn(() => instance),
-          remove: vi.fn(),
-          openPopup: vi.fn(),
-        };
-        return instance;
-      }),
-    },
-  };
-});
-
-afterEach(() => {
-  cleanup();
-  popups.length = 0;
-});
+beforeEach(() => resetLeafletMock());
 
 const baseProps = {
   selectedLocation: null,
@@ -56,19 +22,17 @@ const baseProps = {
 
 describe('MapView popups (SCRUM-92)', () => {
   it('escapes location text so it cannot inject HTML', () => {
-    const evil: SavedLocation = {
+    const evil = makeLocation({
       id: 9,
       name: '<img src=x onerror="alert(1)">',
-      latitude: 48,
-      longitude: -122,
       admin1: '<b>bold</b>',
       country: 'A & B',
       is_default: false,
-    };
+    });
     render(<MapView {...baseProps} locations={[evil]} />);
 
-    expect(popups).toHaveLength(1);
-    const html = popups[0];
+    expect(createdMarkers).toHaveLength(1);
+    const html = createdMarkers[0].popupHtml!;
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<b>');
     expect(html).toContain('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
@@ -79,5 +43,24 @@ describe('MapView popups (SCRUM-92)', () => {
     div.innerHTML = html;
     expect(div.querySelector('img')).toBeNull();
     expect(div.textContent).toContain('<img src=x onerror="alert(1)">');
+  });
+});
+
+describe('MapView saved-location markers', () => {
+  it('calls the latest onSelectLocation when a marker is clicked, without rebuilding markers', () => {
+    const loc = makeLocation();
+    const locations = [loc]; // same array: only the handler changes between renders
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<MapView {...baseProps} locations={locations} onSelectLocation={first} />);
+    expect(createdMarkers).toHaveLength(1);
+
+    // A new handler identity (as App creates on every render) must not recreate markers.
+    rerender(<MapView {...baseProps} locations={locations} onSelectLocation={second} />);
+    expect(createdMarkers).toHaveLength(1);
+
+    createdMarkers[0].fire('click');
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith(loc);
   });
 });
