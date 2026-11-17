@@ -1,138 +1,147 @@
 import {
-  SavedLocation,
+  AppConfig,
   GeocodeResult,
+  GridWindPoint,
+  NewLocation,
+  SavedLocation,
   WeatherForecastResponse,
   WeatherModel,
 } from '../types';
+import { DEFAULT_MODEL, DEFAULT_TIMEZONE } from '../constants';
+
+// Re-exported so existing imports from the client keep working.
+export type { GridWindPoint } from '../types';
 
 const API_BASE = '/api';
 
-export async function fetchLocations(): Promise<SavedLocation[]> {
-  const res = await fetch(`${API_BASE}/locations`);
-  if (!res.ok) throw new Error('Failed to load locations');
-  return res.json();
+/** Error for a non-2xx API response. `status` lets callers tell a 404 from a 502. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
-export async function addLocation(data: {
-  name: string;
-  latitude: number;
-  longitude: number;
-  admin1?: string | null;
-  country?: string | null;
-}): Promise<SavedLocation> {
-  const res = await fetch(`${API_BASE}/locations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error('Failed to add location');
-  return res.json();
+export interface RequestOptions {
+  signal?: AbortSignal;
 }
 
-export async function deleteLocation(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/locations/${id}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error('Failed to delete location');
-}
+type Params = Record<string, string | number>;
 
-export async function fetchModels(): Promise<WeatherModel[]> {
-  const res = await fetch(`${API_BASE}/weather/models`);
-  if (!res.ok) throw new Error('Failed to load weather models');
-  return res.json();
-}
-
-export async function fetchWeather(
-  locationId: number,
-  model: string = 'best_match',
-  timezone: string = 'America/Los_Angeles'
-): Promise<WeatherForecastResponse> {
-  const params = new URLSearchParams({
-    location_id: locationId.toString(),
-    model,
-    timezone,
-  });
-  const res = await fetch(`${API_BASE}/weather?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to load weather data');
-  return res.json();
-}
-
-export async function fetchAllWeather(
-  model: string = 'best_match',
-  timezone: string = 'America/Los_Angeles'
-): Promise<WeatherForecastResponse[]> {
-  const params = new URLSearchParams({ model, timezone });
-  const res = await fetch(`${API_BASE}/weather/all?${params.toString()}`);
-  if (!res.ok) throw new Error('Failed to load all weather data');
-  return res.json();
-}
-
-export async function searchGeocode(query: string): Promise<GeocodeResult[]> {
-  if (!query || query.trim().length < 2) return [];
-  const res = await fetch(
-    `${API_BASE}/geocode?q=${encodeURIComponent(query.trim())}`
+function url(path: string, params?: Params): string {
+  if (!params) return `${API_BASE}${path}`;
+  const query = new URLSearchParams(
+    Object.entries(params).map(([k, v]) => [k, String(v)] as [string, string]),
   );
-  if (!res.ok) return [];
-  return res.json();
+  return `${API_BASE}${path}?${query}`;
 }
 
+/**
+ * Fetch JSON from the API. Throws ApiError(`errorMessage`, status) on a non-2xx response;
+ * network errors and aborts propagate unchanged.
+ */
+async function request<T>(
+  path: string,
+  errorMessage: string,
+  { params, init, signal }: { params?: Params; init?: RequestInit; signal?: AbortSignal } = {},
+): Promise<T> {
+  const res = await fetch(url(path, params), { ...init, signal });
+  if (!res.ok) throw new ApiError(errorMessage, res.status);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
 
+export function fetchLocations(): Promise<SavedLocation[]> {
+  return request('/locations', 'Failed to load locations');
+}
 
-export async function fetchAppConfig(): Promise<{ carto_api_key?: string }> {
+export function addLocation(data: NewLocation): Promise<SavedLocation> {
+  return request('/locations', 'Failed to add location', {
+    init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) },
+  });
+}
+
+export function deleteLocation(id: number): Promise<void> {
+  return request(`/locations/${id}`, 'Failed to delete location', { init: { method: 'DELETE' } });
+}
+
+export function fetchModels(): Promise<WeatherModel[]> {
+  return request('/weather/models', 'Failed to load weather models');
+}
+
+export function fetchWeather(
+  locationId: number,
+  model: string = DEFAULT_MODEL,
+  timezone: string = DEFAULT_TIMEZONE,
+  { signal }: RequestOptions = {},
+): Promise<WeatherForecastResponse> {
+  return request('/weather', 'Failed to load weather data', {
+    params: { location_id: locationId, model, timezone },
+    signal,
+  });
+}
+
+export function fetchAllWeather(
+  model: string = DEFAULT_MODEL,
+  timezone: string = DEFAULT_TIMEZONE,
+  { signal }: RequestOptions = {},
+): Promise<WeatherForecastResponse[]> {
+  return request('/weather/all', 'Failed to load all weather data', { params: { model, timezone }, signal });
+}
+
+/**
+ * Place search. Returns [] for short queries and when the search fails (including the
+ * backend's 502 when the geocoder is down), so the search box simply shows no results.
+ */
+export async function searchGeocode(query: string, { signal }: RequestOptions = {}): Promise<GeocodeResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
   try {
-    const res = await fetch(`${API_BASE}/config`);
-    if (!res.ok) return {};
-    return res.json();
+    return await request('/geocode', 'Failed to search locations', { params: { q }, signal });
+  } catch (err) {
+    if (err instanceof ApiError) return [];
+    throw err; // network errors and aborts
+  }
+}
+
+/** App config. Optional: any failure returns {} so the app still starts. */
+export async function fetchAppConfig(): Promise<AppConfig> {
+  try {
+    return await request<AppConfig>('/config', 'Failed to load config');
   } catch {
     return {};
   }
 }
 
-export interface GridWindPoint {
-  latitude: number;
-  longitude: number;
-  wind_speed_knots: number;
-  wind_direction_deg: number;
-  /** Current temperature in °F; colors the map barb like the drawer (SCRUM-89). */
-  temperature_f?: number | null;
-}
-
-export async function fetchWindGrid(params: {
-  min_lat: number;
-  max_lat: number;
-  min_lon: number;
-  max_lon: number;
-  cols: number;
-  rows: number;
-  model?: string;
-}, options: { signal?: AbortSignal } = {}): Promise<GridWindPoint[]> {
-  const p = new URLSearchParams({
-    min_lat: params.min_lat.toString(),
-    max_lat: params.max_lat.toString(),
-    min_lon: params.min_lon.toString(),
-    max_lon: params.max_lon.toString(),
-    cols: params.cols.toString(),
-    rows: params.rows.toString(),
-    model: params.model ?? 'best_match',
+export function fetchWindGrid(
+  params: {
+    min_lat: number;
+    max_lat: number;
+    min_lon: number;
+    max_lon: number;
+    cols: number;
+    rows: number;
+    model?: string;
+  },
+  { signal }: RequestOptions = {},
+): Promise<GridWindPoint[]> {
+  return request('/weather/grid', 'Failed to fetch wind grid', {
+    params: { ...params, model: params.model ?? DEFAULT_MODEL },
+    signal,
   });
-  const res = await fetch(`${API_BASE}/weather/grid?${p}`, { signal: options.signal });
-  if (!res.ok) throw new Error('Failed to fetch wind grid');
-  return res.json();
 }
 
-export async function fetchPointWeather(
+export function fetchPointWeather(
   lat: number,
   lon: number,
-  model: string = 'best_match',
-  timezone: string = 'America/Los_Angeles',
+  model: string = DEFAULT_MODEL,
+  timezone: string = DEFAULT_TIMEZONE,
+  { signal }: RequestOptions = {},
 ): Promise<WeatherForecastResponse> {
-  const p = new URLSearchParams({
-    lat: lat.toString(),
-    lon: lon.toString(),
-    model,
-    timezone,
+  return request('/weather/point', 'Failed to fetch point weather', {
+    params: { lat, lon, model, timezone },
+    signal,
   });
-  const res = await fetch(`${API_BASE}/weather/point?${p}`);
-  if (!res.ok) throw new Error('Failed to fetch point weather');
-  return res.json();
 }

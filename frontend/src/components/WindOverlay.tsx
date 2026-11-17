@@ -1,13 +1,8 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { fetchWindGrid, GridWindPoint } from '../api/client';
+import { fetchWindGrid } from '../api/client';
+import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
-
-export interface SelectedGridPoint {
-  latitude: number;
-  longitude: number;
-  wind_speed_knots: number;
-}
 
 interface WindOverlayProps {
   map: L.Map | null;

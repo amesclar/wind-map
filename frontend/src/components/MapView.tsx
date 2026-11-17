@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { SavedLocation, WeatherForecastResponse, MapTileLayer } from '../types';
+import { SavedLocation, WeatherForecastResponse, MapTileLayer, UnitSystem, WindSpeedUnit } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
-import { WindOverlay, SelectedGridPoint } from './WindOverlay';
-import { GridWindPoint } from '../api/client';
+import { WindOverlay } from './WindOverlay';
+import type { GridWindPoint, SelectedGridPoint } from '../types';
+import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
+import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -17,6 +19,9 @@ interface MapViewProps {
   windOverlayVisible: boolean;
   selectedGridPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
+  /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
+  unitSystem?: UnitSystem;
+  speedUnit?: WindSpeedUnit;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -30,6 +35,8 @@ export const MapView: React.FC<MapViewProps> = ({
   windOverlayVisible,
   selectedGridPoint,
   onGridPointSelect,
+  unitSystem = 'imperial',
+  speedUnit = 'knots',
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -50,12 +57,12 @@ export const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = selectedLocation ? selectedLocation.latitude : 48.2939;
-    const initialLon = selectedLocation ? selectedLocation.longitude : -122.6064;
+    const initialLat = selectedLocation ? selectedLocation.latitude : DEFAULT_MAP_CENTER[0];
+    const initialLon = selectedLocation ? selectedLocation.longitude : DEFAULT_MAP_CENTER[1];
 
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
-      zoom: 8,
+      zoom: DEFAULT_MAP_ZOOM,
       zoomControl: false,
     });
 
@@ -131,13 +138,11 @@ export const MapView: React.FC<MapViewProps> = ({
       const speedKnots = weather?.current?.wind_speed_knots ?? 10;
       const dirDeg = weather?.current?.wind_direction_deg ?? 180;
       const tempF = weather?.current?.temperature_f ?? 50;
-      const tempDisplay = weather ? `${Math.round(tempF)}°F` : '--';
-      const speedDisplay = weather ? `${Math.round(speedKnots)} kt` : '--';
-      const gustKnots = weather?.current?.wind_gust_knots ?? 0;
-      const gustDisplay = weather ? `${Math.round(gustKnots)} kt` : '--';
-      const windDirDeg = weather?.current?.wind_direction_deg ?? 0;
-      const windDirCard = weather?.current?.wind_direction_cardinal ?? '--';
-      const windDirDisplay = weather ? `${windDirCard} (${Math.round(windDirDeg)}°)` : '--';
+      const current = weather?.current;
+      const tempDisplay = current ? formatTemperature(current, unitSystem) : '--';
+      const speedDisplay = current ? formatSpeed(current, 'speed', speedUnit) : '--';
+      const gustDisplay = current ? formatSpeed(current, 'gust', speedUnit) : '--';
+      const windDirDisplay = current ? formatDirection(current) : '--';
 
       const svgIconHtml = generateWindBarbSvg(
         speedKnots,
@@ -186,7 +191,7 @@ export const MapView: React.FC<MapViewProps> = ({
       markersRef.current[loc.id] = marker;
     });
     // onSelectLocation is read through a ref so a new handler identity doesn't rebuild markers.
-  }, [locations, weatherMap, selectedLocation]);
+  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit]);
 
   // Fly to selected location
   useEffect(() => {

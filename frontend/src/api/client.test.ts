@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchWindGrid, fetchPointWeather } from './client';
+import {
+  ApiError,
+  addLocation,
+  deleteLocation,
+  fetchAppConfig,
+  fetchPointWeather,
+  fetchWeather,
+  fetchWindGrid,
+  searchGeocode,
+} from './client';
 
 // ---------------------------------------------------------------------------
 // fetchWindGrid
@@ -223,5 +232,63 @@ describe('fetchPointWeather', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network failure')));
 
     await expect(fetchPointWeather(48.29, -122.60)).rejects.toThrow('Network failure');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared request helper behaviour (SCRUM-92)
+// ---------------------------------------------------------------------------
+
+describe('API client errors and search (SCRUM-92)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('throws an ApiError carrying the HTTP status', async () => {
+    vi.stubGlobal('fetch', mockFetch({ detail: 'not found' }, 404));
+    const err = await fetchWeather(9999).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(404);
+    expect(err.message).toBe('Failed to load weather data');
+  });
+
+  it('sends JSON when adding a location', async () => {
+    const spy = mockFetch({ id: 3 });
+    vi.stubGlobal('fetch', spy);
+    await addLocation({ name: 'Miami', latitude: 25.76, longitude: -80.19 });
+    const [url, init] = spy.mock.calls[0];
+    expect(url).toBe('/api/locations');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(JSON.parse(init.body)).toEqual({ name: 'Miami', latitude: 25.76, longitude: -80.19 });
+  });
+
+  it('does not parse a body for a 204 delete', async () => {
+    const json = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 204, json }));
+    await expect(deleteLocation(3)).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('searchGeocode returns [] without a request for short queries', async () => {
+    const spy = mockFetch([]);
+    vi.stubGlobal('fetch', spy);
+    expect(await searchGeocode(' a ')).toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('searchGeocode returns [] when the geocoder is down (502)', async () => {
+    vi.stubGlobal('fetch', mockFetch({ detail: 'Failed to search locations with Open-Meteo' }, 502));
+    expect(await searchGeocode('Seattle')).toEqual([]);
+  });
+
+  it('searchGeocode trims and encodes the query', async () => {
+    const spy = mockFetch([]);
+    vi.stubGlobal('fetch', spy);
+    await searchGeocode('  São Paulo ');
+    expect(spy.mock.calls[0][0]).toBe('/api/geocode?q=S%C3%A3o+Paulo');
+  });
+
+  it('fetchAppConfig returns {} on any failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+    expect(await fetchAppConfig()).toEqual({});
   });
 });

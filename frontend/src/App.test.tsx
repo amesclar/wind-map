@@ -227,14 +227,30 @@ describe('App prediction drawer integration', () => {
     await new Promise((r) => setTimeout(r, 0));
     const markerCalls = L.marker.mock.calls.length;
 
-    // Changing the speed unit re-renders App (new handler identities) but changes no map data
-    const speedSelect = Array.from(container.querySelectorAll('select')).find((s) =>
-      Array.from(s.options).some((o) => o.value === 'mph'),
+    // Changing the direction display re-renders App (new handler identities) but changes
+    // nothing on the map (the speed unit does: popups show it).
+    const dirSelect = Array.from(container.querySelectorAll('select')).find((s) =>
+      Array.from(s.options).some((o) => o.value === 'cardinal'),
     )!;
-    fireEvent.change(speedSelect, { target: { value: 'mph' } });
-    await waitFor(() => expect(screen.getAllByText(/mph/).length).toBeGreaterThan(0));
+    fireEvent.change(dirSelect, { target: { value: 'cardinal' } });
+    await waitFor(() => expect(within(drawer).getAllByText('SW').length).toBeGreaterThan(0));
 
     expect(L.marker.mock.calls.length).toBe(markerCalls);
+  });
+
+  it('shows map popups in the selected units (SCRUM-92)', async () => {
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
+    const oak = mockLocations[0];
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('14 kt'));
+
+    fireEvent.click(screen.getByTitle(/Toggle units/)); // imperial → metric (km/h)
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('25.9 km/h'));
+    const popup = markerAt(oak.latitude, oak.longitude)!.popupHtml!;
+    expect(popup).toContain('°C');
+    expect(popup).not.toContain('°F');
+    expect(popup).not.toContain(' kt');
   });
 
   it('updates prediction drawer when clicking a grid barb (SCRUM-88)', async () => {

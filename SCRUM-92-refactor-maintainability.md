@@ -20,7 +20,8 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 | 2. Test foundations | ✅ Done | `feature/SCRUM-92-refactor-phase-2` (built on phase 1) |
 | 3. Backend structure | ✅ Done | `feature/SCRUM-92-refactor-phase-3` |
 | 4. Backend service split | ✅ Done (B3; B7 not started) | `feature/SCRUM-92-refactor-phase-4` |
-| 5. Frontend structure | Not started | |
+| 5a. Frontend: API client and formatters (F4, F3) | ✅ Done | `feature/SCRUM-92-refactor-phase-5a` |
+| 5b. Frontend: App hooks, selection, Leaflet layers (F1, F2, F5) | Not started | |
 
 ### Phase 1: what was done
 
@@ -122,6 +123,24 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 **Not done: B7** (moving SQLite calls off the event loop, and batching grid cache reads). Current traffic doesn't need it; it can be its own change if wanted.
 
 **Results:** backend 120 passed (was 109). Frontend 103 passed. `pyflakes backend` is clean. The container upgraded the real volume from 1 to 2 once, and all 8 locations were kept.
+
+### Phase 5a: what was done
+
+| Item | Change | Tests |
+|---|---|---|
+| F4. Request helper | `api/client.ts`: one `request<T>(path, errorMessage, { params, init, signal })` replaces eleven fetch → `!res.ok` → `json()` copies. Errors are `ApiError` with `.status`, and a 204 isn't parsed. Every fetch accepts `{ signal }`. The client file is about 30 lines shorter. | `client.test.ts`: `ApiError` status, POST body, 204, plus the existing URL and error-message tests (messages kept the same) |
+| F4. Error policy (documented) | `searchGeocode` returns `[]` for short queries and for API errors, including the backend's new 502, but lets network errors and aborts through. `fetchAppConfig` returns `{}` on any failure so the app still starts. | `client.test.ts`: 502 gives `[]`, query trimmed and encoded, config failure gives `{}` |
+| F4. Shared defaults | New `src/constants.ts`: `DEFAULT_MODEL`, `DEFAULT_TIMEZONE`, `TIMEZONES` (moved from Navbar), `FORECAST_STEP_HOURS`, `DEFAULT_MAP_CENTER`/`ZOOM`, `STORAGE_KEYS`. The repeated `'best_match'`/`'America/Los_Angeles'` literals in App and the client are gone. | Existing tests |
+| F4. Types | `GridWindPoint` (re-exported from the client for compatibility) and `SelectedGridPoint` moved to `types.ts`. `SelectedGridPoint` is now `Pick<GridWindPoint, 'latitude' \| 'longitude'>`, dropping its unused `wind_speed_knots`. New `NewLocation` and `AppConfig` types. | `tsc`, typecheck |
+| F3. Formatters | New `src/utils/units.ts`: `formatSpeed(pt, 'speed' \| 'gust', unit)` (one table-driven function replacing the drawer's two four-way switches), `formatTemperature`, `formatDegreesTrue` (moved from TimelineDrawer), `formatDirection`, `formatSliceTime`. | `utils/units.test.ts` (12 tests) |
+| F3. Drawer | TimelineDrawer uses the formatters. The cardinal and degrees branches share one compass block. "16 data points (3h intervals)" and `index * 3` come from the data and `FORECAST_STEP_HOURS`. | Existing drawer tests |
+| F3. Popups follow units | MapView takes `unitSystem` and `speedUnit` and builds popups with the same formatters, instead of hardcoded `kt`/`°F`. Popups rebuild when units change. | `App.test.tsx`: popup switches to km/h and °C after the unit toggle |
+
+**Correction to the review:** F3 said `formatPointTime` "ignores the app's timezone setting". It doesn't: Open-Meteo returns wall-clock times without an offset in the requested timezone, and parsing and formatting them in the browser's zone keeps that wall-clock time. `formatSliceTime` keeps that behavior, drops the try/catch that could never trigger, and returns the input for an invalid date. A test pins the wall-clock behavior.
+
+**Test changes:** the "markers aren't rebuilt" test now changes the direction display instead of the speed unit, since popups now depend on the speed unit.
+
+**Results:** frontend 120 passed (was 103). Backend 120 passed. `lint` and `typecheck` are clean, and the container builds and serves the app.
 
 ---
 
