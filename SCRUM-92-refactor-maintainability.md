@@ -23,6 +23,8 @@ None of this needs a rewrite. Each item below can be done as a small, behavior-p
 | 5a. Frontend: API client and formatters (F4, F3) | ✅ Done | `feature/SCRUM-92-refactor-phase-5a` |
 | 5b. Frontend: App hooks, selection, Leaflet layers (F1, F2, F5) | ✅ Done | `feature/SCRUM-92-refactor-phase-5b` (built on 5a) |
 
+Phases 1–5 were released in **v0.3.0**. B7 (optional) is not started.
+
 ### Phase 1: what was done
 
 | Item | Change | Tests |
