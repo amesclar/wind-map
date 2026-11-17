@@ -18,3 +18,15 @@
 - **Stacked PRs:** If another open PR uses the branch as its base, retarget that PR to `develop` (`gh pr edit <n> --base develop`) before deleting the branch. Otherwise GitHub closes the dependent PR.
 - **Never delete** `develop` or `master`. Merging `develop` into `master` deletes no branch.
 - **Report** the deleted branches in the summary of the merge.
+
+## Record Merge Hash in Jira After Merging
+- **When:** Right after a PR is merged into `develop` or `master`, add a comment to the Jira ticket with the merge commit hash. This is part of completing the merge; don't wait to be asked.
+- **Which hash:** The merge commit on the target branch, not the feature branch commit. Get it after `git fetch origin`:
+  ```bash
+  gh pr view <n> --json mergeCommit -q '.mergeCommit.oid'
+  ```
+  Use the 7-character short hash (e.g., `95cf243`).
+- **Comment format:** `Merged PR #<n> into <target> as <short-hash>` followed by the PR URL.
+- **Which ticket:** The ticket number in the PR title. Use `addOrEditJiraIssueComment`, not the transition comment field, which can be dropped silently.
+- **Merging `develop` into `master`:** Comment on each ticket included in the merge, or on the release ticket if one exists, using the merge hash on `master`.
+- **Report** the hash and the Jira comment in the summary of the merge.
