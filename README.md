@@ -44,7 +44,9 @@ wind-map/
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
 │   │   ├── routers/             # API endpoints (locations, weather, grid, geocode)
-│   │   └── services/            # open_meteo.py (shared HTTP client), forecast, grid & geocoding services
+│   │   └── services/            # open_meteo.py (shared HTTP client); weather_service.py (cache → fetch → parse → store),
+│   │                            # forecast_parser.py (pure parsing), forecast_cache.py (saved-location & point caches);
+│   │                            # grid & geocoding services
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
