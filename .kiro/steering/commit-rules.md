@@ -51,3 +51,13 @@
   | 8 | SCRUM-104: Cloud Run deploy (about 100 lines of code, plus a lot of cloud setup) |
 
 - **Report** the estimate in the summary when you create a ticket.
+
+## Jira Dependency Links (SCRUM-118)
+- **Make dependencies explicit:** When a ticket cannot start or finish before another one, create a Jira issue link in addition to mentioning it in the description. Text alone is not enough, because Jira boards and filters only see links.
+- **Blocks:** Use link type `Blocks` when one ticket must be done first. The blocker is the `inwardIssue` and the blocked ticket is the `outwardIssue` (`createJiraIssueLink`, run through `executeWrite`; use `discover` if the tool is not loaded). The blocked ticket then shows "is blocked by" the blocker.
+- **Relates:** Use link type `Relates` for loose or optional connections, and for tickets that can run in parallel but touch the same area. Do not hard-block work that can proceed on its own.
+- **Not for hierarchy:** Epic and child relationships use the `parent` field when creating the ticket, not a link.
+- **Order of work:** Create all the tickets first, then link them, then check the links with `getJiraIssue` (view `evidence`) or a JQL search such as `issue in linkedIssues(SCRUM-117)`.
+- **When picking up a ticket:** Check its "is blocked by" links. If a blocker is not Done, tell the user before starting and ask how to proceed.
+- **When finishing a ticket:** If it blocks other tickets, mention them in the summary so the user knows what is unblocked.
+- **Report** the links you created in the summary.
