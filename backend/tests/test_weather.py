@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-
 from fastapi.testclient import TestClient
 
 from backend.app.database import get_db_connection
@@ -194,9 +193,11 @@ def test_point_weather_upstream_failure_is_502_without_internal_detail(client, o
 
 def test_programming_errors_are_500_not_502():
     """Non-HTTP errors (bugs) must not be reported as an upstream failure."""
-    with TestClient(app, raise_server_exceptions=False) as c:
-        with patch("backend.app.routers.weather.get_point_forecast", side_effect=KeyError("bug")):
-            resp = c.get("/api/weather/point?lat=48.0&lon=-122.0")
+    with (
+        TestClient(app, raise_server_exceptions=False) as c,
+        patch("backend.app.routers.weather.get_point_forecast", side_effect=KeyError("bug")),
+    ):
+        resp = c.get("/api/weather/point?lat=48.0&lon=-122.0")
     assert resp.status_code == 500
 
 

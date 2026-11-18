@@ -4,8 +4,6 @@ import json
 import re
 from pathlib import Path
 
-
-
 from backend.app.config import APP_VERSION, VERSION_FILE, read_app_version
 from backend.app.main import app
 
@@ -22,7 +20,7 @@ def test_version_file_is_semver():
 
 def test_backend_reads_version_file():
     assert VERSION_FILE == ROOT / "VERSION"
-    assert APP_VERSION == _version_file()
+    assert _version_file() == APP_VERSION
     assert app.version == _version_file()
 
 

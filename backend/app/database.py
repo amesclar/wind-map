@@ -155,7 +155,7 @@ def clean_expired_cache(now: float | None = None) -> int:
     with db_connection() as conn:
         for table in CACHE_TABLES:
             # Table names come from the CACHE_TABLES constant, never from user input.
-            deleted += conn.execute(f"DELETE FROM {table} WHERE expires_at < ?;", (now,)).rowcount
+            deleted += conn.execute(f"DELETE FROM {table} WHERE expires_at < ?;", (now,)).rowcount  # noqa: S608
     if deleted:
         logger.info("Removed %d expired cache rows", deleted)
     return deleted

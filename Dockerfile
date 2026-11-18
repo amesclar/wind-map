@@ -35,8 +35,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATABASE_PATH=/app/data/wind_map.db \
     STATIC_DIR=/app/static
 
-# Create data and static directories
-RUN mkdir -p /app/data /app/static
+# Create data and static directories. Also (SCRUM-108): pick up Alpine security fixes that are newer
+# than the base image, and remove pip, setuptools and wheel, which the app does not need at runtime
+# and which the image scan flagged (vulnerable bundled copies).
+RUN mkdir -p /app/data /app/static \
+    && apk upgrade --no-cache \
+    && pip uninstall -y pip setuptools wheel
 
 # Copy only the installed packages (pip, wheel caches and build tooling stay behind)
 COPY --from=python-deps /install /usr/local
