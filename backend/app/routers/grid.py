@@ -2,8 +2,10 @@
 
 import logging
 from typing import List
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from backend.app.config import GRID_MAX_DIM
 from backend.app.dependencies import model_param
 from backend.app.models import GridWindPoint

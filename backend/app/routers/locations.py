@@ -1,7 +1,9 @@
 """Locations API router: CRUD operations for saved locations."""
 
 from typing import List
+
 from fastapi import APIRouter, HTTPException, status
+
 from backend.app import locations_repo
 from backend.app.models import LocationCreate, LocationResponse
 

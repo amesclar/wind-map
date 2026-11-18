@@ -224,3 +224,23 @@ cd frontend && npm run typecheck
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.
+
+## Quality and Security Checks (SCRUM-108)
+
+GitHub Actions runs these on every pull request to `develop` or `master` and on pushes to those branches (`.github/workflows/`):
+
+| Check | What it does | Run locally |
+| :--- | :--- | :--- |
+| Ruff | Python lint, including security rules (`ruff.toml`) | `ruff check .` |
+| pytest coverage | Backend tests; fails below the threshold in `.coveragerc` | `pytest --cov` |
+| pip-audit | Known vulnerabilities in `requirements.txt` | `pip-audit -r requirements.txt` |
+| ESLint, `tsc` | Frontend lint and type-check | `cd frontend && npm run lint && npm run typecheck` |
+| Vitest coverage | Frontend tests; fails below the thresholds in `frontend/vitest.config.ts` | `cd frontend && npm run test:coverage` |
+| `npm audit` | Fails on high or critical advisories in production dependencies; the full audit is informational | `cd frontend && npm audit --omit=dev` |
+| Docker build, smoke test, Trivy | Builds the image, checks `/api/health`, fails on fixable HIGH or CRITICAL vulnerabilities | `docker build -t wind-map:ci .` |
+| CodeQL | Static analysis for Python and JavaScript/TypeScript (also weekly) | runs on GitHub |
+| Dependabot | Weekly update PRs for pip, npm, Docker and GitHub Actions (target `develop`) | runs on GitHub |
+
+Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
+
+Ruff runs lint only. Auto-formatting (`ruff format`) and the `UP` modernization rules are not enabled, because they would rewrite many files with no behavior change.

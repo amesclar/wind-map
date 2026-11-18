@@ -17,3 +17,9 @@ data
 *.sqlite3
 .DS_Store
 
+frontend/coverage
+.coverage
+htmlcov
+ruff.toml
+.coveragerc
+.github

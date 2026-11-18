@@ -117,7 +117,7 @@ async def _fetch_from_open_meteo(
         raise httpx.HTTPError(f"Open-Meteo returned {len(data)} grid points for {len(points)} requested")
 
     output: List[GridWindPoint] = []
-    for (lat, lon), item in zip(points, data):
+    for (lat, lon), item in zip(points, data, strict=True):
         current = item.get("current", {})
         output.append(
             GridWindPoint(
