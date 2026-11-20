@@ -23,3 +23,5 @@ htmlcov
 ruff.toml
 .coveragerc
 .github
+GEMINI.md
+.config
