@@ -4,6 +4,16 @@
 - **Commit Messages:** Prefix every commit message with the ticket number, followed by a colon (e.g., `PROJ-123: Add user authentication`).
 - **PR Titles:** Prefix all PR titles with the ticket number in brackets (e.g., `[PROJ-123] Implement secure login flow`).
 
+## Feature Branch Requirement for All Changes (SCRUM-111)
+- **Every change goes on a branch:** All repository changes, including code, documentation, configuration and steering rules, are made on a dedicated ticket branch named `feature/SCRUM-xxx-<description>` (or `fix/...`) created from an up-to-date `develop`. Verify it with the tests and linters, then merge it through a PR into `develop`.
+- **No direct commits** to `develop` or `master`, even for one-line or rules-only changes. If you notice you are on `develop` or `master` with uncommitted work, create the branch first and commit there.
+- **A ticket first:** If the change has no ticket, create one (with a story point estimate) before creating the branch.
+
+## Ticket Creation Is Not Execution (SCRUM-111)
+- **"Create ticket to ..." means plan, not do.** When the user asks you to create a ticket, create it with a thorough plan: scope, steps, decisions needed, tests, acceptance criteria and an estimate. Put the same plan in your reply.
+- **Wait for direction.** Do not start implementing, branching or changing files for that ticket until the user explicitly tells you to proceed (for example "implement SCRUM-123" or "go ahead").
+- **Creating the ticket itself is allowed**, including the Jira links, the estimate and the epic and child tickets the user asked for. Questions about unclear scope can go in the reply.
+
 ## Delete Feature Branches After Merging (SCRUM-94)
 - **When:** Right after a `feature/...` or `fix/...` branch is merged into `develop` or `master`, delete it both locally and on `origin`. This is part of completing the merge; don't wait to be asked.
 - **Verify first:** Only delete a branch that is fully merged:

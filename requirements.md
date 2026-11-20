@@ -132,7 +132,8 @@ locate the project in /Users/fredames/Projects/wind-map
 
 include gitignore, dockerignore, requirements.txt, Dockerfile
 
-rules for AI coding tools (SCRUM-119): `.kiro/steering/*.md` is the single source of truth. `.config/antigravity/instructions.md` is generated from those files by `python scripts/sync-ai-rules.py` and must not be edited by hand; `backend/tests/test_ai_rules_sync.py` fails (and so does CI) when it is out of date.
+workflow (SCRUM-111): every change, including documentation and steering rules, is made on a ticket branch (`feature/SCRUM-xxx-...`) created from `develop` and merged by PR; there are no direct commits to `develop` or `master`. When the user asks to "create ticket to ...", the agent creates the ticket with a full plan and waits for explicit direction before implementing it.
+rules for AI coding tools (SCRUM-119, SCRUM-111): `.kiro/steering/*.md` is the single source of truth. `.config/antigravity/instructions.md` and `GEMINI.md` (project root, read by Antigravity) are generated from those files by `python scripts/sync-ai-rules.py` and must not be edited by hand; `backend/tests/test_ai_rules_sync.py` fails (and so does CI) when it is out of date.
 branching (SCRUM-94): work happens on ticket branches (`feature/PROJ-123-...` or `fix/PROJ-123-...`) merged into `develop`, and `develop` is merged into `master` for releases. A ticket branch is deleted locally and on GitHub as soon as it is merged into `develop` or `master`, after confirming it is fully merged. `develop` and `master` are never deleted. Rules: `.kiro/steering/commit-rules.md`.
 
 # testing and documentation
