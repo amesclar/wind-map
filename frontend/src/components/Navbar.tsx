@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Center: Search & Add Location Box */}
-      <div className="flex items-center gap-2 flex-1 justify-center max-w-md">
+      <div className="flex items-center gap-2 flex-1 min-w-0 justify-center max-w-md">
         <AutocompleteDropdown onSelectAndAdd={onSelectAndAddLocation} />
 
         {/* Saved locations list button */}

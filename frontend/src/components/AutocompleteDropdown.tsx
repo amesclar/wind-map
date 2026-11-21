@@ -66,7 +66,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
   };
 
   return (
-    <div ref={wrapperRef} className="relative w-64 md:w-80">
+    <div ref={wrapperRef} className="relative min-w-0 w-64 md:w-80">
       <div className="relative flex items-center">
         <Search className="w-4 h-4 text-gray-400 absolute left-3 pointer-events-none" />
         <input
