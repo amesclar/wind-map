@@ -40,7 +40,7 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - **Never delete** `develop` or `master`. Merging `develop` into `master` deletes no branch.
 - **Report** the deleted branches in the summary of the merge.
 
-## Record Merge Hash in Jira After Merging
+## Record Merge Hash and Mark Ticket Done in Jira After Merging (SCRUM-129)
 - **When:** Right after a PR is merged into `develop` or `master`, add a comment to the Jira ticket with the merge commit hash. This is part of completing the merge; don't wait to be asked.
 - **Which hash:** The merge commit on the target branch, not the feature branch commit. Get it after `git fetch origin`:
   ```bash
@@ -49,8 +49,9 @@ Kiro follows; they come from the files in `.kiro/steering/`.
   Use the 7-character short hash (e.g., `95cf243`).
 - **Comment format:** `Merged PR #<n> into <target> as <short-hash>` followed by the PR URL.
 - **Which ticket:** The ticket number in the PR title. Use `addOrEditJiraIssueComment`, not the transition comment field, which can be dropped silently.
-- **Merging `develop` into `master`:** Comment on each ticket included in the merge, or on the release ticket if one exists, using the merge hash on `master`.
-- **Report** the hash and the Jira comment in the summary of the merge.
+- **Merging `develop` into `master`:** Comment on each ticket included in the merge, or on the release ticket if one exists, using the merge hash on `master`, and mark any of them that are not yet Done as Done.
+- **Mark Done:** After the comment, transition the ticket in the PR title to Done with `transitionJiraIssue` (find the Done transition ID with `getTransitionsForJiraIssue`). Skip tickets that are already Done. Don't mark a ticket Done when the PR only partly delivers it (e.g. the PR or ticket says follow-up work remains); comment why instead.
+- **Report** the hash, the Jira comment and the ticket's new status in the summary of the merge.
 
 ## Story Point Estimates on Jira Tickets (SCRUM-105)
 - **When:** Every Jira ticket you create must have a story point estimate set at creation. If you pick up a ticket that has none, estimate it first. Epics are not pointed; estimate their child tickets.

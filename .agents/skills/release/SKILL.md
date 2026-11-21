@@ -16,7 +16,7 @@ Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the cont
    (cd frontend && npm version X.Y.Z --no-git-tag-version --allow-same-version)
    ```
 5. Run the `ci-checks` skill. `backend/tests/test_version.py` and `frontend/src/version.test.ts` must pass.
-6. Commit `SCRUM-xxx: Bump version to X.Y.Z for release`, open `[SCRUM-xxx] Bump version to X.Y.Z for release` into `develop`, merge once checks pass, delete the branch and comment the merge hash on the ticket.
+6. Commit `SCRUM-xxx: Bump version to X.Y.Z for release`, open `[SCRUM-xxx] Bump version to X.Y.Z for release` into `develop`, merge once checks pass, delete the branch, comment the merge hash on the ticket and mark it Done.
 7. Merge `develop` into `master` through a PR (`gh pr create --base master --head develop`) and wait for checks.
 8. Tag and publish from `master`:
    ```bash
@@ -24,4 +24,4 @@ Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the cont
    test "v$(cat VERSION)" = "vX.Y.Z"
    gh release create vX.Y.Z --target master --generate-notes
    ```
-9. Comment the `master` merge hash on each included ticket (or the release ticket) and report the release URL.
+9. Comment the `master` merge hash on each included ticket (or the release ticket), mark any that are not yet Done as Done, and report the release URL.
