@@ -1,0 +1,14 @@
+{
+  "Stop": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"$(git rev-parse --show-toplevel)/scripts/rebuild-container.sh\"",
+          "timeout": 300
+        }
+      ]
+    }
+  ]
+}

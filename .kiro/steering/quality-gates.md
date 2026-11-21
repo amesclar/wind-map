@@ -42,4 +42,5 @@ You must automatically create or update unit tests for every functional code cha
 
 ## 6. Shared Rules for All AI Tools (SCRUM-119)
 - `.kiro/steering/*.md` is the single source of truth for the project rules.
-- `.config/antigravity/instructions.md` is generated from these files. Do not edit it by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit both. A pytest test fails when the generated file is out of date.
+- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
+- Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.

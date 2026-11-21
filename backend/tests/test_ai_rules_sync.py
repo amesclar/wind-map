@@ -1,4 +1,4 @@
-"""The AI tool rule files must be generated from .kiro/steering (SCRUM-119, SCRUM-111)."""
+"""The AI tool rule files must be generated from .kiro/steering (SCRUM-119, SCRUM-111, SCRUM-128)."""
 
 import importlib.util
 from pathlib import Path
@@ -25,6 +25,16 @@ def test_gemini_md_exists_at_the_project_root():
     sync = _load_script()
     assert ROOT / "GEMINI.md" in sync.TARGETS
     assert (ROOT / "GEMINI.md").is_file()
+
+
+def test_agents_md_exists_at_the_project_root_and_fits_devin_limit():
+    sync = _load_script()
+    assert ROOT / "AGENTS.md" in sync.TARGETS
+    size = len((ROOT / "AGENTS.md").read_bytes())
+    assert size <= sync.AGENTS_MD_LIMIT_BYTES, (
+        f"AGENTS.md is {size} bytes; Devin only auto-includes {sync.AGENTS_MD_LIMIT_BYTES}. "
+        "Move situational guidance into .agents/skills/"
+    )
 
 
 def test_generated_file_contains_every_steering_file():
