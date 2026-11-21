@@ -20,8 +20,8 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
   - *DWD ICON Seamless*
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
-- **Unit Customization:** One-click toggle between Imperial (°F, knots) and Metric (°C, km/h), with granular selectors for speed (knots, km/h, mph, m/s) and wind direction (barbs, cardinal directions, degrees).
-- **Timezone Support:** Pacific Time by default, with quick switching across major world timezones.
+- **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
+- **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
@@ -51,7 +51,7 @@ wind-map/
 └── frontend/
     ├── src/
     │   ├── components/          # MapView, WindOverlay, WindBarb, TimelineDrawer, Navbar, modals, mapTiles.ts
-    │   ├── hooks/               # useMapSettings, useUnitPreferences, useLocations, useAllWeather,
+    │   ├── hooks/               # useMapSettings, useUnitPreferences, useTimezone, useLocations, useAllWeather,
     │   │                        # useDrawerForecast, useWindGrid, useLocalStorageState, useLatest
     │   ├── api/                 # Typed API client (one request() helper, ApiError)
     │   ├── utils/               # units.ts (display formatting), html.ts (escaping)
@@ -203,6 +203,7 @@ Frontend test suite coverage includes:
 - Selected map barb matches the drawer's leftmost barb (direction, barb count and color) *(SCRUM-89)*
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
+- `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
 - Timeline drawer rendering, empty state, stacking context isolation
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
 

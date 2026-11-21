@@ -5,4 +5,5 @@ import { cleanup } from '@testing-library/react';
 // Unmount React trees between tests. RTL only does this automatically with `globals: true`.
 afterEach(() => {
   cleanup();
+  localStorage.clear(); // saved preferences must not leak between tests (SCRUM-107)
 });

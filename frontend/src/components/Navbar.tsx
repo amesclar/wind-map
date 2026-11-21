@@ -4,35 +4,21 @@ import {
   Wind,
   Layers,
   MapPin,
-  Clock,
   Map,
+  Settings,
 } from 'lucide-react';
-import {
-  WeatherModel,
-  UnitSystem,
-  WindSpeedUnit,
-  WindDirDisplay,
-  GeocodeResult,
-} from '../types';
+import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
-import { TIMEZONES } from '../constants';
 
 interface NavbarProps {
   models: WeatherModel[];
   selectedModel: string;
   onSelectModel: (model: string) => void;
-  timezone: string;
-  onSelectTimezone: (tz: string) => void;
-  unitSystem: UnitSystem;
-  onToggleUnitSystem: () => void;
-  speedUnit: WindSpeedUnit;
-  onSelectSpeedUnit: (unit: WindSpeedUnit) => void;
-  dirDisplay: WindDirDisplay;
-  onSelectDirDisplay: (display: WindDirDisplay) => void;
   savedLocationsCount: number;
   onOpenSavedLocations: () => void;
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
+  onOpenPreferences: () => void;
   hasCartoKey: boolean;
 }
 
@@ -40,18 +26,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   models,
   selectedModel,
   onSelectModel,
-  timezone,
-  onSelectTimezone,
-  unitSystem,
-  onToggleUnitSystem,
-  speedUnit,
-  onSelectSpeedUnit,
-  dirDisplay,
-  onSelectDirDisplay,
   savedLocationsCount,
   onOpenSavedLocations,
   onSelectAndAddLocation,
   onOpenMapSettings,
+  onOpenPreferences,
   hasCartoKey,
 }) => {
   return (
@@ -105,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Right Controls: Model, Timezone, Units */}
+      {/* Right Controls: Model, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
@@ -123,55 +102,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           </select>
         </div>
 
-        {/* Timezone Selector */}
-        <div className="hidden md:flex items-center gap-1 text-xs">
-          <Clock className="w-3.5 h-3.5 text-gray-400" />
-          <select
-            value={timezone}
-            onChange={(e) => onSelectTimezone(e.target.value)}
-            className="bg-dark-800 text-gray-200 text-xs border border-dark-600 rounded-lg px-2 py-1 focus:outline-none focus:border-sky-500"
-          >
-            {TIMEZONES.map((tz) => (
-              <option key={tz.id} value={tz.id}>
-                {tz.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Metric / Imperial Unit Toggle */}
+        {/* Preferences: timezone and units (SCRUM-107) */}
         <button
-          onClick={onToggleUnitSystem}
-          title={`Toggle units (currently ${unitSystem === 'imperial' ? 'Imperial °F/knots' : 'Metric °C/kmh'})`}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-xs font-semibold text-gray-200 border border-dark-600 transition"
+          onClick={onOpenPreferences}
+          title="Preferences"
+          aria-label="Preferences"
+          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 transition"
         >
-          <span className={unitSystem === 'imperial' ? 'text-sky-400' : 'text-gray-400'}>°F</span>
-          <span className="text-gray-500">/</span>
-          <span className={unitSystem === 'metric' ? 'text-sky-400' : 'text-gray-400'}>°C</span>
+          <Settings className="w-4 h-4 text-sky-400" />
         </button>
-
-        {/* Speed unit selector */}
-        <select
-          value={speedUnit}
-          onChange={(e) => onSelectSpeedUnit(e.target.value as WindSpeedUnit)}
-          className="bg-dark-800 text-gray-200 text-xs border border-dark-600 rounded-lg px-2 py-1 focus:outline-none focus:border-sky-500 hidden sm:block"
-        >
-          <option value="knots">knots</option>
-          <option value="kmh">km/h</option>
-          <option value="mph">mph</option>
-          <option value="ms">m/s</option>
-        </select>
-
-        {/* Wind direction format selector */}
-        <select
-          value={dirDisplay}
-          onChange={(e) => onSelectDirDisplay(e.target.value as WindDirDisplay)}
-          className="bg-dark-800 text-gray-200 text-xs border border-dark-600 rounded-lg px-2 py-1 focus:outline-none focus:border-sky-500 hidden xl:block"
-        >
-          <option value="barb">Barbs (feathers)</option>
-          <option value="cardinal">Cardinal (N, SW)</option>
-          <option value="deg">Degrees (0°-360°)</option>
-        </select>
       </div>
     </header>
   );
