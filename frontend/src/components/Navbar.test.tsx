@@ -12,18 +12,11 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     ],
     selectedModel: 'best_match',
     onSelectModel: vi.fn(),
-    timezone: 'America/Los_Angeles',
-    onSelectTimezone: vi.fn(),
-    unitSystem: 'imperial',
-    onToggleUnitSystem: vi.fn(),
-    speedUnit: 'knots',
-    onSelectSpeedUnit: vi.fn(),
-    dirDisplay: 'barb',
-    onSelectDirDisplay: vi.fn(),
     savedLocationsCount: 3,
     onOpenSavedLocations: vi.fn(),
     onSelectAndAddLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
+    onOpenPreferences: vi.fn(),
     hasCartoKey: false,
     ...overrides,
   };
@@ -32,7 +25,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     Array.from(container.querySelectorAll('select')).find((s) =>
       Array.from(s.options).some((o) => o.value === value),
     )!;
-  return { props, selectWith };
+  return { props, container, selectWith };
 }
 
 describe('Navbar (SCRUM-92)', () => {
@@ -56,23 +49,19 @@ describe('Navbar (SCRUM-92)', () => {
     expect(screen.getByTitle('API key active')).toBeTruthy();
   });
 
-  it('reports model, timezone, speed unit and direction display changes', () => {
+  it('reports model changes', () => {
     const { props, selectWith } = renderNavbar();
     fireEvent.change(selectWith('gfs_seamless'), { target: { value: 'gfs_seamless' } });
-    fireEvent.change(selectWith('UTC'), { target: { value: 'UTC' } });
-    fireEvent.change(selectWith('mph'), { target: { value: 'mph' } });
-    fireEvent.change(selectWith('cardinal'), { target: { value: 'cardinal' } });
-
     expect(props.onSelectModel).toHaveBeenCalledWith('gfs_seamless');
-    expect(props.onSelectTimezone).toHaveBeenCalledWith('UTC');
-    expect(props.onSelectSpeedUnit).toHaveBeenCalledWith('mph');
-    expect(props.onSelectDirDisplay).toHaveBeenCalledWith('cardinal');
   });
 
-  it('toggles the unit system and describes the current one', () => {
-    const { props } = renderNavbar({ unitSystem: 'metric' });
-    const toggle = screen.getByTitle(/Toggle units \(currently Metric/);
-    fireEvent.click(toggle);
-    expect(props.onToggleUnitSystem).toHaveBeenCalled();
+  it('opens Preferences from the gear button; unit and timezone controls are gone (SCRUM-107)', () => {
+    const { props, container } = renderNavbar();
+    fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+    expect(props.onOpenPreferences).toHaveBeenCalled();
+
+    expect(container.querySelectorAll('select')).toHaveLength(1); // the model selector only
+    expect(screen.queryByTitle(/Toggle units/)).toBeNull();
+    expect(screen.queryByText('°F')).toBeNull();
   });
 });

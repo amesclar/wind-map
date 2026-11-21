@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { STORAGE_KEYS } from '../constants';
+import { DEFAULT_TIMEZONE, STORAGE_KEYS } from '../constants';
 import { useLocalStorageState } from './useLocalStorageState';
-import { useMapSettings, useUnitPreferences } from './useSettings';
+import { useMapSettings, useTimezone, useUnitPreferences } from './useSettings';
 
 beforeEach(() => localStorage.clear());
 
@@ -75,13 +75,71 @@ describe('useMapSettings (SCRUM-92)', () => {
   });
 });
 
-describe('useUnitPreferences (SCRUM-92)', () => {
-  it('toggles imperial/knots ↔ metric/km/h', () => {
+describe('useUnitPreferences (SCRUM-92, SCRUM-107)', () => {
+  it('defaults to imperial, knots and barbs', () => {
     const { result } = renderHook(() => useUnitPreferences());
-    expect([result.current.unitSystem, result.current.speedUnit]).toEqual(['imperial', 'knots']);
-    act(() => result.current.toggleUnitSystem());
-    expect([result.current.unitSystem, result.current.speedUnit]).toEqual(['metric', 'kmh']);
-    act(() => result.current.toggleUnitSystem());
-    expect([result.current.unitSystem, result.current.speedUnit]).toEqual(['imperial', 'knots']);
+    expect([result.current.unitSystem, result.current.speedUnit, result.current.dirDisplay]).toEqual([
+      'imperial',
+      'knots',
+      'barb',
+    ]);
+  });
+
+  it('changing the temperature unit leaves the speed unit unchanged', () => {
+    const { result } = renderHook(() => useUnitPreferences());
+    act(() => result.current.setSpeedUnit('mph'));
+    act(() => result.current.setUnitSystem('metric'));
+    expect([result.current.unitSystem, result.current.speedUnit]).toEqual(['metric', 'mph']);
+    act(() => result.current.setUnitSystem('imperial'));
+    expect([result.current.unitSystem, result.current.speedUnit]).toEqual(['imperial', 'mph']);
+  });
+
+  it('saves each preference and reads it back after a remount', () => {
+    const first = renderHook(() => useUnitPreferences());
+    act(() => first.result.current.setUnitSystem('metric'));
+    act(() => first.result.current.setSpeedUnit('ms'));
+    act(() => first.result.current.setDirDisplay('cardinal'));
+    expect(localStorage.getItem(STORAGE_KEYS.unitSystem)).toBe('metric');
+    expect(localStorage.getItem(STORAGE_KEYS.speedUnit)).toBe('ms');
+    expect(localStorage.getItem(STORAGE_KEYS.dirDisplay)).toBe('cardinal');
+    first.unmount();
+
+    const { result } = renderHook(() => useUnitPreferences());
+    expect([result.current.unitSystem, result.current.speedUnit, result.current.dirDisplay]).toEqual([
+      'metric',
+      'ms',
+      'cardinal',
+    ]);
+  });
+
+  it('falls back to the defaults for invalid stored values', () => {
+    localStorage.setItem(STORAGE_KEYS.unitSystem, 'kelvin');
+    localStorage.setItem(STORAGE_KEYS.speedUnit, 'furlongs');
+    localStorage.setItem(STORAGE_KEYS.dirDisplay, '');
+    const { result } = renderHook(() => useUnitPreferences());
+    expect([result.current.unitSystem, result.current.speedUnit, result.current.dirDisplay]).toEqual([
+      'imperial',
+      'knots',
+      'barb',
+    ]);
+  });
+});
+
+describe('useTimezone (SCRUM-107)', () => {
+  it('defaults to the default timezone', () => {
+    expect(renderHook(() => useTimezone()).result.current.timezone).toBe(DEFAULT_TIMEZONE);
+  });
+
+  it('saves the timezone and reads it back after a remount', () => {
+    const first = renderHook(() => useTimezone());
+    act(() => first.result.current.setTimezone('Asia/Tokyo'));
+    expect(localStorage.getItem(STORAGE_KEYS.timezone)).toBe('Asia/Tokyo');
+    first.unmount();
+    expect(renderHook(() => useTimezone()).result.current.timezone).toBe('Asia/Tokyo');
+  });
+
+  it('ignores a stored timezone that is not offered', () => {
+    localStorage.setItem(STORAGE_KEYS.timezone, 'Mars/Olympus_Mons');
+    expect(renderHook(() => useTimezone()).result.current.timezone).toBe(DEFAULT_TIMEZONE);
   });
 });

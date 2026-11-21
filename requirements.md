@@ -84,6 +84,9 @@ user selects units
 Temperature: Celsius or Fahrenheit (default)
 Wind speed: knots (default), km/h, m/s, or mph
 Wind direction: Degrees (0, 90, 180, 270, 360) or cardinal directions (N, NE, SW) or wind barbs with feathers showing direction and speed (default)
++ Preferences pop-up (SCRUM-107): timezone, temperature unit, wind speed unit and wind direction display are set in a Preferences pop-up opened from the gear icon in the top bar (reachable at every screen width). Changes apply immediately; the pop-up closes with its X and "Done" buttons.
++ All four preferences are saved in localStorage (`unit_system`, `speed_unit`, `dir_display`, `timezone`) and restored on reload. Missing or invalid stored values fall back to the defaults (°F, knots, barbs, Pacific).
++ The four preferences are independent: choosing °F or °C changes only the temperature unit, never the wind speed unit.
 
 # ui design
 use a minimalist ui
@@ -92,7 +95,7 @@ Frontend: React + Vite + Leaflet + TailwindCSS in dark minimalist style.
 + Location names and regions are HTML-escaped before being placed in map popups (SCRUM-92).
 + Map popups show wind speed, gust and temperature in the user's selected units, the same as the drawer (SCRUM-92). Formatting lives in `src/utils/units.ts`.
 + Frontend defaults (model, timezone, timezone list, map center, localStorage keys) are in `src/constants.ts`; API calls go through one `request()` helper in `src/api/client.ts` that throws `ApiError` with the HTTP status.
-+ Frontend state (SCRUM-92): `App.tsx` only wires hooks together. `src/hooks/` holds settings (`useMapSettings`, `useUnitPreferences`, persisted with `useLocalStorageState`), saved locations (`useLocations`), forecasts (`useAllWeather` for map markers, `useDrawerForecast` for the drawer) and the wind grid (`useWindGrid`). The drawer shows exactly one selection, a saved location or a map point; a newer forecast request cancels the previous one, and choosing the selected location again reloads it.
++ Frontend state (SCRUM-92): `App.tsx` only wires hooks together. `src/hooks/` holds settings (`useMapSettings`; `useUnitPreferences` for the temperature unit, wind speed unit and direction display; `useTimezone`; all persisted with `useLocalStorageState`), saved locations (`useLocations`), forecasts (`useAllWeather` for map markers, `useDrawerForecast` for the drawer) and the wind grid (`useWindGrid`). The drawer shows exactly one selection, a saved location or a map point; a newer forecast request cancels the previous one, and choosing the selected location again reloads it.
 + Saved-location markers are updated in place when weather, selection or units change; only added or deleted locations create or remove markers (SCRUM-92).
 + Wind grid requests are cancelled when superseded; only the latest response draws barbs, and a failed request is retried on the next pan/zoom (SCRUM-92).
 + Code quality (SCRUM-92): ESLint (`npm run lint`, TypeScript + React hooks rules, zero warnings allowed) and TypeScript `noUnusedLocals` / `noUnusedParameters`.

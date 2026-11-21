@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import App from './App';
 import type { WeatherForecastResponse } from './types';
 import type { GridWindPoint } from './api/client';
+import { STORAGE_KEYS } from './constants';
 import { makeForecast, makeLocation } from './test/fixtures';
 import { currentMap, markerAt, resetLeafletMock, type MockMarker } from './test/leafletMock';
 
@@ -39,6 +40,11 @@ const pointForecast = makeForecast(
   { location_id: 0, location_name: '48.78°N, 121.94°W', latitude: 48.78, longitude: -121.94 },
   { speed: 14, gust: 20 },
 );
+
+/** Open the Preferences pop-up from the navbar gear (SCRUM-107). */
+function openPreferences() {
+  fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+}
 
 /** Requests are cancellable: every data call receives `{ signal }`. */
 const withSignal = expect.objectContaining({ signal: expect.any(AbortSignal) });
@@ -210,16 +216,14 @@ describe('App prediction drawer integration', () => {
   });
 
   it('still refreshes all weather and the drawer when the timezone changes (SCRUM-92)', async () => {
-    const { container } = render(<App />);
+    render(<App />);
     const drawer = await screen.findByTestId('timeline-drawer');
     await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
     (api.fetchAllWeather as any).mockClear();
     (api.fetchWeather as any).mockClear();
 
-    const timezoneSelect = Array.from(container.querySelectorAll('select')).find((s) =>
-      Array.from(s.options).some((o) => o.value === 'UTC'),
-    )!;
-    fireEvent.change(timezoneSelect, { target: { value: 'UTC' } });
+    openPreferences();
+    fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'UTC' } });
 
     await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', withSignal));
     expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
@@ -228,18 +232,16 @@ describe('App prediction drawer integration', () => {
 
   it('does not rebuild saved-location markers when App re-renders with unchanged data (SCRUM-92)', async () => {
     const L = vi.mocked((await import('leaflet')).default);
-    const { container } = render(<App />);
+    render(<App />);
     const drawer = await screen.findByTestId('timeline-drawer');
     await waitFor(() => expect(within(drawer).getByText('Oak Harbor, WA')).toBeTruthy());
     await new Promise((r) => setTimeout(r, 0));
+    openPreferences(); // opening the modal re-renders App too
     const markerCalls = L.marker.mock.calls.length;
 
     // Changing the direction display re-renders App (new handler identities) but changes
     // nothing on the map (the speed unit does: popups show it).
-    const dirSelect = Array.from(container.querySelectorAll('select')).find((s) =>
-      Array.from(s.options).some((o) => o.value === 'cardinal'),
-    )!;
-    fireEvent.change(dirSelect, { target: { value: 'cardinal' } });
+    fireEvent.change(screen.getByLabelText('Wind direction display'), { target: { value: 'cardinal' } });
     await waitFor(() => expect(within(drawer).getAllByText('SW').length).toBeGreaterThan(0));
 
     expect(L.marker.mock.calls.length).toBe(markerCalls);
@@ -285,12 +287,36 @@ describe('App prediction drawer integration', () => {
     const oak = mockLocations[0];
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('14 kt'));
 
-    fireEvent.click(screen.getByTitle(/Toggle units/)); // imperial → metric (km/h)
+    openPreferences();
+    fireEvent.click(screen.getByRole('radio', { name: '°C' }));
+    // The temperature unit no longer changes the speed unit (SCRUM-107).
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('°C'));
+    expect(markerAt(oak.latitude, oak.longitude)!.popupHtml).toContain('14 kt');
+    fireEvent.change(screen.getByLabelText('Wind speed'), { target: { value: 'kmh' } });
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('25.9 km/h'));
     const popup = markerAt(oak.latitude, oak.longitude)!.popupHtml!;
     expect(popup).toContain('°C');
     expect(popup).not.toContain('°F');
     expect(popup).not.toContain(' kt');
+  });
+
+  it('applies saved preferences on first render (SCRUM-107)', async () => {
+    localStorage.setItem(STORAGE_KEYS.speedUnit, 'kmh');
+    localStorage.setItem(STORAGE_KEYS.timezone, 'UTC');
+    render(<App />);
+    const drawer = await screen.findByTestId('timeline-drawer');
+    await waitFor(() => expect(within(drawer).getAllByText('25.9 km/h').length).toBeGreaterThan(0));
+    expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', withSignal);
+    expect(api.fetchWeather).not.toHaveBeenCalledWith(1, 'best_match', 'America/Los_Angeles', withSignal);
+  });
+
+  it('opens and closes the Preferences pop-up from the navbar gear (SCRUM-107)', async () => {
+    render(<App />);
+    await screen.findByTestId('timeline-drawer');
+    expect(screen.queryByText('Done')).toBeNull();
+    openPreferences();
+    fireEvent.click(screen.getByText('Done'));
+    expect(screen.queryByLabelText('Timezone')).toBeNull();
   });
 
   it('updates prediction drawer when clicking a grid barb (SCRUM-88)', async () => {

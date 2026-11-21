@@ -3,7 +3,7 @@
 export const DEFAULT_MODEL = 'best_match';
 export const DEFAULT_TIMEZONE = 'America/Los_Angeles';
 
-/** Timezones offered in the navbar. */
+/** Timezones offered in the Preferences pop-up. */
 export const TIMEZONES: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'America/Los_Angeles', label: 'Pacific (PT)' },
   { id: 'America/Denver', label: 'Mountain (MT)' },
@@ -27,4 +27,8 @@ export const STORAGE_KEYS = {
   tileLayer: 'map_tile_layer',
   cartoApiKey: 'carto_api_key',
   windOverlayVisible: 'wind_overlay_visible',
+  unitSystem: 'unit_system',
+  speedUnit: 'speed_unit',
+  dirDisplay: 'dir_display',
+  timezone: 'timezone',
 } as const;
