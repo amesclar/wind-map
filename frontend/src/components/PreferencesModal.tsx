@@ -43,9 +43,9 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-full">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-600">
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-dark-600">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-sky-400" />
             <h2 className="text-base font-semibold text-gray-100">Preferences</h2>
@@ -60,7 +60,7 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-5">
+        <div className="p-5 space-y-5 overflow-y-auto flex-1 min-h-0">
           <div>
             <label htmlFor="pref-timezone" className={LABEL_CLASS}>
               <Clock className="w-3.5 h-3.5 text-sky-400" />
@@ -145,7 +145,7 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-dark-900 border-t border-dark-600 flex justify-end">
+        <div className="shrink-0 px-5 py-3 bg-dark-900 border-t border-dark-600 flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-xs font-medium rounded-lg bg-dark-700 hover:bg-dark-600 text-gray-200 transition"
