@@ -1,9 +1,10 @@
-"""Generate the AI tool rule files from the Kiro steering files (SCRUM-119, SCRUM-111).
+"""Generate the AI tool rule files from the Kiro steering files (SCRUM-119, SCRUM-111, SCRUM-128).
 
 `.kiro/steering/*.md` is the single source of truth. This script combines those files into the
 files other tools read, so every tool follows the same rules:
   - `.config/antigravity/instructions.md`
   - `GEMINI.md` at the project root (Antigravity reads it from there)
+  - `AGENTS.md` at the project root (Devin reads it from there)
 
 Usage:
     python scripts/sync-ai-rules.py           # rewrite the generated file
@@ -19,7 +20,11 @@ STEERING_DIR = ROOT / ".kiro" / "steering"
 TARGETS = [
     ROOT / ".config" / "antigravity" / "instructions.md",
     ROOT / "GEMINI.md",
+    ROOT / "AGENTS.md",
 ]
+
+# Devin includes only the first 16 KiB of AGENTS.md automatically.
+AGENTS_MD_LIMIT_BYTES = 16 * 1024
 
 # Fixed order, so the output does not depend on file system ordering.
 SOURCES = ["commit-rules.md", "documentation.md", "quality-gates.md", "release-versioning.md"]
