@@ -72,3 +72,9 @@
 - **When picking up a ticket:** Check its "is blocked by" links. If a blocker is not Done, tell the user before starting and ask how to proceed.
 - **When finishing a ticket:** If it blocks other tickets, mention them in the summary so the user knows what is unblocked.
 - **Report** the links you created in the summary.
+
+## Rebuild Container After Merge for User Verification (SCRUM-132)
+- **When:** Right after a PR is merged into `develop` or `master` (and the branch is deleted, merge hash commented, and ticket transitioned), rebuild and restart the local Docker container so the user can verify changes on http://localhost:5005.
+- **Command:** Run `scripts/rebuild-container.sh`.
+- The script builds the `wind-map` image, restarts the `wind-map` container with the `wind_data` volume on port 5005, and waits for `GET /api/health` to respond.
+- **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
