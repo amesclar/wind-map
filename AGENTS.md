@@ -84,6 +84,12 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - **When finishing a ticket:** If it blocks other tickets, mention them in the summary so the user knows what is unblocked.
 - **Report** the links you created in the summary.
 
+## Rebuild Container After Merge for User Verification (SCRUM-132)
+- **When:** Right after a PR is merged into `develop` or `master` (and the branch is deleted, merge hash commented, and ticket transitioned), rebuild and restart the local Docker container so the user can verify changes on http://localhost:5005.
+- **Command:** Run `scripts/rebuild-container.sh`.
+- The script builds the `wind-map` image, restarts the `wind-map` container with the `wind_data` volume on port 5005, and waits for `GET /api/health` to respond.
+- **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
+
 ---
 <!-- from .kiro/steering/documentation.md -->
 
@@ -147,7 +153,7 @@ You must automatically create or update unit tests for every functional code cha
 ---
 <!-- from .kiro/steering/release-versioning.md -->
 
-# Release Versioning (SCRUM-91, SCRUM-130)
+# Release Versioning (SCRUM-91, SCRUM-130, SCRUM-132)
 
 The app version must always match the release version.
 
@@ -158,6 +164,7 @@ The app version must always match the release version.
   (cd frontend && npm version X.Y.Z --no-git-tag-version --allow-same-version)
   ```
 - **Release notes:** Every release requires release notes summarizing changes (features, fixes, performance, governance/rules). Save the release notes in the `release-notes/` directory as `x-x-x.md` (e.g., `0-4-0.md`, replacing dots with hyphens) and commit it alongside the version bump.
+- **Rebuild container on version bump and release (SCRUM-132):** Whenever a version bump is performed or when a release is merged to `master`, rebuild and restart the container by running `scripts/rebuild-container.sh` so user verification can happen on http://localhost:5005.
 - **Never hardcode the version** in UI or API code. The backend reads `VERSION` (`backend/app/config.py` → `APP_VERSION`); the frontend gets it at build time as `__APP_VERSION__` (`frontend/appVersion.ts`, `src/version.ts`).
 - **When creating a release `vX.Y.Z`:**
   1. Bump `VERSION` and `frontend/package.json` to `X.Y.Z`, write `release-notes/x-x-x.md`, and commit on a ticket branch, merged to `develop`.

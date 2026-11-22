@@ -1,4 +1,4 @@
-# Release Versioning (SCRUM-91, SCRUM-130)
+# Release Versioning (SCRUM-91, SCRUM-130, SCRUM-132)
 
 The app version must always match the release version.
 
@@ -9,6 +9,7 @@ The app version must always match the release version.
   (cd frontend && npm version X.Y.Z --no-git-tag-version --allow-same-version)
   ```
 - **Release notes:** Every release requires release notes summarizing changes (features, fixes, performance, governance/rules). Save the release notes in the `release-notes/` directory as `x-x-x.md` (e.g., `0-4-0.md`, replacing dots with hyphens) and commit it alongside the version bump.
+- **Rebuild container on version bump and release (SCRUM-132):** Whenever a version bump is performed or when a release is merged to `master`, rebuild and restart the container by running `scripts/rebuild-container.sh` so user verification can happen on http://localhost:5005.
 - **Never hardcode the version** in UI or API code. The backend reads `VERSION` (`backend/app/config.py` → `APP_VERSION`); the frontend gets it at build time as `__APP_VERSION__` (`frontend/appVersion.ts`, `src/version.ts`).
 - **When creating a release `vX.Y.Z`:**
   1. Bump `VERSION` and `frontend/package.json` to `X.Y.Z`, write `release-notes/x-x-x.md`, and commit on a ticket branch, merged to `develop`.
