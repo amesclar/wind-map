@@ -5,7 +5,7 @@ description: Rebuild the wind-map Docker image and restart the local container o
 
 # Rebuild and restart the container
 
-This mirrors `.kiro/hooks/rebuild-wind-map.json`. `.devin/hooks.v1.json` runs it automatically when Devin finishes a turn; run it by hand when you need the result right away:
+`.kiro/hooks/rebuild-wind-map.json` and `.devin/hooks.v1.json` both run it automatically when a session finishes a turn; run it by hand when you need the result right away:
 
 ```bash
 scripts/rebuild-container.sh
