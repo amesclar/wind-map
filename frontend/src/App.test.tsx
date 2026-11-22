@@ -319,6 +319,18 @@ describe('App prediction drawer integration', () => {
     expect(screen.queryByLabelText('Timezone')).toBeNull();
   });
 
+  it('opens and closes the model update frequency guide from the navbar (SCRUM-110)', async () => {
+    render(<App />);
+    await screen.findByTestId('timeline-drawer');
+    expect(screen.queryByText('NOAA HRRR')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Model Update Cycles & Frequency' }));
+    expect(await screen.findByText('NOAA HRRR')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Done'));
+    expect(screen.queryByText('NOAA HRRR')).toBeNull();
+  });
+
   it('updates prediction drawer when clicking a grid barb (SCRUM-88)', async () => {
     render(<App />);
 

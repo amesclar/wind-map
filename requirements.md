@@ -56,6 +56,11 @@ Wind Grid Overlay (SCRUM-86, SCRUM-89): A continuous grid of wind barbs covering
 + Toggled via Map Settings modal (default: visible).
 + Hard limits of 30 cols × 30 rows prevent runaway API requests.
 
+Model update frequency guide (SCRUM-110): the ticket's `weather-models.md` reference table is bundled at build time (`frontend/src/assets/weather-models.md` imported with Vite `?raw`) and rendered in an in-app modal, so nothing is downloaded and no markdown library or CDN is added.
++ It opens from the refresh-icon button between the weather model selector and the Preferences gear, and stays reachable at every screen width even though the model selector is hidden below `lg`.
++ `src/utils/modelGuide.ts` parses the markdown table, which remains the single source of truth, and derives the 1h/3h/6h cadence badges (unrecognised cadence text is shown as-is). The modal scrolls vertically and its table scrolls horizontally on narrow screens.
++ The guide is presented as a general reference: only the models in the backend's `AVAILABLE_MODELS` are selectable in the app.
+
 Drawer: Bottom timeline showing 16 time slices (every 3h for 48h) in Pacific Time by default.
 + Each slice shows temperature and wind only; relative humidity is no longer displayed in the drawer (SCRUM-97). The API still returns `humidity` in forecast points.
 + Each slice shows the wind direction in whole degrees true (e.g. "220°T", normalized to 0–359) directly below the wind barb (or direction display) and above the wind speed, regardless of the selected wind direction display (SCRUM-90).
