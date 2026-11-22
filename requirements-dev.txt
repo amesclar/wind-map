@@ -4,61 +4,194 @@
 #
 #    pip-compile --annotation-style=line --output-file=requirements-dev.txt --strip-extras requirements-dev.in
 #
-annotated-doc==0.0.6      # via -c requirements.txt, fastapi
-annotated-types==0.8.0    # via -c requirements.txt, pydantic
-anyio==4.16.0             # via -c requirements.txt, fastapi, httpx, starlette, watchfiles
-boolean-py==5.0           # via license-expression
-cachecontrol==0.15.0      # via cachecontrol, pip-audit
-certifi==2026.10.23       # via -c requirements.txt, httpcore, httpx, requests
-charset-normalizer==3.5.2  # via requests
-click==8.5.1              # via -c requirements.txt, uvicorn
-coverage==7.17.3          # via pytest-cov
-cyclonedx-python-lib==11.12.0  # via pip-audit
-defusedxml==0.7.1         # via py-serializable
-fastapi==0.163.2          # via -c requirements.txt, -r requirements.in
-filelock==4.2.12          # via cachecontrol
-h11==0.16.0               # via -c requirements.txt, httpcore, uvicorn
-httpcore==1.0.9           # via -c requirements.txt, httpx
-httptools==0.9.0          # via -c requirements.txt, uvicorn
-httpx==0.28.1             # via -c requirements.txt, -r requirements.in
-idna==3.20                # via -c requirements.txt, anyio, httpx, requests
-iniconfig==2.3.1          # via pytest
-license-expression==30.4.4  # via cyclonedx-python-lib
-markdown-it-py==4.3.0     # via rich
-mdurl==0.1.2              # via markdown-it-py
-msgpack==1.2.4            # via cachecontrol
-opentelemetry-api==1.45.2  # via -c requirements.txt, fastapi
-packageurl-python==0.17.6  # via cyclonedx-python-lib
-packaging==26.3           # via pip-audit, pip-requirements-parser, pytest
-pip-api==0.0.35           # via pip-audit
-pip-audit==2.10.1         # via -r requirements-dev.in
-pip-requirements-parser==32.0.1  # via pip-audit
-platformdirs==4.14.7      # via pip-audit
-pluggy==1.7.0             # via pytest, pytest-cov
-py-serializable==2.2.0    # via cyclonedx-python-lib
-pydantic==2.14.3          # via -c requirements.txt, -r requirements.in, fastapi
-pydantic-core==2.50.4     # via -c requirements.txt, pydantic
-pygments==2.21.0          # via pytest, rich
-pyparsing==3.3.3          # via pip-requirements-parser
-pytest==9.2.0             # via -r requirements-dev.in, pytest-asyncio, pytest-cov
-pytest-asyncio==1.5.0     # via -r requirements-dev.in
-pytest-cov==7.1.0         # via -r requirements-dev.in
-python-dotenv==1.2.4      # via -c requirements.txt, uvicorn
-pyyaml==6.0.3             # via -c requirements.txt, uvicorn
-requests==2.34.2          # via cachecontrol, pip-audit
-rich==15.0.0              # via pip-audit
-ruff==0.17.5              # via -r requirements-dev.in
-sortedcontainers==2.4.0   # via cyclonedx-python-lib
-starlette==1.10.0         # via -c requirements.txt, fastapi
-tomli==2.5.0              # via pip-audit
-tomli-w==1.2.0            # via pip-audit
-typing-extensions==4.16.0  # via -c requirements.txt, anyio, cyclonedx-python-lib, fastapi, opentelemetry-api, pydantic, pydantic-core, pytest-asyncio, starlette, typing-inspection
-typing-inspection==0.4.5  # via -c requirements.txt, fastapi, pydantic
-urllib3==2.8.0            # via requests
-uvicorn==0.54.0           # via -c requirements.txt, -r requirements.in
-uvloop==0.23.0            # via -c requirements.txt, uvicorn
-watchfiles==1.3.0         # via -c requirements.txt, uvicorn
-websockets==17.4          # via -c requirements.txt, uvicorn
+annotated-doc==0.0.6
+    # via
+    #   -c requirements.txt
+    #   fastapi
+annotated-types==0.8.0
+    # via
+    #   -c requirements.txt
+    #   pydantic
+anyio==4.16.0
+    # via
+    #   -c requirements.txt
+    #   fastapi
+    #   httpx
+    #   starlette
+    #   watchfiles
+boolean-py==5.0
+    # via license-expression
+cachecontrol==0.15.0
+    # via
+    #   cachecontrol
+    #   pip-audit
+certifi==2026.10.23
+    # via
+    #   -c requirements.txt
+    #   httpcore
+    #   httpx
+    #   requests
+charset-normalizer==3.5.2
+    # via requests
+click==8.5.1
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+coverage==7.17.3
+    # via pytest-cov
+cyclonedx-python-lib==11.12.0
+    # via pip-audit
+defusedxml==0.7.1
+    # via py-serializable
+fastapi==0.165.0
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+filelock==4.2.12
+    # via cachecontrol
+h11==0.16.0
+    # via
+    #   -c requirements.txt
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via
+    #   -c requirements.txt
+    #   httpx
+httptools==0.9.0
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+httpx==0.28.1
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+idna==3.20
+    # via
+    #   -c requirements.txt
+    #   anyio
+    #   httpx
+    #   requests
+iniconfig==2.3.1
+    # via pytest
+license-expression==30.4.4
+    # via cyclonedx-python-lib
+markdown-it-py==4.3.0
+    # via rich
+mdurl==0.1.2
+    # via markdown-it-py
+msgpack==1.2.4
+    # via cachecontrol
+opentelemetry-api==1.45.2
+    # via
+    #   -c requirements.txt
+    #   fastapi
+packageurl-python==0.17.6
+    # via cyclonedx-python-lib
+packaging==26.3
+    # via
+    #   pip-audit
+    #   pip-requirements-parser
+    #   pytest
+pip-api==0.0.35
+    # via pip-audit
+pip-audit==2.10.1
+    # via -r requirements-dev.in
+pip-requirements-parser==32.0.1
+    # via pip-audit
+platformdirs==4.14.7
+    # via pip-audit
+pluggy==1.7.0
+    # via
+    #   pytest
+    #   pytest-cov
+py-serializable==2.2.0
+    # via cyclonedx-python-lib
+pydantic==2.14.3
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+    #   fastapi
+pydantic-core==2.50.4
+    # via
+    #   -c requirements.txt
+    #   pydantic
+pygments==2.21.0
+    # via
+    #   pytest
+    #   rich
+pyparsing==3.3.3
+    # via pip-requirements-parser
+pytest==9.2.0
+    # via
+    #   -r requirements-dev.in
+    #   pytest-asyncio
+    #   pytest-cov
+pytest-asyncio==1.5.0
+    # via -r requirements-dev.in
+pytest-cov==7.1.0
+    # via -r requirements-dev.in
+python-dotenv==1.2.4
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+pyyaml==6.0.3
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+requests==2.34.2
+    # via
+    #   cachecontrol
+    #   pip-audit
+rich==15.0.0
+    # via pip-audit
+ruff==0.17.5
+    # via -r requirements-dev.in
+sortedcontainers==2.4.0
+    # via cyclonedx-python-lib
+starlette==1.10.0
+    # via
+    #   -c requirements.txt
+    #   fastapi
+tomli==2.5.0
+    # via pip-audit
+tomli-w==1.2.0
+    # via pip-audit
+typing-extensions==4.16.0
+    # via
+    #   -c requirements.txt
+    #   anyio
+    #   cyclonedx-python-lib
+    #   fastapi
+    #   opentelemetry-api
+    #   pydantic
+    #   pydantic-core
+    #   pytest-asyncio
+    #   starlette
+    #   typing-inspection
+typing-inspection==0.4.5
+    # via
+    #   -c requirements.txt
+    #   fastapi
+    #   pydantic
+urllib3==2.8.0
+    # via requests
+uvicorn==0.54.0
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+uvloop==0.23.0
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+watchfiles==1.3.0
+    # via
+    #   -c requirements.txt
+    #   uvicorn
+websockets==17.4
+    # via
+    #   -c requirements.txt
+    #   uvicorn
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
