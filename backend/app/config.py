@@ -79,7 +79,8 @@ FORECAST_STEP_HOURS = 3
 # Hourly data starts at local midnight, so the last slice can be up to
 # 23 + (16 - 1) * 3 = 68 hours in; 4 days (96 hours) covers that with a margin.
 FORECAST_DAYS = 4
-assert 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24, "FORECAST_DAYS too small"
+if not 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24:
+    raise ValueError("FORECAST_DAYS too small for FORECAST_POINTS and FORECAST_STEP_HOURS")
 
 # Cache keys round coordinates to 2 decimals (~1.1 km), for point and grid caches.
 COORD_CACHE_PRECISION = 2

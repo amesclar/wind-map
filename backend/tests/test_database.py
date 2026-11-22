@@ -21,6 +21,7 @@ from backend.app.main import app
 from backend.app.services.weather_service import get_point_forecast
 from factories import insert_grid_row, upstream_error
 
+
 def _is_closed(conn: sqlite3.Connection) -> bool:
     try:
         conn.execute("SELECT 1;")
@@ -38,10 +39,9 @@ def test_db_connection_commits_and_closes():
 
 
 def test_db_connection_rolls_back_and_closes_on_error():
-    with pytest.raises(RuntimeError):
-        with db_connection() as conn:
-            conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES ('B', 1, 2);")
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), db_connection() as conn:
+        conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES ('B', 1, 2);")
+        raise RuntimeError("boom")
     assert _is_closed(conn)
     with db_connection() as check:
         assert check.execute("SELECT COUNT(*) AS n FROM locations WHERE name = 'B';").fetchone()["n"] == 0
@@ -59,9 +59,8 @@ async def test_point_forecast_closes_connections_when_open_meteo_fails(open_mete
         return conn
 
     open_meteo.fail(upstream_error("down"))
-    with patch.object(database, "get_db_connection", side_effect=tracking):
-        with pytest.raises(httpx.HTTPError):
-            await get_point_forecast(48.0, -122.0)
+    with patch.object(database, "get_db_connection", side_effect=tracking), pytest.raises(httpx.HTTPError):
+        await get_point_forecast(48.0, -122.0)
 
     assert opened, "expected at least one connection"
     assert all(_is_closed(c) for c in opened)
@@ -163,12 +162,11 @@ def test_upgrade_from_unversioned_db_resets_caches_and_keeps_locations():
 
 
 def test_foreign_keys_are_enforced():
-    with pytest.raises(sqlite3.IntegrityError):
-        with db_connection() as conn:
-            conn.execute(
-                "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
-                "VALUES (999, 'best_match', 'UTC', 0, 1, '{}');"
-            )
+    with pytest.raises(sqlite3.IntegrityError), db_connection() as conn:
+        conn.execute(
+            "INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json) "
+            "VALUES (999, 'best_match', 'UTC', 0, 1, '{}');"
+        )
 
 
 def test_upgrade_from_version_1_adds_timezone_to_forecast_cache_keys():

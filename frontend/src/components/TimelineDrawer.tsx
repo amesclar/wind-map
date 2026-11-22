@@ -9,7 +9,6 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  Droplets,
   Wind,
   Compass,
   Clock,
@@ -227,12 +226,6 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
                     }}
                   >
                     {formatTemperature(pt, unitSystem)}
-                  </div>
-
-                  {/* Humidity */}
-                  <div className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                    <Droplets className="w-2.5 h-2.5 text-blue-400" />
-                    <span>{Math.round(pt.humidity)}%</span>
                   </div>
                 </div>
               );

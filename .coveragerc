@@ -1,0 +1,12 @@
+# Backend coverage settings (SCRUM-108). Run: pytest --cov
+[run]
+source = backend/app
+branch = False
+
+[report]
+# Baseline when added was 99%; keep a small margin so CI only fails on a real drop.
+fail_under = 97
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:

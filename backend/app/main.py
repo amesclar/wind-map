@@ -2,12 +2,13 @@
 
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.config import STATIC_DIR, CARTO_API_KEY, APP_VERSION, CORS_ORIGINS
+from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
 from backend.app.routers import geocode, grid, locations, weather
 

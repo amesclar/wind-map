@@ -1,0 +1,8 @@
+# Top-level dev/test dependencies. Regenerate requirements-dev.txt after editing.
+-c requirements.txt
+-r requirements.in
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+ruff>=0.6.0
+pip-audit>=2.7.0

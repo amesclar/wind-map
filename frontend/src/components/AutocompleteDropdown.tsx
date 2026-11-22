@@ -66,7 +66,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
   };
 
   return (
-    <div ref={wrapperRef} className="relative w-64 md:w-80">
+    <div ref={wrapperRef} className="relative min-w-0 w-64 md:w-80">
       <div className="relative flex items-center">
         <Search className="w-4 h-4 text-gray-400 absolute left-3 pointer-events-none" />
         <input
@@ -84,7 +84,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto divide-y divide-dark-700">
+        <div className="absolute top-full left-0 w-[max(100%,16rem)] max-w-[calc(100vw-4.5rem)] mt-1.5 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto divide-y divide-dark-700">
           {results.map((item, idx) => (
             <button
               key={`${item.name}-${item.latitude}-${item.longitude}-${idx}`}
@@ -100,7 +100,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
                   {[item.admin1, item.country].filter(Boolean).join(', ')}
                 </div>
               </div>
-              <span className="text-[10px] text-gray-500 font-mono">
+              <span className="hidden sm:inline shrink-0 text-[10px] text-gray-500 font-mono">
                 {item.latitude.toFixed(2)}°, {item.longitude.toFixed(2)}°
               </span>
             </button>

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModel } from './types';
 import { fetchAppConfig, fetchModels } from './api/client';
-import { DEFAULT_MODEL, DEFAULT_TIMEZONE } from './constants';
-import { useMapSettings, useUnitPreferences } from './hooks/useSettings';
+import { DEFAULT_MODEL } from './constants';
+import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
 import { type Selection, useAllWeather, useDrawerForecast } from './hooks/useForecast';
 import { useLatest } from './hooks/useLatest';
@@ -11,6 +11,7 @@ import { MapView } from './components/MapView';
 import { TimelineDrawer } from './components/TimelineDrawer';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
+import { PreferencesModal } from './components/PreferencesModal';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
 
@@ -27,7 +28,7 @@ function getCurrentPosition(): Promise<GeolocationPosition | null> {
 export const App: React.FC = () => {
   const [models, setModels] = useState<WeatherModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
-  const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE);
+  const { timezone, setTimezone } = useTimezone();
   const mapSettings = useMapSettings();
   const units = useUnitPreferences();
   const { locations, load: loadLocations, add: addLocation, remove: removeLocation } = useLocations();
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
 
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
 
   const selectedLocation = selection?.kind === 'saved' ? selection.location : null;
   const selectedGridPoint = useMemo<SelectedGridPoint | null>(
@@ -147,18 +149,11 @@ export const App: React.FC = () => {
         models={models}
         selectedModel={selectedModel}
         onSelectModel={setSelectedModel}
-        timezone={timezone}
-        onSelectTimezone={setTimezone}
-        unitSystem={units.unitSystem}
-        onToggleUnitSystem={units.toggleUnitSystem}
-        speedUnit={units.speedUnit}
-        onSelectSpeedUnit={units.setSpeedUnit}
-        dirDisplay={units.dirDisplay}
-        onSelectDirDisplay={units.setDirDisplay}
         savedLocationsCount={locations.length}
         onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
+        onOpenPreferences={() => setIsPreferencesOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
       />
 
@@ -206,6 +201,19 @@ export const App: React.FC = () => {
         onSaveCartoApiKey={mapSettings.saveCartoApiKey}
         windOverlayVisible={mapSettings.windOverlayVisible}
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
+      />
+
+      <PreferencesModal
+        isOpen={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
+        timezone={timezone}
+        onSelectTimezone={setTimezone}
+        unitSystem={units.unitSystem}
+        onSelectUnitSystem={units.setUnitSystem}
+        speedUnit={units.speedUnit}
+        onSelectSpeedUnit={units.setSpeedUnit}
+        dirDisplay={units.dirDisplay}
+        onSelectDirDisplay={units.setDirDisplay}
       />
     </div>
   );

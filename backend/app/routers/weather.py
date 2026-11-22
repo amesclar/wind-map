@@ -1,9 +1,11 @@
 """Weather API router: weather forecast endpoints."""
 
 import logging
-from typing import List, Dict
+from typing import Dict, List
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from backend.app import locations_repo
 from backend.app.config import AVAILABLE_MODELS
 from backend.app.dependencies import model_param, timezone_param

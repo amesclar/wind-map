@@ -12,7 +12,7 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
 - **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the drawer's barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
 - **Clickable Barbs *(SCRUM-88, SCRUM-89)*:** Clicking any grid barb loads a full 48-hour forecast for that exact lat/lon into the drawer without saving it as a location — useful over open water where no place name exists. The selected barb is drawn larger with a white highlight ring and matches the drawer's leftmost barb. Clicking a saved location marker restores normal drawer behaviour.
-- **48-Hour Forecast Timeline Drawer:** Collapsible bottom drawer showing 16 time slices (every 3 hours for 48 hours) with temperature, wind speed/direction, and relative humidity. The first ("Now") slice shows Open-Meteo current conditions. Each slice also shows the wind direction in whole degrees true (e.g. `220°T`) below the wind barb and above the wind speed *(SCRUM-90)*.
+- **48-Hour Forecast Timeline Drawer:** Collapsible bottom drawer showing 16 time slices (every 3 hours for 48 hours) with temperature and wind speed/direction. The first ("Now") slice shows Open-Meteo current conditions. Each slice also shows the wind direction in whole degrees true (e.g. `220°T`) below the wind barb and above the wind speed *(SCRUM-90)*.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS 0.4°*
@@ -20,8 +20,8 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
   - *DWD ICON Seamless*
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
-- **Unit Customization:** One-click toggle between Imperial (°F, knots) and Metric (°C, km/h), with granular selectors for speed (knots, km/h, mph, m/s) and wind direction (barbs, cardinal directions, degrees).
-- **Timezone Support:** Pacific Time by default, with quick switching across major world timezones.
+- **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
+- **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
@@ -31,7 +31,7 @@ Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leafle
 
 ```
 wind-map/
-├── Dockerfile                   # Multi-stage build (Node build -> Python runtime)
+├── Dockerfile                   # Multi-stage build (Node build -> Python deps -> Alpine runtime)
 ├── docker-compose.yml           # Optional compose configuration
 ├── requirements.txt             # Python backend dependencies (FastAPI, httpx, etc.)
 ├── backend/
@@ -51,7 +51,7 @@ wind-map/
 └── frontend/
     ├── src/
     │   ├── components/          # MapView, WindOverlay, WindBarb, TimelineDrawer, Navbar, modals, mapTiles.ts
-    │   ├── hooks/               # useMapSettings, useUnitPreferences, useLocations, useAllWeather,
+    │   ├── hooks/               # useMapSettings, useUnitPreferences, useTimezone, useLocations, useAllWeather,
     │   │                        # useDrawerForecast, useWindGrid, useLocalStorageState, useLatest
     │   ├── api/                 # Typed API client (one request() helper, ApiError)
     │   ├── utils/               # units.ts (display formatting), html.ts (escaping)
@@ -113,8 +113,19 @@ docker stop wind-map && docker rm wind-map
    ```
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
+   (`requirements.txt` holds pinned runtime dependencies only and is what the Docker image installs; `requirements-dev.txt` adds the pinned test tools.)
+
+#### Updating Python dependencies
+`requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions. Do not edit them by hand. To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
+```bash
+docker run --rm -v "$PWD":/w -w /w python:3.11-alpine sh -c \
+  "pip install -q pip-tools && \
+   pip-compile -q --strip-extras --annotation-style=line -o requirements.txt requirements.in && \
+   pip-compile -q --strip-extras --annotation-style=line -o requirements-dev.txt requirements-dev.in"
+```
+To upgrade everything to the latest allowed versions, add `--upgrade` to both `pip-compile` commands.
 3. Run backend tests:
    ```bash
    pytest backend/tests
@@ -192,6 +203,7 @@ Frontend test suite coverage includes:
 - Selected map barb matches the drawer's leftmost barb (direction, barb count and color) *(SCRUM-89)*
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
+- `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
 - Timeline drawer rendering, empty state, stacking context isolation
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
 
@@ -213,3 +225,23 @@ cd frontend && npm run typecheck
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.
+
+## Quality and Security Checks (SCRUM-108)
+
+GitHub Actions runs these on every pull request to `develop` or `master` and on pushes to those branches (`.github/workflows/`):
+
+| Check | What it does | Run locally |
+| :--- | :--- | :--- |
+| Ruff | Python lint, including security rules (`ruff.toml`) | `ruff check .` |
+| pytest coverage | Backend tests; fails below the threshold in `.coveragerc` | `pytest --cov` |
+| pip-audit | Known vulnerabilities in `requirements.txt` | `pip-audit -r requirements.txt` |
+| ESLint, `tsc` | Frontend lint and type-check | `cd frontend && npm run lint && npm run typecheck` |
+| Vitest coverage | Frontend tests; fails below the thresholds in `frontend/vitest.config.ts` | `cd frontend && npm run test:coverage` |
+| `npm audit` | Fails on high or critical advisories in production dependencies; the full audit is informational | `cd frontend && npm audit --omit=dev` |
+| Docker build, smoke test, Trivy | Builds the image, checks `/api/health`, fails on fixable HIGH or CRITICAL vulnerabilities | `docker build -t wind-map:ci .` |
+| CodeQL | Static analysis for Python and JavaScript/TypeScript (also weekly) | runs on GitHub |
+| Dependabot | Weekly update PRs for pip, npm, Docker and GitHub Actions (target `develop`) | runs on GitHub |
+
+Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
+
+Ruff runs lint only. Auto-formatting (`ruff format`) and the `UP` modernization rules are not enabled, because they would rewrite many files with no behavior change.

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { STORAGE_KEYS } from '../constants';
+import { DEFAULT_TIMEZONE, STORAGE_KEYS, TIMEZONES } from '../constants';
 import type { AppConfig, MapTileLayer, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { useLocalStorageState } from './useLocalStorageState';
 
@@ -66,18 +66,34 @@ export function useMapSettings() {
   };
 }
 
-/** Temperature system, wind speed unit and direction display (not persisted). */
+const UNIT_SYSTEMS: readonly UnitSystem[] = ['imperial', 'metric'];
+const SPEED_UNITS: readonly WindSpeedUnit[] = ['knots', 'kmh', 'mph', 'ms'];
+const DIR_DISPLAYS: readonly WindDirDisplay[] = ['barb', 'cardinal', 'deg'];
+
+/** Parser returning the stored value when it is one of `allowed`, else `fallback`. */
+const oneOf =
+  <T extends string>(allowed: readonly T[], fallback: T) =>
+  (stored: string | null): T =>
+    allowed.includes(stored as T) ? (stored as T) : fallback;
+
+const parseUnitSystem = oneOf(UNIT_SYSTEMS, 'imperial');
+const parseSpeedUnit = oneOf(SPEED_UNITS, 'knots');
+const parseDirDisplay = oneOf(DIR_DISPLAYS, 'barb');
+const parseTimezone = oneOf(
+  TIMEZONES.map((tz) => tz.id),
+  DEFAULT_TIMEZONE,
+);
+
+/** Temperature unit, wind speed unit and direction display, persisted and independent (SCRUM-107). */
 export function useUnitPreferences() {
-  const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
-  const [speedUnit, setSpeedUnit] = useState<WindSpeedUnit>('knots');
-  const [dirDisplay, setDirDisplay] = useState<WindDirDisplay>('barb');
+  const [unitSystem, setUnitSystem] = useLocalStorageState(STORAGE_KEYS.unitSystem, parseUnitSystem);
+  const [speedUnit, setSpeedUnit] = useLocalStorageState(STORAGE_KEYS.speedUnit, parseSpeedUnit);
+  const [dirDisplay, setDirDisplay] = useLocalStorageState(STORAGE_KEYS.dirDisplay, parseDirDisplay);
+  return { unitSystem, setUnitSystem, speedUnit, setSpeedUnit, dirDisplay, setDirDisplay };
+}
 
-  /** Imperial ↔ metric also switches the speed unit (knots ↔ km/h). */
-  const toggleUnitSystem = useCallback(() => {
-    const next: UnitSystem = unitSystem === 'imperial' ? 'metric' : 'imperial';
-    setUnitSystem(next);
-    setSpeedUnit(next === 'metric' ? 'kmh' : 'knots');
-  }, [unitSystem]);
-
-  return { unitSystem, toggleUnitSystem, speedUnit, setSpeedUnit, dirDisplay, setDirDisplay };
+/** Display timezone, persisted (SCRUM-107). */
+export function useTimezone() {
+  const [timezone, setTimezone] = useLocalStorageState(STORAGE_KEYS.timezone, parseTimezone);
+  return { timezone, setTimezone };
 }

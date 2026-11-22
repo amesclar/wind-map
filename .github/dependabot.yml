@@ -1,0 +1,34 @@
+# Dependency update PRs (SCRUM-108). The commit rules require a ticket key in commit messages,
+# so Dependabot commits use the SCRUM-108 prefix. Retitle a PR with its own ticket if you create one.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "SCRUM-108"
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "SCRUM-108"
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "SCRUM-108"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "SCRUM-108"

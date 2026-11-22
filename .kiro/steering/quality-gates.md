@@ -23,3 +23,24 @@ You must automatically create or update unit tests for every functional code cha
 ## 3. Strict Task Completion Gate
 - A task is not considered complete unless the relevant test files are created/modified, and the verification commands exit with a code `0` (success).
 
+
+## 4. CI Checks and Branch Protection (SCRUM-108, SCRUM-119)
+- **Before pushing,** run the same checks CI runs and make sure they pass:
+  ```bash
+  ruff check .                                   # Python lint and security rules
+  pytest --cov                                   # backend tests, minimum coverage in .coveragerc
+  cd frontend && npm run lint && npm run typecheck && npm run test:coverage
+  ```
+  Run `pip-audit -r requirements.txt` and `npm audit --omit=dev` when you change dependencies.
+- **Branch protection:** `develop` and `master` require the CI checks (Backend, Frontend, Docker image, and the two CodeQL analyses) to pass. Merge a PR only after `gh pr checks <n>` shows every check passing. Do not push directly to `develop` or `master`, and do not use an admin bypass, without asking the user first.
+- **Fix findings, don't hide them:** Do not make a check pass by disabling it, lowering a coverage threshold, or adding a blanket suppression. A suppression needs a one-line reason in the code or config.
+- **Docker image:** The Trivy scan fails on fixable HIGH or CRITICAL vulnerabilities. Fix them in the Dockerfile or the pinned dependencies.
+
+## 5. Pinned Python Dependencies (SCRUM-103)
+- `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`. Never edit them by hand.
+- To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.11-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
+
+## 6. Shared Rules for All AI Tools (SCRUM-119)
+- `.kiro/steering/*.md` is the single source of truth for the project rules.
+- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
+- Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.
