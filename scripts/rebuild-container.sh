@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rebuild the wind-map image and restart the container (SCRUM-128).
-# Devin runs this from .devin/hooks.v1.json; it mirrors .kiro/hooks/rebuild-wind-map.json.
+# Rebuild the wind-map image and restart the container (SCRUM-128, SCRUM-140).
+# Kiro and Devin run this from .kiro/hooks/rebuild-wind-map.json and .devin/hooks.v1.json.
 # Always exits 0 so a failed or skipped rebuild never blocks the agent.
 
 cd "$(dirname "$0")/.." || exit 0
