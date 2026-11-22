@@ -30,4 +30,4 @@ npm run test:coverage   # thresholds in vitest.config.ts
 - Dockerfile or runtime changed: `docker build -t wind-map .` and check `curl -fsS http://localhost:5005/api/health` (see the `rebuild-container` skill).
 
 ## After pushing
-Open the PR into `develop` with title `[SCRUM-xxx] ...`. Merge only after `gh pr checks <n>` shows Backend, Frontend, Docker image and both CodeQL checks passing.
+Open the PR into `develop` with title `[SCRUM-xxx] ...`. Once `gh pr checks <n>` shows Backend, Frontend, Docker image and both CodeQL checks passing, transition the ticket to Done (SCRUM-141), then merge.
