@@ -145,7 +145,7 @@ branching (SCRUM-94): work happens on ticket branches (`feature/PROJ-123-...` or
 # testing and documentation
 Testing & Docs: Unit and integration tests (pytest for backend, frontend component tests) with comprehensive README.md.
 + Backend test setup (SCRUM-92): `backend/tests/conftest.py` gives every test its own temporary SQLite file (never the repo's `data/` directory, and independent of the working directory) and blocks real Open-Meteo calls; tests configure responses through the `open_meteo` fixture. Payload builders live in `backend/tests/factories.py`.
-+ Frontend test setup (SCRUM-92): shared Leaflet mock (`src/test/leafletMock.ts`, used via `vi.mock('leaflet', () => import(...))`), data builders (`src/test/fixtures.ts`) and a setup file (`src/test/setup.ts`) that unmounts components after each test. Test files are type-checked by `npm run typecheck`.
++ Frontend test setup (SCRUM-92): shared Leaflet mock (`src/test/leafletMock.ts`, used via `vi.mock('leaflet', () => import(...))`), data builders (`src/test/fixtures.ts`) and a setup file (`src/test/setup.ts`) that unmounts components after each test. Source, test, and config files (`vite.config.ts`, `vitest.config.ts`, `appVersion.ts`) are type-checked by `npm run typecheck` (SCRUM-93).
 
 # performance
 the application should be respond to users request within 3 seconds 

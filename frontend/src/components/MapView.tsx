@@ -40,13 +40,13 @@ const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 export function buildLocationIcon(weather: WeatherForecastResponse | undefined, isSelected: boolean): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
-  const svg = generateWindBarbSvg(
-    current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
-    current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
-    current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
+  const svg = generateWindBarbSvg({
+    speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
+    directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
+    tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
     size,
-    true,
-  );
+    showLabel: true,
+  });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
