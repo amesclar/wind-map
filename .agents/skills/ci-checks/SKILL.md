@@ -24,7 +24,7 @@ npm run test:coverage   # thresholds in vitest.config.ts
 ```
 
 ## Conditional
-- Steering files changed: `python scripts/sync-ai-rules.py` (regenerates `AGENTS.md`, `GEMINI.md`, `.config/antigravity/instructions.md`); commit all generated files.
+- Rules changed (`.kiro/steering/*.md`, `.agents/skills/*/SKILL.md`, `.kiro/hooks/*.json`, `.devin/hooks.v1.json`): `python scripts/sync-ai-rules.py` (regenerates `AGENTS.md`, `GEMINI.md`, `.config/antigravity/instructions.md` and `.freebuff/rules.md`); commit all generated files.
 - Python dependencies changed: `pip-audit -r requirements.txt` (edit `requirements*.in` and regenerate with `pip-compile`; never edit the `.txt` files by hand).
 - npm dependencies changed: `npm audit --omit=dev --audit-level=high`.
 - Dockerfile or runtime changed: `docker build -t wind-map .` and check `curl -fsS http://localhost:5005/api/health` (see the `rebuild-container` skill).

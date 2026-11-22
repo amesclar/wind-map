@@ -145,9 +145,10 @@ You must automatically create or update unit tests for every functional code cha
 - `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`. Never edit them by hand.
 - To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.11-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
 
-## 6. Shared Rules for All AI Tools (SCRUM-119)
+## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139)
 - `.kiro/steering/*.md` is the single source of truth for the project rules.
-- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
+- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin and Freebuff) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
+- Freebuff (SCRUM-139): Freebuff Desktop reads the root `AGENTS.md` and the skills in `.agents/skills/`. `.freebuff/rules.md` is generated from the same steering files plus a workflow inventory (the skills and the post-task hooks), so changing a steering file, a skill in `.agents/skills/` or a hook in `.kiro/hooks/` or `.devin/hooks.v1.json` requires running `python scripts/sync-ai-rules.py` and committing the regenerated files. Do not copy skills into `.freebuff/skills/`, because Freebuff already loads `.agents/skills/`. Freebuff has no project hooks, so the post-task container rebuild follows `release-versioning.md`.
 - Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.
 
 ---
