@@ -129,6 +129,7 @@ the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔
 + Frontend reads it at build time (Vite `__APP_VERSION__`) and shows it in the navbar as `vX.Y.Z`.
 + `frontend/package.json` `version` must match `VERSION`; tests fail if they differ.
 + For every release: update `VERSION` and `frontend/package.json` to the release number before tagging `vX.Y.Z`.
++ Release notes (SCRUM-130): every release requires release notes saved in the `release-notes/` directory as `x-x-x.md` (e.g. `0-4-0.md`, replacing dots with hyphens) committed alongside the version bump and used when publishing the release on GitHub.
 
 # git and code layout
 locate the project in /Users/fredames/Projects/wind-map
