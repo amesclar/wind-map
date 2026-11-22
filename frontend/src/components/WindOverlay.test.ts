@@ -22,7 +22,9 @@ const colorsIn = (svg: string) =>
 
 describe('generateGridBarbSvg (SCRUM-89)', () => {
   it('draws exactly the same barb as the drawer, including temperature color', () => {
-    expect(generateGridBarbSvg(27, 305, 50, 32)).toBe(generateWindBarbSvg(27, 305, 50, 32, false));
+    expect(generateGridBarbSvg(27, 305, 50, 32)).toBe(
+      generateWindBarbSvg({ speedKnots: 27, directionDeg: 305, tempF: 50, size: 32, showLabel: false })
+    );
   });
 
   it('colors the barb by temperature like the drawer', () => {

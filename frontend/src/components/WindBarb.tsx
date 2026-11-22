@@ -12,19 +12,30 @@ export function getTemperatureColor(tempF: number): string {
   return '#ef4444'; // Red
 }
 
+export interface WindBarbOptions {
+  speedKnots: number;
+  directionDeg: number;
+  tempF: number;
+  size?: number;
+  showLabel?: boolean;
+  colorOverride?: string;
+}
+
 /**
  * Generates an SVG string representation of a meteorological wind barb.
  * Direction is in degrees (0 = North, 90 = East, etc.)
  * Speed is in knots.
  */
-export function generateWindBarbSvg(
-  speedKnots: number,
-  directionDeg: number,
-  tempF: number,
-  size: number = 44,
-  showLabel: boolean = true,
-  colorOverride?: string
-): string {
+export function generateWindBarbSvg(options: WindBarbOptions): string {
+  const {
+    speedKnots,
+    directionDeg,
+    tempF,
+    size = 44,
+    showLabel = true,
+    colorOverride,
+  } = options;
+
   const color = colorOverride ?? getTemperatureColor(tempF);
   const roundedSpeed = Math.round(speedKnots);
 
@@ -99,7 +110,7 @@ export function generateWindBarbSvg(
   `;
 }
 
-interface WindBarbProps {
+export interface WindBarbProps {
   speedKnots: number;
   directionDeg: number;
   tempF: number;
@@ -114,7 +125,7 @@ export const WindBarb: React.FC<WindBarbProps> = ({
   size = 44,
   showLabel = false,
 }) => {
-  const svgHtml = generateWindBarbSvg(speedKnots, directionDeg, tempF, size, showLabel);
+  const svgHtml = generateWindBarbSvg({ speedKnots, directionDeg, tempF, size, showLabel });
   return (
     <div
       className="inline-flex items-center justify-center"
@@ -122,4 +133,3 @@ export const WindBarb: React.FC<WindBarbProps> = ({
     />
   );
 };
-

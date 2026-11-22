@@ -34,14 +34,14 @@ export function generateGridBarbSvg(
   size: number = BARB_SIZE,
 ): string {
   const hasTemp = typeof tempF === 'number';
-  return generateWindBarbSvg(
+  return generateWindBarbSvg({
     speedKnots,
     directionDeg,
-    hasTemp ? tempF : 0,
+    tempF: hasTemp ? tempF : 0,
     size,
-    false,
-    hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
-  );
+    showLabel: false,
+    colorOverride: hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
+  });
 }
 
 export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.DivIcon {
