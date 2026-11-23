@@ -121,6 +121,30 @@ export function buildExportFileName({ extension, ...input }: ExportFileNameInput
   return `${buildExportBaseName(input)}.${extension}`;
 }
 
+/** Path separators, reserved characters and control characters that are stripped from user names. */
+// Control characters cannot appear in a portable file name, so they are matched deliberately.
+// eslint-disable-next-line no-control-regex
+const RESERVED_FILE_NAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
+const KNOWN_EXPORT_EXTENSION = /\.(?:png|jpe?g|pdf)$/i;
+
+/**
+ * Clean a name the user typed in the export dialog (SCRUM-162): remove path separators and reserved
+ * characters, ignore a typed extension, fall back to the generated name when nothing usable is
+ * left, and append the chosen format's extension. Spaces and non-ASCII letters are kept.
+ */
+export function sanitizeExportFileName(
+  name: string,
+  extension: ExportExtension,
+  fallback: string,
+): string {
+  const cleaned = name
+    .replace(KNOWN_EXPORT_EXTENSION, '')
+    .replace(RESERVED_FILE_NAME_CHARS, '')
+    .trim()
+    .replace(/^\.+|\.+$/g, '');
+  return `${cleaned || fallback}.${extension}`;
+}
+
 export interface BarbLegendEntry {
   /** Speed in knots the glyph shows. */
   knots: number;

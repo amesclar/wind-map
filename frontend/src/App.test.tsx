@@ -245,13 +245,26 @@ describe('App map integration (SCRUM-126)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('exports with the edited file name, cleaned of reserved characters (SCRUM-162)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my/map: 2026.png' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [, content] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(content.fileName).toBe('mymap 2026.png');
+  });
+
   it('exports the current view as a single-page PDF in the chosen size and orientation (SCRUM-117)', async () => {
     render(<App />);
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
 
     fireEvent.click(screen.getByTitle('Export map image'));
     fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
-    expect(screen.getByTestId('export-file-name').textContent).toMatch(/\.pdf$/);
+    expect((screen.getByTestId('export-file-name') as HTMLInputElement).value).toMatch(/\.pdf$/);
 
     fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ImageDown, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import downloadIcon from '../assets/download-icon.png';
 import { DEFAULT_JPEG_QUALITY, type MapImageFormat } from '../utils/captureMap';
+import { sanitizeExportFileName } from '../utils/mapExport';
 import { PDF_PAGE_BOX, type PdfOrientation, type PdfPageSize } from '../utils/pdfExport';
 
 export type MapExportFormat = MapImageFormat | 'pdf';
@@ -11,13 +13,15 @@ export interface MapExportOptions {
   jpegQuality: number;
   pageSize: PdfPageSize;
   orientation: PdfOrientation;
+  /** Cleaned file name with its extension, ready to download (SCRUM-162). */
+  fileName: string;
 }
 
 interface MapExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onExport: (options: MapExportOptions) => void;
-  /** File name without its extension, e.g. "wind-map_2026-11-18_1400PST". */
+  /** Generated file name without its extension, e.g. "wind-map_2026-11-18_1400PST". */
   fileBaseName: string;
   /** True while the capture and encode run. */
   busy: boolean;
@@ -49,6 +53,7 @@ const LABEL_CLASS =
   'block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5';
 const SELECT_CLASS =
   'w-full bg-dark-900 text-gray-100 text-xs border border-dark-600 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-sky-500';
+const KNOWN_EXTENSION = /\.(?:png|jpe?g|pdf)$/i;
 
 const optionClass = (active: boolean) =>
   `flex-1 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
@@ -63,9 +68,12 @@ const pageDimensions = (size: PdfPageSize) => {
     : `${Math.round((width / 72) * 25.4)} × ${Math.round((height / 72) * 25.4)} mm`;
 };
 
+const extensionFor = (format: MapExportFormat) => (format === 'jpeg' ? 'jpeg' : format) as 'png' | 'jpeg' | 'pdf';
+
 /**
- * Export dialog for the view currently on screen (SCRUM-117): PNG, JPEG (with a quality
- * choice) or one-page PDF on Letter/A4 in portrait or landscape, plus the file name preview.
+ * Export dialog for the view currently on screen (SCRUM-117, SCRUM-162): PNG, JPEG (with a quality
+ * choice) or one-page PDF on Letter/A4 in portrait or landscape, plus an editable file name whose
+ * extension follows the chosen format.
  */
 export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   isOpen,
@@ -78,6 +86,15 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   const [jpegQuality, setJpegQuality] = useState<number>(DEFAULT_JPEG_QUALITY);
   const [pageSize, setPageSize] = useState<PdfPageSize>('letter');
   const [orientation, setOrientation] = useState<PdfOrientation>('portrait');
+  const extension = extensionFor(format);
+  const [fileName, setFileName] = useState(`${fileBaseName}.${extension}`);
+  const [wasOpen, setWasOpen] = useState(false);
+
+  // Each opening starts from the generated name, so a stale edit never leaks into the next export.
+  useEffect(() => {
+    if (isOpen && !wasOpen) setFileName(`${fileBaseName}.${extension}`);
+    setWasOpen(isOpen);
+  }, [isOpen, wasOpen, fileBaseName, extension, format]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -90,8 +107,10 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const extension = format === 'jpeg' ? 'jpeg' : format;
-  const fileName = `${fileBaseName}.${extension}`;
+  const selectFormat = (next: MapExportFormat) => {
+    setFormat(next);
+    setFileName((current) => `${current.replace(KNOWN_EXTENSION, '')}.${extensionFor(next)}`);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
@@ -103,9 +122,9 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
       >
         <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-dark-600">
           <div className="flex items-center gap-2">
-            <ImageDown className="w-5 h-5 text-sky-400" />
+            <img src={downloadIcon} alt="" aria-hidden="true" className="w-5 h-5 object-contain" />
             <h2 id="export-dialog-title" className="text-base font-semibold text-gray-100">
-              Export map image
+              Download map image
             </h2>
           </div>
           <button
@@ -131,7 +150,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
                     type="button"
                     role="radio"
                     aria-checked={active}
-                    onClick={() => setFormat(option.id)}
+                    onClick={() => selectFormat(option.id)}
                     className={optionClass(active)}
                   >
                     <span className="block">{option.label}</span>
@@ -220,13 +239,22 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
           )}
 
           <div className="pt-2 border-t border-dark-600/70">
-            <span className={LABEL_CLASS}>File</span>
-            <p
+            <label htmlFor="export-file-name" className={LABEL_CLASS}>
+              File name
+            </label>
+            <input
+              id="export-file-name"
               data-testid="export-file-name"
-              title={fileName}
-              className="text-xs text-gray-200 bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 truncate"
-            >
-              {fileName}
+              type="text"
+              value={fileName}
+              onChange={(e) => setFileName(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+              aria-describedby="export-file-name-hint"
+              className={SELECT_CLASS}
+            />
+            <p id="export-file-name-hint" className="mt-1 text-[11px] text-gray-400">
+              The extension follows the chosen format; an empty name uses the generated one.
             </p>
           </div>
         </div>
@@ -239,7 +267,15 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
             Cancel
           </button>
           <button
-            onClick={() => onExport({ format, jpegQuality, pageSize, orientation })}
+            onClick={() =>
+              onExport({
+                format,
+                jpegQuality,
+                pageSize,
+                orientation,
+                fileName: sanitizeExportFileName(fileName, extension, fileBaseName),
+              })
+            }
             disabled={busy}
             className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-60 disabled:cursor-wait text-white transition"
           >

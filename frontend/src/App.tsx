@@ -12,7 +12,6 @@ import { formatStepLabel } from './utils/forecastWindow';
 import {
   barbLegendEntries,
   buildExportBaseName,
-  buildExportFileName,
   buildExportFooter,
   buildExportHeader,
   temperatureBands,
@@ -165,12 +164,8 @@ export const App: React.FC = () => {
       try {
         const capturedAt = new Date();
         const content = {
-          fileName: buildExportFileName({
-            validTime: forecastTime,
-            timezone,
-            extension: options.format,
-            now: capturedAt,
-          }),
+          // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
+          fileName: options.fileName,
           header: buildExportHeader({
             validTime: forecastTime,
             timezone,
