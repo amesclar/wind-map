@@ -63,12 +63,17 @@ export function buildExportFooter({ unitSystem, speedUnit, attribution, version 
   return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution} · Wind Map v${version}`;
 }
 
-export interface ExportFileNameInput {
+export type ExportExtension = 'png' | 'jpeg' | 'pdf';
+
+export interface ExportBaseNameInput {
   validTime: string | null;
   timezone: string;
-  extension: 'png' | 'jpeg';
   /** Capture time, used when no forecast hour is selected. */
   now?: Date;
+}
+
+export interface ExportFileNameInput extends ExportBaseNameInput {
+  extension: ExportExtension;
 }
 
 const DATE_PARTS = (timezone: string) =>
@@ -90,13 +95,12 @@ const TIME_PARTS = (timezone: string) =>
 const ZONE_NAME = (timezone: string) =>
   new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
 
-/** e.g. "wind-map_2026-11-18_1400PST.png": the shown hour, its zone and the format. */
-export function buildExportFileName({
+/** e.g. "wind-map_2026-11-18_1400PST": the shown hour and its zone, without an extension. */
+export function buildExportBaseName({
   validTime,
   timezone,
-  extension,
   now = new Date(),
-}: ExportFileNameInput): string {
+}: ExportBaseNameInput): string {
   const date = new Date(validTime ?? now.toISOString());
   const part = (formatter: Intl.DateTimeFormat, type: Intl.DateTimeFormatPartTypes) =>
     formatter.formatToParts(date).find((p) => p.type === type)?.value ?? '';
@@ -109,7 +113,12 @@ export function buildExportFileName({
   const minute = part(localTime, 'minute');
   // "PST" stays; "GMT+2" loses its sign so the name stays portable.
   const zone = part(ZONE_NAME(timezone), 'timeZoneName').replace(/[^A-Za-z0-9]/g, '') || 'UTC';
-  return `wind-map_${year}-${month}-${day}_${hour}${minute}${zone}.${extension}`;
+  return `wind-map_${year}-${month}-${day}_${hour}${minute}${zone}`;
+}
+
+/** The same name with the format's extension, e.g. "…1400PST.png", ".jpeg" or ".pdf". */
+export function buildExportFileName({ extension, ...input }: ExportFileNameInput): string {
+  return `${buildExportBaseName(input)}.${extension}`;
 }
 
 export interface BarbLegendEntry {

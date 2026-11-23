@@ -11,12 +11,15 @@ import { ForecastTimeSelector } from './components/ForecastTimeSelector';
 import { formatStepLabel } from './utils/forecastWindow';
 import {
   barbLegendEntries,
+  buildExportBaseName,
   buildExportFileName,
   buildExportFooter,
   buildExportHeader,
   temperatureBands,
 } from './utils/mapExport';
-import { saveMapImage, type MapImageFormat } from './utils/captureMap';
+import { saveMapImage } from './utils/captureMap';
+import { saveMapPdf } from './utils/pdfExport';
+import { MapExportDialog, type MapExportOptions } from './components/MapExportDialog';
 import { attributionText } from './components/mapTiles';
 import { SPEED_UNIT_LABEL } from './utils/units';
 import { APP_VERSION } from './version';
@@ -64,6 +67,7 @@ export const App: React.FC = () => {
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   const selectedLocation = selection?.kind === 'saved' ? selection.location : null;
   const selectedGridPoint = useMemo<SelectedGridPoint | null>(
@@ -152,40 +156,51 @@ export const App: React.FC = () => {
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
   }, []);
 
-  /** Capture the current view with its header, legend and footer, and download it (SCRUM-116). */
-  const handleSaveMapAsImage = useCallback(
-    async (format: MapImageFormat) => {
+  /** Capture the current view with its header, legend and footer, and export it (SCRUM-116, SCRUM-117). */
+  const handleExport = useCallback(
+    async (options: MapExportOptions) => {
       const element = mapContainerRef.current;
       if (!element || !selectedModelInfo) return;
       setSavingMap(true);
       try {
         const capturedAt = new Date();
-        await saveMapImage(
-          element,
-          {
-            fileName: buildExportFileName({ validTime: forecastTime, timezone, extension: format, now: capturedAt }),
-            header: buildExportHeader({
-              validTime: forecastTime,
-              timezone,
-              modelName: selectedModelInfo.name,
-              runTimeUtc: selectedModelInfo.last_run_utc,
-              capturedAt,
-            }),
-            footer: buildExportFooter({
-              unitSystem: units.unitSystem,
-              speedUnit: units.speedUnit,
-              attribution: attributionText(mapSettings.tileLayer),
-              version: APP_VERSION,
-            }),
-            barbs: barbLegendEntries(units.speedUnit),
-            temperatures: temperatureBands(units.unitSystem),
-            speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
-            temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
-          },
-          format,
-        );
+        const content = {
+          fileName: buildExportFileName({
+            validTime: forecastTime,
+            timezone,
+            extension: options.format,
+            now: capturedAt,
+          }),
+          header: buildExportHeader({
+            validTime: forecastTime,
+            timezone,
+            modelName: selectedModelInfo.name,
+            runTimeUtc: selectedModelInfo.last_run_utc,
+            capturedAt,
+          }),
+          footer: buildExportFooter({
+            unitSystem: units.unitSystem,
+            speedUnit: units.speedUnit,
+            attribution: attributionText(mapSettings.tileLayer),
+            version: APP_VERSION,
+          }),
+          barbs: barbLegendEntries(units.speedUnit),
+          temperatures: temperatureBands(units.unitSystem),
+          speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
+          temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
+        };
+        if (options.format === 'pdf') {
+          await saveMapPdf(element, content, {
+            fileName: content.fileName,
+            pageSize: options.pageSize,
+            orientation: options.orientation,
+          });
+        } else {
+          await saveMapImage(element, content, { format: options.format, quality: options.jpegQuality });
+        }
+        setIsExportDialogOpen(false);
       } catch (err) {
-        console.error('Failed to save the map image:', err);
+        console.error('Failed to export the map image:', err);
       } finally {
         setSavingMap(false);
       }
@@ -206,7 +221,7 @@ export const App: React.FC = () => {
         onOpenPreferences={() => setIsPreferencesOpen(true)}
         onOpenModelGuide={() => setIsModelGuideOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
-        onSaveMapAsImage={handleSaveMapAsImage}
+        onOpenExportDialog={() => setIsExportDialogOpen(true)}
         savingMap={savingMap}
       />
 
@@ -279,6 +294,14 @@ export const App: React.FC = () => {
         onSelectSpeedUnit={units.setSpeedUnit}
         dirDisplay={units.dirDisplay}
         onSelectDirDisplay={units.setDirDisplay}
+      />
+
+      <MapExportDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        onExport={handleExport}
+        fileBaseName={buildExportBaseName({ validTime: forecastTime, timezone })}
+        busy={savingMap}
       />
     </div>
   );

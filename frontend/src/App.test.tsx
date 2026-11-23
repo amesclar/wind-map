@@ -9,8 +9,18 @@ import { currentMap, markerAt, resetLeafletMock, type MockMarker } from './test/
 vi.mock('leaflet', () => import('./test/leafletMock'));
 
 // The capture itself is covered by captureMap.test; here only the wiring matters (SCRUM-116).
-vi.mock('./utils/captureMap', () => ({ saveMapImage: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('./utils/captureMap', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/captureMap')>()),
+  saveMapImage: vi.fn().mockResolvedValue(undefined),
+}));
 import { saveMapImage } from './utils/captureMap';
+
+// The page layout is covered by pdfExport.test; here only the wiring matters (SCRUM-117).
+vi.mock('./utils/pdfExport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/pdfExport')>()),
+  saveMapPdf: vi.fn().mockResolvedValue(undefined),
+}));
+import { saveMapPdf } from './utils/pdfExport';
 
 // The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
 // fetchWeather/fetchPointWeather at all.
@@ -219,18 +229,40 @@ describe('App map integration (SCRUM-126)', () => {
     );
 
     fireEvent.click(screen.getByTitle('Save the map as an image'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'PNG' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
     await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
-    const [element, content, format] = vi.mocked(saveMapImage).mock.calls[0];
+    const [element, content, options] = vi.mocked(saveMapImage).mock.calls[0];
     expect(element).toBe(screen.getByTestId('map-canvas'));
-    expect(format).toBe('png');
+    expect(options).toEqual({ format: 'png', quality: 0.92 });
     expect(content.fileName).toMatch(/^wind-map_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.png$/);
     expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
     expect(content.header.lines[1]).toContain('Open-Meteo');
     expect(content.footer).toContain('Wind Map v');
     expect(content.barbs).toHaveLength(4);
     expect(content.temperatures.length).toBeGreaterThan(0);
+    // The dialog closes once the file is handed to the browser.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('exports the current view as a single-page PDF in the chosen size and orientation (SCRUM-117)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Save the map as an image'));
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    expect(screen.getByTestId('export-file-name').textContent).toMatch(/\.pdf$/);
+
+    fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapPdf)).toHaveBeenCalledTimes(1));
+    const [element, content, options] = vi.mocked(saveMapPdf).mock.calls[0];
+    expect(element).toBe(screen.getByTestId('map-canvas'));
+    expect(options).toEqual({ fileName: content.fileName, pageSize: 'a4', orientation: 'landscape' });
+    expect(content.fileName).toMatch(/^wind-map_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.pdf$/);
+    expect(vi.mocked(saveMapImage)).not.toHaveBeenCalled();
   });
 
   it('fetches every saved location once on initial load (SCRUM-92)', async () => {

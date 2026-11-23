@@ -3,6 +3,7 @@ import {
   captureMapCanvas,
   collectTiles,
   DARK_TILE_FILTER,
+  DEFAULT_JPEG_QUALITY,
   drawBarb,
   drawFittedText,
   drawTiles,
@@ -195,7 +196,7 @@ describe('saveMapImage (SCRUM-116)', () => {
     const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
-    await saveMapImage(element, content, 'png', { domToCanvas, tileTimeoutMs: 0 });
+    await saveMapImage(element, content, { format: 'png' }, { domToCanvas, tileTimeoutMs: 0 });
 
     expect(click).toHaveBeenCalled();
     expect(URL.createObjectURL).toHaveBeenCalled();
@@ -210,8 +211,24 @@ describe('saveMapImage (SCRUM-116)', () => {
     (HTMLCanvasElement.prototype as unknown as { toBlob: unknown }).toBlob = vi.fn((callback: BlobCallback) =>
       callback(null),
     );
-    await expect(saveMapImage(element, content, 'jpeg', { domToCanvas, tileTimeoutMs: 0 })).rejects.toThrow(
-      'could not be encoded',
-    );
+    await expect(
+      saveMapImage(element, content, { format: 'jpeg' }, { domToCanvas, tileTimeoutMs: 0 }),
+    ).rejects.toThrow('could not be encoded');
+  });
+
+  it('encodes JPEG at the chosen quality, or at the default when none is given (SCRUM-117)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const toBlob = HTMLCanvasElement.prototype.toBlob as unknown as ReturnType<typeof vi.fn>;
+
+    await saveMapImage(element, content, { format: 'jpeg', quality: 0.8 }, { domToCanvas, tileTimeoutMs: 0 });
+    expect(toBlob).toHaveBeenLastCalledWith(expect.any(Function), 'image/jpeg', 0.8);
+
+    await saveMapImage(element, content, { format: 'jpeg' }, { domToCanvas, tileTimeoutMs: 0 });
+    expect(toBlob).toHaveBeenLastCalledWith(expect.any(Function), 'image/jpeg', DEFAULT_JPEG_QUALITY);
+
+    await saveMapImage(element, content, { format: 'png' }, { domToCanvas, tileTimeoutMs: 0 });
+    expect(toBlob).toHaveBeenLastCalledWith(expect.any(Function), 'image/png', undefined);
   });
 });
