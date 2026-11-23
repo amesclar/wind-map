@@ -1,6 +1,6 @@
 # Python lint and format settings (SCRUM-108).
 line-length = 120
-target-version = "py311"
+target-version = "py314"
 extend-exclude = [".venv", "frontend", "data"]
 
 [lint]

@@ -1,6 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    // Tests run on Node 24 / jsdom, so they get ES2022 libs (Array.prototype.at and friends).
+    // The app build in tsconfig.json stays on its ES2020 browser target (SCRUM-150).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
   "include": ["src"],

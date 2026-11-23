@@ -2,7 +2,7 @@
 
 A standalone, minimalist dark-mode application that displays live weather forecasts and meteorological wind barbs on an interactive map.
 
-Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
+Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
 
 ---
 
@@ -105,6 +105,8 @@ docker stop wind-map && docker rm wind-map
 
 ## Local Development Setup
 
+Requires **Node 24** (`frontend/package.json` `engines`) and **Python 3.14** — the same versions CI and the Docker image use.
+
 ### Backend (Python)
 
 1. Create and activate a virtual environment:
@@ -121,7 +123,7 @@ docker stop wind-map && docker rm wind-map
 #### Updating Python dependencies
 `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions, and the top-level `requirements.in` and `requirements-dev.in` are pinned to exact versions too: no `>=` ranges, so a rebuild never resolves something newer than what was tested. Do not edit the generated files by hand. To add or upgrade a package, change the exact version in `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
 ```bash
-docker run --rm -v "$PWD":/w -w /w python:3.11-alpine sh -c \
+docker run --rm -v "$PWD":/w -w /w python:3.14-alpine sh -c \
   "pip install -q pip-tools && \
    pip-compile -q --strip-extras --annotation-style=line -o requirements.txt requirements.in && \
    pip-compile -q --strip-extras --annotation-style=line -o requirements-dev.txt requirements-dev.in"
