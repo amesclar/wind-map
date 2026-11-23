@@ -389,6 +389,11 @@ export async function downloadCanvas(
   });
   if (!blob) throw new Error('The map image could not be encoded');
 
+  downloadBlob(blob, fileName);
+}
+
+/** Hand `blob` to the browser as `fileName` (shared by images, ZIPs and PDFs). */
+export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

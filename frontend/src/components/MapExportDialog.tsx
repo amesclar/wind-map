@@ -27,9 +27,11 @@ export interface MapExportViewOptions {
 
 export interface MapExportRangeOptions {
   mode: 'range';
-  /** Range frames are images: ZIP and multi-page PDF are SCRUM-156. */
-  format: MapImageFormat;
+  /** PNG/JPEG become one ZIP (or a single image), PDF becomes one page per hour (SCRUM-156). */
+  format: MapExportFormat;
   jpegQuality: number;
+  pageSize: PdfPageSize;
+  orientation: PdfOrientation;
   /** The hours to capture, from `planExportRange` (SCRUM-155). */
   hours: string[];
 }
@@ -68,9 +70,10 @@ const VIEW_FORMATS: ReadonlyArray<{ id: MapExportFormat; label: string; hint: st
   { id: 'pdf', label: 'PDF', hint: 'One page' },
 ];
 
-const RANGE_FORMATS: ReadonlyArray<{ id: MapImageFormat; label: string; hint: string }> = [
-  { id: 'png', label: 'PNG', hint: 'Lossless' },
-  { id: 'jpeg', label: 'JPEG', hint: 'Smaller file' },
+const RANGE_FORMATS: ReadonlyArray<{ id: MapExportFormat; label: string; hint: string }> = [
+  { id: 'png', label: 'PNG', hint: 'ZIP of images' },
+  { id: 'jpeg', label: 'JPEG', hint: 'ZIP of images' },
+  { id: 'pdf', label: 'PDF', hint: 'Page per hour' },
 ];
 
 const JPEG_QUALITIES: ReadonlyArray<{ value: number; label: string }> = [
@@ -112,8 +115,8 @@ const extensionFor = (format: MapExportFormat) => (format === 'jpeg' ? 'jpeg' : 
 
 /**
  * Export dialog for the view currently on screen (SCRUM-117, SCRUM-162) and, since SCRUM-155, for
- * an hour range captured one frame per hour. Range frames are images only: ZIP and multi-page PDF
- * arrive in SCRUM-156.
+ * an hour range captured one frame per hour. Since SCRUM-156 a range saves as one ZIP of images or
+ * one multi-page PDF.
  */
 export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   isOpen,
@@ -184,17 +187,22 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
     setFileName((current) => `${current.replace(KNOWN_EXTENSION, '')}.${extensionFor(next)}`);
   };
 
-  const switchMode = (next: 'view' | 'range') => {
-    setMode(next);
-    if (next === 'range' && format === 'pdf') setFormat('png');
-  };
+  const switchMode = (next: 'view' | 'range') => setMode(next);
 
   const rangeReady = mode === 'range' && plan.ok && !busy;
-  const rangeFormat = format === 'pdf' ? 'png' : format;
 
   const exportNow = () => {
     if (mode === 'range') {
-      if (plan.ok) onExport({ mode: 'range', format: rangeFormat, jpegQuality, hours: plan.hours });
+      if (plan.ok) {
+        onExport({
+          mode: 'range',
+          format,
+          jpegQuality,
+          pageSize,
+          orientation,
+          hours: plan.hours,
+        });
+      }
       return;
     }
     onExport({
@@ -331,8 +339,8 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
               )}
 
               <p className="text-[11px] text-gray-400">
-                Each frame is named after its own hour. Browsers may ask to allow multiple downloads;
-                a ZIP or multi-page PDF comes in SCRUM-156.
+                PNG and JPEG arrive as one ZIP with a file per hour, and PDF as one page per hour;
+                a single-hour range downloads that image directly. Frames are named after their hour.
               </p>
             </>
           )}
@@ -343,7 +351,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
             </span>
             <div role="radiogroup" aria-labelledby="export-format" className="flex gap-2">
               {(mode === 'range' ? RANGE_FORMATS : VIEW_FORMATS).map((option) => {
-                const active = rangeFormat === option.id;
+                const active = format === option.id;
                 return (
                   <button
                     key={option.id}
@@ -383,7 +391,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
             </div>
           )}
 
-          {mode === 'view' && format === 'pdf' && (
+          {format === 'pdf' && (
             <>
               <div>
                 <span id="export-page-size" className={LABEL_CLASS}>
@@ -435,7 +443,9 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
               </div>
 
               <p className="text-xs text-gray-400">
-                One page: the view currently on screen, fitted and centred with its aspect ratio kept.
+                {mode === 'range'
+                  ? 'One page per hour, each fitted and centred with its aspect ratio kept.'
+                  : 'One page: the view currently on screen, fitted and centred with its aspect ratio kept.'}
               </p>
             </>
           )}
