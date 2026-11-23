@@ -225,6 +225,10 @@ cd frontend && npm run lint
 
 # Frontend type check, including test files
 cd frontend && npm run typecheck
+
+# Backend suite inside the Docker test stage (SCRUM-152), which adds the bash that the
+# shipped image omits; a plain `docker build .` still produces the runtime image
+docker build --target test -t wind-map:test . && docker run --rm wind-map:test pytest --cov
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.

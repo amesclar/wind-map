@@ -22,7 +22,37 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ==========================================
-# Stage 3: Python Backend Runtime (Alpine, no build tools or test deps)
+# Stage 3: Backend tests (SCRUM-152)
+# ==========================================
+# An opt-in target that is never part of the shipped image. Alpine has no bash and four backend
+# tests run scripts/rebuild-container.sh through /bin/bash, so the suite needs this stage:
+#   docker build --target test -t wind-map:test . && docker run --rm wind-map:test pytest --cov
+# It stays before the runtime stage so a plain `docker build .` still ends on the runtime image.
+FROM python:3.14-alpine AS test
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    DATA_DIR=/app/data \
+    DATABASE_PATH=/app/data/wind_map.db \
+    STATIC_DIR=/app/static
+
+RUN apk add --no-cache bash \
+    && mkdir -p /app/data /app/static
+
+# Test tooling pulls in the runtime pins through requirements-dev.txt
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# The suite reads the repository itself (VERSION, frontend/package.json, the rule sources and the
+# hooks), so this stage takes the whole context. .dockerignore keeps it small.
+COPY . .
+
+CMD ["pytest", "--cov"]
+
+# ==========================================
+# Stage 4: Python Backend Runtime (Alpine, no bash, build tools or test deps)
 # ==========================================
 FROM python:3.14-alpine AS runtime
 WORKDIR /app
