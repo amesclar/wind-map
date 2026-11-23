@@ -370,15 +370,16 @@ export interface SaveImageOptions {
   quality?: number;
 }
 
-/** Capture and download the composed image as PNG or JPEG. */
-export async function saveMapImage(
-  element: HTMLElement,
-  content: CaptureContent,
+/**
+ * Download an already-composed canvas as PNG or JPEG (SCRUM-155 extracts this so a range frame is
+ * captured once and saved later, instead of capturing again after the hour was restored).
+ */
+export async function downloadCanvas(
+  canvas: HTMLCanvasElement,
+  fileName: string,
   options: SaveImageOptions,
-  deps?: CaptureDeps,
 ): Promise<void> {
   const { format } = options;
-  const canvas = await captureMapCanvas(element, content, deps);
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob(
       resolve,
@@ -391,10 +392,21 @@ export async function saveMapImage(
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = content.fileName;
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
   // The download has the blob by now; releasing the URL keeps memory flat.
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Capture and download the composed image as PNG or JPEG. */
+export async function saveMapImage(
+  element: HTMLElement,
+  content: CaptureContent,
+  options: SaveImageOptions,
+  deps?: CaptureDeps,
+): Promise<void> {
+  const canvas = await captureMapCanvas(element, content, deps);
+  await downloadCanvas(canvas, content.fileName, options);
 }

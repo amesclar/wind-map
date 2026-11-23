@@ -44,6 +44,8 @@ interface MapViewProps {
   validTimeLabel?: string | null;
   /** The map container, so the image export can capture it (SCRUM-116). */
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  /** The hour and points of each accepted grid response, for the range export (SCRUM-155). */
+  onGridLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void;
 }
 
 interface LocationMarker {
@@ -125,6 +127,7 @@ export const MapView: React.FC<MapViewProps> = ({
   validTime = null,
   validTimeLabel = null,
   containerRef,
+  onGridLoaded,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -145,6 +148,7 @@ export const MapView: React.FC<MapViewProps> = ({
     selectedModel,
     windOverlayVisible || windColorOverlayVisible,
     validTime,
+    onGridLoaded,
   );
 
   // Initialize Leaflet Map
