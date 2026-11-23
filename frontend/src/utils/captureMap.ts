@@ -361,16 +361,30 @@ export async function captureMapCanvas(
   return canvas;
 }
 
+/** JPEG quality used when the caller does not choose one. */
+export const DEFAULT_JPEG_QUALITY = 0.92;
+
+export interface SaveImageOptions {
+  format: MapImageFormat;
+  /** JPEG quality between 0 and 1; PNG is lossless and ignores it. */
+  quality?: number;
+}
+
 /** Capture and download the composed image as PNG or JPEG. */
 export async function saveMapImage(
   element: HTMLElement,
   content: CaptureContent,
-  format: MapImageFormat,
+  options: SaveImageOptions,
   deps?: CaptureDeps,
 ): Promise<void> {
+  const { format } = options;
   const canvas = await captureMapCanvas(element, content, deps);
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, MIME[format], format === 'jpeg' ? 0.92 : undefined);
+    canvas.toBlob(
+      resolve,
+      MIME[format],
+      format === 'jpeg' ? (options.quality ?? DEFAULT_JPEG_QUALITY) : undefined,
+    );
   });
   if (!blob) throw new Error('The map image could not be encoded');
 

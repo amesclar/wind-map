@@ -46,13 +46,16 @@ clicking on location should show;
 
 Wind Barb Markers: SVG wind barbs with speed feathers (knots) and temperature color-coding on the map.
 
-Map image export (SCRUM-116): the top bar's **Save** button (a plain button with a PNG/JPEG menu until the full dialog arrives as SCRUM-117) downloads the current map view as a single image.
+Map export (SCRUM-116, SCRUM-117): the top bar's **Save** button opens an export dialog and downloads the view currently on screen as a PNG, JPEG or a single-page PDF.
 + Capture is client-side: `modern-screenshot` 4.7.0 is imported lazily (its own chunk) and renders the map container at 2x into a canvas. Leaflet controls and pop-ups are filtered out, so no UI chrome reaches the image; tiles use `crossOrigin: true`.
 + The header, legend and footer are drawn on the canvas, not captured from the DOM: header = the hour the image shows (`Sun 22 Nov 20:00 PST`) plus reference lines with the UTC time, the model, its run and the capture time; legend = the barb glyphs for calm/5/10/50 kt in the selected speed unit and the barb temperature colour classes in the selected temperature unit; footer = units, the base-map attribution (OSM, plus CARTO) and `Wind Map v<version>`.
 + The image is named after the shown hour, e.g. `wind-map_2026-11-18_1400PST.png` (`buildExportFileName`).
-+ `utils/mapExport.ts` builds all the text and the legend contents as pure functions; `utils/captureMap.ts` composes and downloads; `utils/windBarb.ts` holds the feather maths shared with the on-screen barbs.
++ `utils/mapExport.ts` builds all the text, the legend contents and the file name as pure functions; `utils/captureMap.ts` composes and downloads images; `utils/windBarb.ts` holds the feather maths shared with the on-screen barbs.
 + The header uses the current hour when the map shows live values, and the selected forecast hour when the selector has moved (SCRUM-127).
-+ Not in this task: PDF, time ranges, progress and cancel, and the export dialog (SCRUM-117).
++ Export dialog (SCRUM-117): format (PNG, JPEG or PDF), a JPEG quality choice (0.8, 0.92 or 1.0), Letter or A4 with portrait or landscape for PDF, and a live preview of the file name. Export captures once, disables the button while it runs, and closes the dialog once the file is handed to the browser.
++ Single-page PDF (SCRUM-117): `utils/pdfExport.ts` fits the composed canvas inside the page margins with its aspect ratio kept and centres it, so neither a wide nor a tall map is stretched. Pages are Letter (612 × 792 pt) and A4 (595.28 × 841.89 pt), swapped for landscape. jsPDF 4.2.1 is imported lazily and the page image is re-encoded as JPEG at quality 0.92 to keep the file small.
++ The file name is the shown hour plus the format's extension, e.g. `wind-map_2026-11-18_1400PST.pdf` (`buildExportBaseName`, `buildExportFileName`).
++ Not in these tasks: time ranges, ZIP or multi-page PDF output, and progress or cancel while a range renders (SCRUM-155, SCRUM-156).
 
 Wind Grid Overlay (SCRUM-86, SCRUM-89): A continuous grid of wind barbs covering the entire visible map viewport, not just saved locations.
 + Grid density: approximately one barb per 80px at the current zoom level; grid dimensions (cols × rows) are computed from the map bounds and pixel size on each pan/zoom.

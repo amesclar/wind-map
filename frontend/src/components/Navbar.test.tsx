@@ -19,7 +19,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onOpenPreferences: vi.fn(),
     onOpenModelGuide: vi.fn(),
     hasCartoKey: false,
-    onSaveMapAsImage: vi.fn(),
+    onOpenExportDialog: vi.fn(),
     savingMap: false,
     ...overrides,
   };
@@ -63,6 +63,12 @@ describe('Navbar (SCRUM-92)', () => {
     const button = screen.getByRole('button', { name: 'Model Update Cycles & Frequency' });
     fireEvent.click(button);
     expect(props.onOpenModelGuide).toHaveBeenCalled();
+  });
+
+  it('opens the export dialog from the Save button (SCRUM-117)', () => {
+    const { props } = renderNavbar();
+    fireEvent.click(screen.getByTitle('Save the map as an image'));
+    expect(props.onOpenExportDialog).toHaveBeenCalled();
   });
 
   it('opens Preferences from the gear button; unit and timezone controls are gone (SCRUM-107)', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BARB_LEGEND_KNOTS,
   barbLegendEntries,
+  buildExportBaseName,
   buildExportFileName,
   buildExportFooter,
   buildExportHeader,
@@ -75,6 +76,15 @@ describe('buildExportFileName (SCRUM-116)', () => {
     expect(
       buildExportFileName({ validTime: '2026-11-18T22:00:00Z', timezone: 'UTC', extension: 'jpeg' }),
     ).toBe('wind-map_2026-11-18_2200UTC.jpeg');
+  });
+
+  it('keeps an extension-free base name for the dialog preview (SCRUM-117)', () => {
+    expect(
+      buildExportBaseName({ validTime: '2026-11-18T22:00:00Z', timezone: 'America/Los_Angeles' }),
+    ).toBe('wind-map_2026-11-18_1400PST');
+    expect(
+      buildExportFileName({ validTime: '2026-11-18T22:00:00Z', timezone: 'UTC', extension: 'pdf' }),
+    ).toBe('wind-map_2026-11-18_2200UTC.pdf');
   });
 
   it('falls back to the capture time and strips punctuation from zone names', () => {
