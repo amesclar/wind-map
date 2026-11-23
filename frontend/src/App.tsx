@@ -37,8 +37,11 @@ import { PreferencesModal } from './components/PreferencesModal';
 import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
-/** How long one hour of a range may take to show its grid before the export fails (SCRUM-155). */
-const RANGE_FRAME_TIMEOUT_MS = 15_000;
+/**
+ * How long one hour of a range may take to show its grid before the export fails (SCRUM-155).
+ * Raised from 15 s to 60 s in SCRUM-164: slow model responses were aborting otherwise valid ranges.
+ */
+export const RANGE_FRAME_TIMEOUT_MS = 60_000;
 const RANGE_POLL_MS = 100;
 
 /** Resolve with the user's position, or null if unavailable/denied/timed out. */
