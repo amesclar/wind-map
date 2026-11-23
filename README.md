@@ -119,7 +119,7 @@ docker stop wind-map && docker rm wind-map
    (`requirements.txt` holds pinned runtime dependencies only and is what the Docker image installs; `requirements-dev.txt` adds the pinned test tools.)
 
 #### Updating Python dependencies
-`requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions. Do not edit them by hand. To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
+`requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions, and the top-level `requirements.in` and `requirements-dev.in` are pinned to exact versions too: no `>=` ranges, so a rebuild never resolves something newer than what was tested. Do not edit the generated files by hand. To add or upgrade a package, change the exact version in `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
 ```bash
 docker run --rm -v "$PWD":/w -w /w python:3.11-alpine sh -c \
   "pip install -q pip-tools && \
