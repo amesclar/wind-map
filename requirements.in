@@ -1,6 +1,7 @@
-# Top-level runtime dependencies. Edit this file, then regenerate requirements.txt
-# (see "Updating Python dependencies" in README.md).
-fastapi>=0.110.0
-uvicorn[standard]>=0.28.0
-httpx>=0.27.0
-pydantic>=2.6.0
+# Top-level runtime dependencies, pinned to exact versions so an upgrade is a deliberate
+# edit followed by a regeneration of requirements.txt (see "Updating Python dependencies"
+# in README.md). Regenerate with pip-compile; never edit the .txt files by hand.
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+pydantic==2.14.4
