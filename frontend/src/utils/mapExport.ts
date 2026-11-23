@@ -66,10 +66,27 @@ export function buildExportFooter({ unitSystem, speedUnit, attribution, version 
 export type ExportExtension = 'png' | 'jpeg' | 'pdf';
 
 export interface ExportBaseNameInput {
+  /** `/api/weather/models` id, e.g. "ecmwf_ifs"; the name leads with it (SCRUM-163). */
+  modelId: string;
   validTime: string | null;
   timezone: string;
   /** Capture time, used when no forecast hour is selected. */
   now?: Date;
+}
+
+/**
+ * The model part of a generated file name (SCRUM-163): lower-case, spaces to underscores, with
+ * only `[a-z0-9_-]` kept and repeats collapsed. A missing or unusable id falls back to
+ * "wind-map", so an export is never named after nothing.
+ */
+export function exportModelPrefix(modelId: string | null | undefined): string {
+  const slug = (modelId ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'wind-map';
 }
 
 export interface ExportFileNameInput extends ExportBaseNameInput {
@@ -95,8 +112,9 @@ const TIME_PARTS = (timezone: string) =>
 const ZONE_NAME = (timezone: string) =>
   new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
 
-/** e.g. "wind-map_2026-11-18_1400PST": the shown hour and its zone, without an extension. */
+/** e.g. "ecmwf_ifs_2026-11-18_1400PST": the model, the shown hour and its zone, no extension. */
 export function buildExportBaseName({
+  modelId,
   validTime,
   timezone,
   now = new Date(),
@@ -113,10 +131,10 @@ export function buildExportBaseName({
   const minute = part(localTime, 'minute');
   // "PST" stays; "GMT+2" loses its sign so the name stays portable.
   const zone = part(ZONE_NAME(timezone), 'timeZoneName').replace(/[^A-Za-z0-9]/g, '') || 'UTC';
-  return `wind-map_${year}-${month}-${day}_${hour}${minute}${zone}`;
+  return `${exportModelPrefix(modelId)}_${year}-${month}-${day}_${hour}${minute}${zone}`;
 }
 
-/** The same name with the format's extension, e.g. "…1400PST.png", ".jpeg" or ".pdf". */
+/** The same name with the format's extension, e.g. "ecmwf_ifs_…1400PST.png", ".jpeg" or ".pdf". */
 export function buildExportFileName({ extension, ...input }: ExportFileNameInput): string {
   return `${buildExportBaseName(input)}.${extension}`;
 }

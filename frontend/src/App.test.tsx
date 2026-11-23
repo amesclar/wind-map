@@ -246,7 +246,7 @@ describe('App map integration (SCRUM-126)', () => {
     const [element, content, options] = vi.mocked(saveMapImage).mock.calls[0];
     expect(element).toBe(screen.getByTestId('map-canvas'));
     expect(options).toEqual({ format: 'png', quality: 0.92 });
-    expect(content.fileName).toMatch(/^wind-map_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.png$/);
+    expect(content.fileName).toMatch(/^best_match_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.png$/);
     expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
     expect(content.header.lines[1]).toContain('Open-Meteo');
     expect(content.footer).toContain('Wind Map v');
@@ -285,7 +285,7 @@ describe('App map integration (SCRUM-126)', () => {
     const [element, content, options] = vi.mocked(saveMapPdf).mock.calls[0];
     expect(element).toBe(screen.getByTestId('map-canvas'));
     expect(options).toEqual({ fileName: content.fileName, pageSize: 'a4', orientation: 'landscape' });
-    expect(content.fileName).toMatch(/^wind-map_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.pdf$/);
+    expect(content.fileName).toMatch(/^best_match_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.pdf$/);
     expect(vi.mocked(saveMapImage)).not.toHaveBeenCalled();
   });
 
@@ -306,6 +306,8 @@ describe('App map integration (SCRUM-126)', () => {
     const names = vi.mocked(downloadCanvas).mock.calls.map(([, name]) => name);
     expect(new Set(names).size).toBe(3);
     expect(names.every((name) => name.endsWith('.png'))).toBe(true);
+    // The selected model leads every frame name (SCRUM-163).
+    expect(names.every((name) => name.startsWith('best_match_'))).toBe(true);
 
     // One composed frame per hour, each with that hour's header; the capture saw each hour once.
     const contents = vi.mocked(captureMapCanvas).mock.calls.map(([, content]) => content);

@@ -6,6 +6,7 @@ import {
   buildExportFileName,
   buildExportFooter,
   buildExportHeader,
+  exportModelPrefix,
   sanitizeExportFileName,
   temperatureBands,
 } from './mapExport';
@@ -69,33 +70,100 @@ describe('buildExportFileName (SCRUM-116)', () => {
   it('names the file after the shown hour, its zone and the format', () => {
     expect(
       buildExportFileName({
+        modelId: 'best_match',
         validTime: '2026-11-18T22:00:00Z',
         timezone: 'America/Los_Angeles',
         extension: 'png',
       }),
-    ).toBe('wind-map_2026-11-18_1400PST.png');
+    ).toBe('best_match_2026-11-18_1400PST.png');
     expect(
-      buildExportFileName({ validTime: '2026-11-18T22:00:00Z', timezone: 'UTC', extension: 'jpeg' }),
-    ).toBe('wind-map_2026-11-18_2200UTC.jpeg');
+      buildExportFileName({
+        modelId: 'best_match',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'UTC',
+        extension: 'jpeg',
+      }),
+    ).toBe('best_match_2026-11-18_2200UTC.jpeg');
+  });
+
+  it('leads with the selected model, so exports from different models differ (SCRUM-163)', () => {
+    expect(
+      buildExportFileName({
+        modelId: 'ecmwf_ifs',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'America/Los_Angeles',
+        extension: 'png',
+      }),
+    ).toBe('ecmwf_ifs_2026-11-18_1400PST.png');
+    expect(
+      buildExportFileName({
+        modelId: 'gfs_seamless',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'UTC',
+        extension: 'pdf',
+      }),
+    ).toBe('gfs_seamless_2026-11-18_2200UTC.pdf');
+  });
+
+  it('falls back to wind-map when the model id is unknown (SCRUM-163)', () => {
+    expect(
+      buildExportFileName({
+        modelId: '',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'UTC',
+        extension: 'png',
+      }),
+    ).toBe('wind-map_2026-11-18_2200UTC.png');
   });
 
   it('keeps an extension-free base name for the dialog preview (SCRUM-117)', () => {
     expect(
-      buildExportBaseName({ validTime: '2026-11-18T22:00:00Z', timezone: 'America/Los_Angeles' }),
-    ).toBe('wind-map_2026-11-18_1400PST');
+      buildExportBaseName({
+        modelId: 'best_match',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'America/Los_Angeles',
+      }),
+    ).toBe('best_match_2026-11-18_1400PST');
     expect(
-      buildExportFileName({ validTime: '2026-11-18T22:00:00Z', timezone: 'UTC', extension: 'pdf' }),
-    ).toBe('wind-map_2026-11-18_2200UTC.pdf');
+      buildExportFileName({
+        modelId: 'best_match',
+        validTime: '2026-11-18T22:00:00Z',
+        timezone: 'UTC',
+        extension: 'pdf',
+      }),
+    ).toBe('best_match_2026-11-18_2200UTC.pdf');
   });
 
   it('falls back to the capture time and strips punctuation from zone names', () => {
     const name = buildExportFileName({
+      modelId: 'best_match',
       validTime: null,
       timezone: 'Asia/Kolkata',
       extension: 'png',
       now: new Date('2026-11-18T08:30:00Z'),
     });
-    expect(name).toMatch(/^wind-map_2026-11-18_1400[A-Za-z0-9]+\.png$/);
+    expect(name).toMatch(/^best_match_2026-11-18_1400[A-Za-z0-9]+\.png$/);
+  });
+});
+
+describe('exportModelPrefix (SCRUM-163)', () => {
+  it('keeps a filename-safe lower-case model id', () => {
+    expect(exportModelPrefix('ecmwf_ifs')).toBe('ecmwf_ifs');
+    expect(exportModelPrefix('gfs_seamless')).toBe('gfs_seamless');
+    expect(exportModelPrefix('best_match')).toBe('best_match');
+  });
+
+  it('lower-cases and replaces anything a file name cannot carry', () => {
+    expect(exportModelPrefix(' GFS Seamless ')).toBe('gfs_seamless');
+    expect(exportModelPrefix('ECMWF/IFS 0.25')).toBe('ecmwf_ifs_0_25');
+    expect(exportModelPrefix('a//b')).toBe('a_b');
+  });
+
+  it('falls back to wind-map rather than producing an empty prefix', () => {
+    expect(exportModelPrefix('')).toBe('wind-map');
+    expect(exportModelPrefix('   ')).toBe('wind-map');
+    expect(exportModelPrefix('...')).toBe('wind-map');
+    expect(exportModelPrefix(undefined)).toBe('wind-map');
   });
 });
 
