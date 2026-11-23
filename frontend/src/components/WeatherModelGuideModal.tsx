@@ -30,7 +30,7 @@ export const WeatherModelGuideModal: React.FC<WeatherModelGuideModalProps> = ({
   const guide = parseModelGuide(markdown);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
       <div className="w-full max-w-2xl max-h-full bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-dark-600">

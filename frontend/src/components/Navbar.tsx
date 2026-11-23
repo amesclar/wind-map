@@ -95,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <select
             value={selectedModel}
             onChange={(e) => onSelectModel(e.target.value)}
-            className="bg-dark-800 text-gray-200 text-xs border border-dark-600 rounded-lg px-2 py-1 focus:outline-none focus:border-sky-500"
+            className="bg-dark-800 text-gray-200 text-xs border border-dark-600 rounded-lg px-2 py-1 focus:outline-hidden focus:border-sky-500"
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
