@@ -46,7 +46,8 @@ clicking on location should show;
 
 Wind Barb Markers: SVG wind barbs with speed feathers (knots) and temperature color-coding on the map.
 
-Map export (SCRUM-116, SCRUM-117): the top bar's **Save** button opens an export dialog and downloads the view currently on screen as a PNG, JPEG or a single-page PDF.
+Map export (SCRUM-116, SCRUM-117, SCRUM-157): the top bar's download-icon trigger opens an export dialog and downloads the view currently on screen as a PNG, JPEG or a single-page PDF.
++ Trigger (SCRUM-157): `MapExportControl` is icon-only, using the supplied `assets/download-icon.png` (512 × 512 RGBA) at 16 px (`w-4 h-4 object-contain`) inside the same `p-1.5` square frame as the model-guide and Preferences buttons, and it sits immediately left of the Preferences gear. It keeps the accessible name and tooltip "Export map image" ("Exporting…" with `aria-busy` and a disabled state while a capture runs), `aria-haspopup="dialog"`, and a decorative `alt=""` image.
 + Capture is client-side: `modern-screenshot` 4.7.0 is imported lazily (its own chunk) and renders the map container at 2x into a canvas. Leaflet controls and pop-ups are filtered out, so no UI chrome reaches the image; tiles use `crossOrigin: true`.
 + The header, legend and footer are drawn on the canvas, not captured from the DOM: header = the hour the image shows (`Sun 22 Nov 20:00 PST`) plus reference lines with the UTC time, the model, its run and the capture time; legend = the barb glyphs for calm/5/10/50 kt in the selected speed unit and the barb temperature colour classes in the selected temperature unit; footer = units, the base-map attribution (OSM, plus CARTO) and `Wind Map v<version>`.
 + The image is named after the shown hour, e.g. `wind-map_2026-11-18_1400PST.png` (`buildExportFileName`).
