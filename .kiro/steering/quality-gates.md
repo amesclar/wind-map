@@ -28,6 +28,7 @@ You must automatically create or update unit tests for every functional code cha
 - **Before pushing,** run the same checks CI runs and make sure they pass:
   ```bash
   ruff check .                                   # Python lint and security rules
+  ruff format --check .                          # formatting
   pytest --cov                                   # backend tests, minimum coverage in .coveragerc
   cd frontend && npm run lint && npm run typecheck && npm run test:coverage
   ```
