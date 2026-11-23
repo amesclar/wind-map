@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { readAppVersion } from './appVersion';
+// Explicit .ts extension: Vite 8's native config loader (planned default) cannot resolve
+// extensionless imports (SCRUM-149).
+import { readAppVersion } from './appVersion.ts';
 
 export default defineConfig({
   plugins: [react()],

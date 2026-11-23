@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 // Reuses plugins and `define` (__APP_VERSION__) from vite.config.ts (SCRUM-92).
 export default mergeConfig(
