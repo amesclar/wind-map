@@ -7,6 +7,7 @@ import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
 import { useLatest } from '../hooks/useLatest';
+import { useWindGrid } from '../hooks/useWindGrid';
 import { tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
@@ -110,6 +111,9 @@ export const MapView: React.FC<MapViewProps> = ({
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+
+  // One grid fetch per view change, shared by every layer that draws it (SCRUM-122).
+  const gridPoints = useWindGrid(mapInstance, selectedModel, windOverlayVisible);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -221,8 +225,7 @@ export const MapView: React.FC<MapViewProps> = ({
       />
       <WindOverlay
         map={mapInstance}
-        model={selectedModel}
-        visible={windOverlayVisible}
+        points={gridPoints}
         selectedPoint={selectedGridPoint}
         onGridPointSelect={onGridPointSelect}
       />

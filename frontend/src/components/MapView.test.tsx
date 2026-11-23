@@ -1,12 +1,19 @@
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
-import { createdMarkers, resetLeafletMock } from '../test/leafletMock';
+import { createdMarkers, currentMap, resetLeafletMock } from '../test/leafletMock';
+import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
 
-beforeEach(() => resetLeafletMock());
+// The shared wind grid fetch lives in MapView (SCRUM-122).
+vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn() }));
+
+beforeEach(() => {
+  resetLeafletMock();
+  vi.mocked(api.fetchWindGrid).mockReset();
+});
 
 const baseProps = {
   selectedLocation: null,
@@ -43,6 +50,33 @@ describe('MapView popups (SCRUM-92)', () => {
     div.innerHTML = html;
     expect(div.querySelector('img')).toBeNull();
     expect(div.textContent).toContain('<img src=x onerror="alert(1)">');
+  });
+});
+
+describe('MapView shared wind grid (SCRUM-122)', () => {
+  it('fetches once per view change while the barbs are shown', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    render(<MapView {...baseProps} locations={[]} windOverlayVisible />);
+
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+    const map = currentMap();
+
+    // Same viewport: the overlay and the map both re-render, but nothing refetches.
+    map.fire('moveend');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(1);
+
+    map.bounds = { south: 46, north: 50, west: -124, east: -120 };
+    map.fire('moveend');
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not fetch the grid when no layer needs it', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    render(<MapView {...baseProps} locations={[]} windOverlayVisible={false} />);
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fetchWindGrid).not.toHaveBeenCalled();
   });
 });
 
