@@ -228,7 +228,7 @@ describe('App map integration (SCRUM-126)', () => {
       expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toMatch(/T\d{2}:00:00\.000Z$/),
     );
 
-    fireEvent.click(screen.getByTitle('Save the map as an image'));
+    fireEvent.click(screen.getByTitle('Export map image'));
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
     await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
@@ -249,7 +249,7 @@ describe('App map integration (SCRUM-126)', () => {
     render(<App />);
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
 
-    fireEvent.click(screen.getByTitle('Save the map as an image'));
+    fireEvent.click(screen.getByTitle('Export map image'));
     fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
     expect(screen.getByTestId('export-file-name').textContent).toMatch(/\.pdf$/);
 

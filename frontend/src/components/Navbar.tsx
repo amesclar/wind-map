@@ -94,10 +94,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Right Controls: Save image, Model, Preferences */}
+      {/* Right Controls: Model, guide, export, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
-        <MapExportControl onOpen={onOpenExportDialog} busy={savingMap} />
-
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
           <Layers className="w-3.5 h-3.5 text-gray-400" />
@@ -125,6 +123,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
         </button>
+
+        {/* Export trigger: download icon beside Preferences (SCRUM-157) */}
+        <MapExportControl onOpen={onOpenExportDialog} busy={savingMap} />
 
         {/* Preferences: timezone and units (SCRUM-107) */}
         <button
