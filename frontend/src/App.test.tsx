@@ -8,6 +8,10 @@ import { currentMap, markerAt, resetLeafletMock, type MockMarker } from './test/
 
 vi.mock('leaflet', () => import('./test/leafletMock'));
 
+// The capture itself is covered by captureMap.test; here only the wiring matters (SCRUM-116).
+vi.mock('./utils/captureMap', () => ({ saveMapImage: vi.fn().mockResolvedValue(undefined) }));
+import { saveMapImage } from './utils/captureMap';
+
 // The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
 // fetchWeather/fetchPointWeather at all.
 vi.mock('./api/client', () => ({
@@ -203,6 +207,30 @@ describe('App map integration (SCRUM-126)', () => {
 
     fireEvent.click(screen.getByText('Now'));
     await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
+  });
+
+  it('saves the visible hour as an image with its header, legend and footer (SCRUM-116)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByLabelText('Next hour'));
+    await waitFor(() =>
+      expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toMatch(/T\d{2}:00:00\.000Z$/),
+    );
+
+    fireEvent.click(screen.getByTitle('Save the map as an image'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'PNG' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [element, content, format] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(element).toBe(screen.getByTestId('map-canvas'));
+    expect(format).toBe('png');
+    expect(content.fileName).toMatch(/^wind-map_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.png$/);
+    expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
+    expect(content.header.lines[1]).toContain('Open-Meteo');
+    expect(content.footer).toContain('Wind Map v');
+    expect(content.barbs).toHaveLength(4);
+    expect(content.temperatures.length).toBeGreaterThan(0);
   });
 
   it('fetches every saved location once on initial load (SCRUM-92)', async () => {

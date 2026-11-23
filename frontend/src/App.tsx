@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModelInfo } from './types';
 import { fetchAppConfig, fetchModels } from './api/client';
 import { DEFAULT_MODEL } from './constants';
@@ -9,6 +9,17 @@ import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
 import { formatStepLabel } from './utils/forecastWindow';
+import {
+  barbLegendEntries,
+  buildExportFileName,
+  buildExportFooter,
+  buildExportHeader,
+  temperatureBands,
+} from './utils/mapExport';
+import { saveMapImage, type MapImageFormat } from './utils/captureMap';
+import { attributionText } from './components/mapTiles';
+import { SPEED_UNIT_LABEL } from './utils/units';
+import { APP_VERSION } from './version';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
@@ -40,6 +51,10 @@ export const App: React.FC = () => {
 
   // Selected forecast hour (null = now). Memory only: the app opens at "now" (SCRUM-127).
   const [forecastTime, setForecastTime] = useState<string | null>(null);
+
+  // The map element, captured when the user saves an image (SCRUM-116).
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [savingMap, setSavingMap] = useState(false);
 
   const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
   const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
@@ -137,6 +152,47 @@ export const App: React.FC = () => {
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
   }, []);
 
+  /** Capture the current view with its header, legend and footer, and download it (SCRUM-116). */
+  const handleSaveMapAsImage = useCallback(
+    async (format: MapImageFormat) => {
+      const element = mapContainerRef.current;
+      if (!element || !selectedModelInfo) return;
+      setSavingMap(true);
+      try {
+        const capturedAt = new Date();
+        await saveMapImage(
+          element,
+          {
+            fileName: buildExportFileName({ validTime: forecastTime, timezone, extension: format, now: capturedAt }),
+            header: buildExportHeader({
+              validTime: forecastTime,
+              timezone,
+              modelName: selectedModelInfo.name,
+              runTimeUtc: selectedModelInfo.last_run_utc,
+              capturedAt,
+            }),
+            footer: buildExportFooter({
+              unitSystem: units.unitSystem,
+              speedUnit: units.speedUnit,
+              attribution: attributionText(mapSettings.tileLayer),
+              version: APP_VERSION,
+            }),
+            barbs: barbLegendEntries(units.speedUnit),
+            temperatures: temperatureBands(units.unitSystem),
+            speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
+            temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
+          },
+          format,
+        );
+      } catch (err) {
+        console.error('Failed to save the map image:', err);
+      } finally {
+        setSavingMap(false);
+      }
+    },
+    [forecastTime, timezone, selectedModelInfo, units.unitSystem, units.speedUnit, mapSettings.tileLayer],
+  );
+
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
       <Navbar
@@ -150,6 +206,8 @@ export const App: React.FC = () => {
         onOpenPreferences={() => setIsPreferencesOpen(true)}
         onOpenModelGuide={() => setIsModelGuideOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
+        onSaveMapAsImage={handleSaveMapAsImage}
+        savingMap={savingMap}
       />
 
       <main className="flex-1 flex flex-col min-h-0 w-full">
@@ -171,6 +229,7 @@ export const App: React.FC = () => {
             dirDisplay={units.dirDisplay}
             validTime={forecastTime}
             validTimeLabel={validTimeLabel}
+            containerRef={mapContainerRef}
           />
         </div>
         <ForecastTimeSelector
