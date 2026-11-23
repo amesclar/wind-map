@@ -14,6 +14,11 @@ export { legendTicks } from '../utils/windColorScale';
  */
 export const LEGEND_BOTTOM_PX = 24;
 export const LEGEND_HEIGHT_PX = 24;
+/**
+ * Above Leaflet's content panes (gradient 250, markers 600, pop-ups 700) so the strip is not
+ * hidden, but below its controls (800) so the zoom buttons still win (SCRUM-168).
+ */
+export const LEGEND_Z_INDEX = 750;
 /** Below this width only every second tick is labelled. */
 export const NARROW_LEGEND_PX = 640;
 
@@ -46,8 +51,8 @@ export const WindColorLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedU
       data-testid="wind-color-legend"
       role="img"
       aria-label={`Wind speed color scale from 0 to ${Math.round(max)} ${label}`}
-      className="wind-color-legend absolute inset-x-0 z-30 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-xs border-y border-dark-600/70"
-      style={{ height: LEGEND_HEIGHT_PX }}
+      className="wind-color-legend absolute inset-x-0 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-xs border-y border-dark-600/70"
+      style={{ height: LEGEND_HEIGHT_PX, zIndex: LEGEND_Z_INDEX }}
     >
       <div
         className="relative flex-1 h-2.5 rounded-xs border border-black/50"

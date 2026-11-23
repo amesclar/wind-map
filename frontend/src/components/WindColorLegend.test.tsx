@@ -2,10 +2,12 @@ import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   LEGEND_HEIGHT_PX,
+  LEGEND_Z_INDEX,
   legendTicks,
   NARROW_LEGEND_PX,
   WindColorLegend,
 } from './WindColorLegend';
+import { WIND_COLOR_PANE_Z_INDEX } from './WindColorOverlay';
 import { MAX_WIND_KNOTS } from '../utils/windColorScale';
 import { knotsToUnit } from '../utils/units';
 
@@ -43,6 +45,13 @@ describe('WindColorLegend (SCRUM-124)', () => {
     expect(strip.style.bottom).toBe('');
     expect(strip.style.height).toBe(`${LEGEND_HEIGHT_PX}px`);
     expect(strip.className).toContain('pointer-events-none');
+    // Above Leaflet's content panes, which hid the strip behind the gradient (SCRUM-168).
+    expect(strip.style.zIndex).toBe(String(LEGEND_Z_INDEX));
+    expect(LEGEND_Z_INDEX).toBeGreaterThan(WIND_COLOR_PANE_Z_INDEX);
+    // Leaflet's popup pane is 700 and its controls are 800 (leaflet.css): visible below the
+    // controls, above the pop-ups.
+    expect(LEGEND_Z_INDEX).toBeGreaterThan(700);
+    expect(LEGEND_Z_INDEX).toBeLessThan(800);
 
     // jsdom normalizes hex colors to rgb() in computed style strings.
     const bar = container.querySelector('[style*="linear-gradient"]') as HTMLElement;
