@@ -197,6 +197,18 @@ The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0
 
 ---
 
+## AI coding rules
+
+`.kiro/steering/*.md` is the single source of truth for the project rules. `python scripts/sync-ai-rules.py` renders them for every agent, and the generated files must not be edited by hand: a pytest test fails when one is stale or over budget. The rules are tiered *(SCRUM-160)* because Devin Desktop auto-injects only the first 16 KiB of `AGENTS.md`:
+
+- **Always on — `AGENTS.md`** (Devin and Freebuff): the hard guardrails only, held to **14,000 bytes** so a new rule has headroom instead of landing on the truncation edge. It ends with pointers to the situational files.
+- **Situational — `.devin/rules/*.md`** (Devin): one generated file per situational steering file, with `trigger: glob` front matter and a 12,000-character cap each, so Devin loads the testing or release rules only when a matching file is in play. To add one, list the steering file in `SITUATIONAL` in the sync script.
+- **Complete body — `GEMINI.md`, `.config/antigravity/instructions.md` and `.freebuff/rules.md`:** those tools do not share Devin's 16 KiB cap, so they get every rule; the Freebuff file also lists the skills, the situational rules and the hooks.
+
+To change a rule, edit `.kiro/steering/`, run `python scripts/sync-ai-rules.py`, and commit the steering change with the regenerated `AGENTS.md`, `GEMINI.md`, `.config/antigravity/instructions.md`, `.freebuff/rules.md` and `.devin/rules/`.
+
+---
+
 ## Testing
 
 Backend test suite coverage includes:

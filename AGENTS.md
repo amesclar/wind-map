@@ -103,73 +103,10 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - **Verification Rule:** Never complete a task that alters functional scope or technical dependencies without committing an updated `requirements.md` alongside the code.
 
 ---
-<!-- from .kiro/steering/quality-gates.md -->
 
-# Automated Testing Policies
+# Situational rules (Devin)
 
-You must automatically create or update unit tests for every functional code change you make. Do not wait for explicit user instructions to write tests. Follow the specific frameworks, directory structures, and verification loops below:
+Devin loads these from `.devin/rules/` when their trigger matches. When a task touches those files, read the rule before editing:
 
-## 1. Backend (Python / FastAPI)
-- **Frameworks:** Use `pytest` and `pytest-asyncio` for all backend unit and integration tests.
-- **Location:** Place tests inside the `tests/` directory mirroring the `app/` folder structure.
-- **Mocking:** Always mock external network calls (such as `httpx` requests to the Open-Meteo API) and use SQLite test fixtures or memory databases to avoid altering production cache states.
-- **Verification Loop:** Run your backend tests autonomously before completing a task by executing:
-  ```bash
-  pytest
-  ```
-
-## 2. Frontend (React / TypeScript)
-- **Frameworks:** Use `Vitest` and `React Testing Library` for component and integration testing.
-- **Location:** Place tests in the same directory as the component using the `.test.tsx` or `.spec.tsx` naming convention.
-- **Leaflet & Maps Mocking:** If a component renders `Leaflet.js` maps, ensure the map container or tiles are mocked properly to prevent DOM measurement runtime errors during test execution.
-- **Verification Loop:** Run your frontend tests autonomously before completing a task by executing:
-  ```bash
-  npm run test -- --run  # or 'yarn test' / 'vitest run' depending on package.json setup
-  ```
-
-## 3. Strict Task Completion Gate
-- A task is not considered complete unless the relevant test files are created/modified, and the verification commands exit with a code `0` (success).
-
-
-## 4. CI Checks and Branch Protection (SCRUM-108, SCRUM-119)
-- **Before pushing,** run the same checks CI runs and make sure they pass:
-  ```bash
-  ruff check . && ruff format --check .          # Python lint, security and formatting
-  pytest --cov                                   # backend tests, minimum coverage in .coveragerc
-  cd frontend && npm run lint && npm run typecheck && npm run test:coverage
-  ```
-  Run `pip-audit -r requirements.txt` and `npm audit --omit=dev` when you change dependencies.
-- **Branch protection:** `develop` and `master` require the CI checks (Backend, Frontend, Docker image, and the two CodeQL analyses) to pass. Merge a PR only after `gh pr checks <n>` shows every check passing. Do not push directly to `develop` or `master`, and do not use an admin bypass, without asking the user first.
-- **Fix findings, don't hide them:** Do not make a check pass by disabling it, lowering a coverage threshold, or adding a blanket suppression. A suppression needs a one-line reason in the code or config.
-- **Docker image:** The Trivy scan fails on fixable HIGH or CRITICAL vulnerabilities. Fix them in the Dockerfile or the pinned dependencies.
-
-## 5. Pinned Python Dependencies (SCRUM-103)
-- `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`. Never edit them by hand.
-- To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.14-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
-
-## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139)
-- `.kiro/steering/*.md` is the single source of truth for the project rules.
-- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin and Freebuff) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
-- Freebuff (SCRUM-139): Freebuff Desktop reads the root `AGENTS.md` and the skills in `.agents/skills/`. `.freebuff/rules.md` is generated from the same steering files plus a workflow inventory (the skills and the post-task hooks), so changing a steering file, a skill in `.agents/skills/` or a hook in `.kiro/hooks/` or `.devin/hooks.v1.json` requires running `python scripts/sync-ai-rules.py` and committing the regenerated files. Do not copy skills into `.freebuff/skills/`, because Freebuff already loads `.agents/skills/`. Freebuff has no project hooks, so the post-task container rebuild follows `release-versioning.md`.
-- Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.
-
----
-<!-- from .kiro/steering/release-versioning.md -->
-
-# Release Versioning (SCRUM-91, SCRUM-130, SCRUM-132)
-
-The app version must always match the release version.
-
-- **Single source of truth:** the `VERSION` file in the project root, plain semver `MAJOR.MINOR.PATCH` with no "v" (e.g. `0.2.0`).
-- **Keep in sync:** `frontend/package.json` (and `package-lock.json`) `version` must equal `VERSION`. Update both with:
-  ```bash
-  echo "X.Y.Z" > VERSION
-  (cd frontend && npm version X.Y.Z --no-git-tag-version --allow-same-version)
-  ```
-- **Displayed version includes the build hash (SCRUM-159):** the navbar badge and `GET /api/health` show `X.Y.Z-<short-hash>` while `VERSION`, `package.json` and tags stay `X.Y.Z` / `vX.Y.Z`. User-testing builds also bump `PATCH` (no notes, no tag: not a release). Mechanics: `rebuild-container` skill.
-- **Release notes:** every release needs notes covering features, fixes, performance and rules, saved as `release-notes/x-x-x.md` (dots as hyphens) and committed with the version bump.
-- **Rebuild container on version bump and release (SCRUM-132):** after a version bump or a release merged to `master`, run `scripts/rebuild-container.sh` so user verification happens on http://localhost:5005.
-- **Never hardcode the version** in UI or API code. The backend reads `VERSION` (`backend/app/config.py` → `APP_VERSION`); the frontend gets it at build time as `__APP_VERSION__` (`frontend/appVersion.ts`, `src/version.ts`).
-- **When creating a release `vX.Y.Z`:** bump both files, write `release-notes/x-x-x.md`, merge `develop` into `master`, then publish the tag from `master` with the notes (see the `release` skill).
-- If asked to create a release without a version bump, ask whether to bump `VERSION` first instead of tagging a mismatched version.
-- Tests (`version.test.ts`, `test_version.py`) fail if `VERSION`, `package.json`, the badge or `/api/health` disagree, or if the version is not `X.Y.Z[-<hash>]`.
+- `.devin/rules/quality-gates.md` — Testing policy, CI parity, branch protection and pinned dependencies.
+- `.devin/rules/release-versioning.md` — Version source of truth, build hash, releases and container rebuilds.
