@@ -38,6 +38,8 @@ export interface MockMap {
   size: { x: number; y: number };
   getBounds: ReturnType<typeof vi.fn>;
   getSize: ReturnType<typeof vi.fn>;
+  createPane: ReturnType<typeof vi.fn>;
+  containerPointToLatLng: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   flyTo: ReturnType<typeof vi.fn>;
@@ -99,6 +101,13 @@ function makeMap(): MockMap {
     getEast: () => map.bounds.east,
   }));
   map.getSize = vi.fn(() => map.size);
+  // Panes are detached divs: jsdom has no layout, and the gradient layer only needs a
+  // parent it can remove on unmount (SCRUM-123).
+  map.createPane = vi.fn(() => document.createElement('div'));
+  map.containerPointToLatLng = vi.fn(([x, y]: [number, number]) => ({
+    lat: map.bounds.north - (y / map.size.y) * (map.bounds.north - map.bounds.south),
+    lng: map.bounds.west + (x / map.size.x) * (map.bounds.east - map.bounds.west),
+  }));
   map.on = vi.fn((event: string, fn: Handler) => {
     (map.handlers[event] ??= []).push(fn);
     return map;

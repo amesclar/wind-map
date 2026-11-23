@@ -1,5 +1,5 @@
-import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
 import { createdMarkers, currentMap, resetLeafletMock } from '../test/leafletMock';
@@ -23,6 +23,7 @@ const baseProps = {
   cartoApiKey: '',
   selectedModel: 'best_match',
   windOverlayVisible: false,
+  windColorOverlayVisible: false,
   selectedGridPoint: null,
   onGridPointSelect: () => {},
 };
@@ -77,6 +78,50 @@ describe('MapView shared wind grid (SCRUM-122)', () => {
 
     await new Promise((r) => setTimeout(r, 0));
     expect(api.fetchWindGrid).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapView wind color gradient (SCRUM-124)', () => {
+  beforeEach(() => {
+    // jsdom has no canvas backend, so the gradient layer draws nothing here; the drawing
+    // itself is covered by WindColorOverlay.test.tsx.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('draws the gradient, shows the legend, and shares the grid fetch', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    render(<MapView {...baseProps} locations={[]} windColorOverlayVisible />);
+
+    expect(screen.getByTestId('wind-color-legend')).toBeTruthy();
+    // The barbs are off but the gradient still needs the grid, and asks for it once.
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the legend hidden and fetches nothing when both layers are off', async () => {
+    render(<MapView {...baseProps} locations={[]} />);
+
+    expect(screen.queryByTestId('wind-color-legend')).toBeNull();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fetchWindGrid).not.toHaveBeenCalled();
+  });
+
+  it('gives the barbs a dark halo while the gradient is on', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      {
+        latitude: 48,
+        longitude: -122,
+        wind_speed_knots: 12,
+        wind_direction_deg: 180,
+        temperature_f: 55,
+      },
+    ]);
+    render(<MapView {...baseProps} locations={[]} windOverlayVisible windColorOverlayVisible />);
+
+    await waitFor(() => expect(createdMarkers).toHaveLength(1));
+    const html = (createdMarkers[0].icon as { html: string }).html;
+    expect(html).toContain('wind-barb-halo');
   });
 });
 

@@ -170,6 +170,7 @@ export const App: React.FC = () => {
           cartoApiKey={mapSettings.cartoApiKey}
           selectedModel={selectedModel}
           windOverlayVisible={mapSettings.windOverlayVisible}
+          windColorOverlayVisible={mapSettings.windColorOverlayVisible}
           selectedGridPoint={selectedGridPoint}
           onGridPointSelect={handleGridPointSelect}
           unitSystem={units.unitSystem}
@@ -204,6 +205,8 @@ export const App: React.FC = () => {
         onSaveCartoApiKey={mapSettings.saveCartoApiKey}
         windOverlayVisible={mapSettings.windOverlayVisible}
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
+        windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+        onToggleWindColorOverlay={mapSettings.setWindColorOverlayVisible}
       />
 
       <WeatherModelGuideModal

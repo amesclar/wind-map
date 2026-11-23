@@ -27,6 +27,7 @@ export const STORAGE_KEYS = {
   tileLayer: 'map_tile_layer',
   cartoApiKey: 'carto_api_key',
   windOverlayVisible: 'wind_overlay_visible',
+  windColorOverlayVisible: 'wind_color_overlay_visible',
   unitSystem: 'unit_system',
   speedUnit: 'speed_unit',
   dirDisplay: 'dir_display',
