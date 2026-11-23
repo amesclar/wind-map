@@ -3,13 +3,19 @@ import L from 'leaflet';
 import type { GridWindPoint } from '../types';
 import { buildWindGrid, interpolateWindSpeed, windSpeedToColor } from '../utils/windColorScale';
 
-/** Dedicated pane above the tile and markup panes but below popups. */
+/** Dedicated pane above the tiles but below the barbs, labels and popups. */
 export const WIND_COLOR_PANE = 'windColorPane';
 export const WIND_COLOR_PANE_Z_INDEX = 250;
-/** Strong enough to read at a glance, light enough to keep the barbs and labels clear. */
-export const WIND_COLOR_OPACITY = 0.7;
+/**
+ * Low enough that coastlines, roads and place labels stay readable through the color,
+ * high enough that the speed field still reads at a glance (SCRUM-143).
+ */
+export const WIND_COLOR_OPACITY = 0.55;
 /** One sample per 4 CSS pixels; the browser smooths the upscaled canvas. */
 export const WIND_COLOR_SAMPLE_PX = 4;
+
+/** Map events after which the viewport has settled and the field must be redrawn. */
+const VIEW_EVENTS = ['moveend', 'zoomend', 'viewreset', 'resize'] as const;
 
 interface WindColorOverlayProps {
   map: L.Map | null;
@@ -24,19 +30,23 @@ interface WindColorOverlayProps {
  * Samples every 4 CSS pixels and lets CSS scale the result, so a 1400×800 view costs
  * about 350×200 fills per redraw. Longitude depends only on x and latitude only on y in
  * Web Mercator, so the projection runs once per column and row instead of per pixel.
- * Redraws keep the previous frame (no clearing) until new points arrive, so panning does
- * not flash; a resize or new data starts from a clean frame.
+ *
+ * The canvas is pinned to the viewport on every paint (SCRUM-143): Leaflet keeps the pan
+ * offset as a transform on the map pane, so a pane child would otherwise drift away from
+ * the viewport after every drag. A container resize repaints through a ResizeObserver,
+ * because the map can change size without any pan or zoom.
  */
 export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps) {
   const pointsRef = useRef(points);
   pointsRef.current = points;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const paintRef = useRef<((clear: boolean) => void) | null>(null);
+  const paintRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!map) return;
 
+    const container = map.getContainer();
     const pane = map.createPane(WIND_COLOR_PANE);
     pane.style.zIndex = String(WIND_COLOR_PANE_Z_INDEX);
     pane.style.pointerEvents = 'none';
@@ -50,7 +60,17 @@ export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps
     canvas.style.opacity = String(WIND_COLOR_OPACITY);
     pane.appendChild(canvas);
 
-    const paint = (clear: boolean) => {
+    /** Place the canvas exactly over the map viewport, whatever the pane is offset by. */
+    const anchorToViewport = () => {
+      const viewport = container.getBoundingClientRect();
+      const paneBox = pane.getBoundingClientRect();
+      canvas.style.left = `${Math.round(viewport.left - paneBox.left)}px`;
+      canvas.style.top = `${Math.round(viewport.top - paneBox.top)}px`;
+      canvas.style.width = `${map.getSize().x}px`;
+      canvas.style.height = `${map.getSize().y}px`;
+    };
+
+    const paint = () => {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -60,6 +80,7 @@ export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps
         return;
       }
       canvas.style.display = 'block';
+      anchorToViewport();
 
       const size = map.getSize();
       const width = Math.max(1, Math.ceil(size.x / WIND_COLOR_SAMPLE_PX));
@@ -67,11 +88,8 @@ export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
-        canvas.style.width = `${size.x}px`;
-        canvas.style.height = `${size.y}px`;
-        clear = true; // resizing a canvas already dropped its pixels
       }
-      if (clear) ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height); // every paint is a full frame (SCRUM-143)
 
       const grid = buildWindGrid(pointsRef.current); // null below 2 by 2: draw nothing
       if (!grid) return;
@@ -99,17 +117,17 @@ export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps
     };
 
     paintRef.current = paint;
-    paint(true);
+    paint();
 
-    const repaint = () => paint(false); // keep the previous frame until new points arrive
-    map.on('moveend', repaint);
-    map.on('zoomend', repaint);
-    map.on('resize', repaint);
+    const repaint = () => paint();
+    VIEW_EVENTS.forEach((event) => map.on(event, repaint));
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => repaint());
+    observer?.observe(container);
 
     return () => {
-      map.off('moveend', repaint);
-      map.off('zoomend', repaint);
-      map.off('resize', repaint);
+      VIEW_EVENTS.forEach((event) => map.off(event, repaint));
+      observer?.disconnect();
       canvas.remove();
       pane.remove();
       paintRef.current = null;
@@ -118,7 +136,7 @@ export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps
 
   // New data or a visibility change replaces the frame outright.
   useEffect(() => {
-    paintRef.current?.(true);
+    paintRef.current?.();
   }, [points, visible]);
 
   return null;
