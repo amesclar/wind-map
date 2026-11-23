@@ -3,8 +3,13 @@ import type { WindSpeedUnit } from '../types';
 import { MAX_WIND_KNOTS, windColorCssGradient } from '../utils/windColorScale';
 import { knotsToUnit, SPEED_UNIT_LABEL } from '../utils/units';
 
-/** Sits just above the 42px drawer bar (bottom-0 z-40), clear of the attribution. */
-export const LEGEND_BOTTOM_OFFSET_PX = 48;
+/**
+ * Gap above the timeline drawer and the floor used when no drawer is showing, so the strip
+ * still clears the attribution. The offsets live in index.css (`.wind-color-legend`, which
+ * reads `--drawer-height` published by the drawer), so the constants stay documented here.
+ */
+export const LEGEND_GAP_PX = 6;
+export const LEGEND_MIN_BOTTOM_PX = 24;
 export const LEGEND_HEIGHT_PX = 24;
 /** Below this width only every second tick is labelled. */
 export const NARROW_LEGEND_PX = 640;
@@ -36,7 +41,9 @@ function useNarrowLegend(): boolean {
 /**
  * Full-width strip under the map, above the drawer: the same gradient as the overlay with
  * tick labels in the user's speed unit (SCRUM-124). It never takes pointer events, and on
- * narrow screens it drops every second label so they stop colliding.
+ * narrow screens it drops every second label so they stop colliding. Its vertical offset is
+ * `.wind-color-legend` in index.css, which rides on the drawer's published height so an
+ * expanded forecast panel cannot cover it (SCRUM-144).
  */
 export const WindColorLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedUnit }) => {
   const narrow = useNarrowLegend();
@@ -49,8 +56,8 @@ export const WindColorLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedU
       data-testid="wind-color-legend"
       role="img"
       aria-label={`Wind speed color scale from 0 to ${Math.round(max)} ${label}`}
-      className="absolute inset-x-0 z-30 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-sm border-y border-dark-600/70"
-      style={{ bottom: LEGEND_BOTTOM_OFFSET_PX, height: LEGEND_HEIGHT_PX }}
+      className="wind-color-legend absolute inset-x-0 z-30 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-sm border-y border-dark-600/70"
+      style={{ height: LEGEND_HEIGHT_PX }}
     >
       <div
         className="relative flex-1 h-2.5 rounded-sm border border-black/50"
