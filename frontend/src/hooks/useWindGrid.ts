@@ -3,7 +3,15 @@ import type L from 'leaflet';
 import { fetchWindGrid } from '../api/client';
 import type { GridWindPoint } from '../types';
 
-/** About one barb per 80px; the backend caps each axis at 30. */
+/**
+ * About one barb per 80px; the backend caps each axis at 30.
+ *
+ * The same grid feeds every layer that draws it (the barbs now, the color gradient in
+ * SCRUM-123), so density is one shared decision rather than a per-layer detail. It is
+ * not raised further: data resolution is limited by the weather model (about 1 to 11 km),
+ * so a finer grid repeats values instead of adding detail, and the smoothness comes from
+ * client-side interpolation. Revisit only if verification shows blockiness at zoom 8-12.
+ */
 export const BARB_SPACING_PX = 80;
 export const MAX_GRID_DIM = 30;
 
@@ -14,15 +22,19 @@ export function gridDimensions(size: { x: number; y: number }): { cols: number; 
 
 /**
  * Wind grid points for the visible map area, refetched after every pan or zoom
- * (SCRUM-92). A newer request aborts the previous one, so only the latest response is
- * used; a failed request is retried on the next pan or zoom, even for the same view.
+ * (SCRUM-92). Called once in `MapView` and shared with every layer that draws the grid
+ * (SCRUM-122), so turning another layer on never adds a request. `enabled` is true when
+ * at least one such layer is on; otherwise the points are cleared and nothing is fetched.
+ *
+ * A newer request aborts the previous one, so only the latest response is used; a failed
+ * request is retried on the next pan or zoom, even for the same view.
  */
-export function useWindGrid(map: L.Map | null, model: string, visible: boolean): GridWindPoint[] {
+export function useWindGrid(map: L.Map | null, model: string, enabled: boolean): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
 
   useEffect(() => {
     if (!map) return;
-    if (!visible) {
+    if (!enabled) {
       setPoints([]);
       return;
     }
@@ -64,7 +76,7 @@ export function useWindGrid(map: L.Map | null, model: string, visible: boolean):
       map.off('zoomend', refresh);
       controller?.abort();
     };
-  }, [map, model, visible]);
+  }, [map, model, enabled]);
 
   return points;
 }

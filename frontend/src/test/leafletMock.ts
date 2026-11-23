@@ -31,6 +31,8 @@ export interface MockMarker {
 }
 
 export interface MockMap {
+  /** Element the map was created on (SCRUM-143 reads it for the overlay viewport). */
+  container: HTMLElement;
   handlers: Record<string, Handler[]>;
   /** Simulate a map event, e.g. fire('moveend'). */
   fire: (event: string) => void;
@@ -38,6 +40,9 @@ export interface MockMap {
   size: { x: number; y: number };
   getBounds: ReturnType<typeof vi.fn>;
   getSize: ReturnType<typeof vi.fn>;
+  getContainer: ReturnType<typeof vi.fn>;
+  createPane: ReturnType<typeof vi.fn>;
+  containerPointToLatLng: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   flyTo: ReturnType<typeof vi.fn>;
@@ -85,12 +90,14 @@ function makeMarker(latlng: [number, number], options: Record<string, unknown> =
   return marker;
 }
 
-function makeMap(): MockMap {
+function makeMap(container?: HTMLElement): MockMap {
   const map = {
+    container: container ?? document.createElement('div'),
     handlers: {},
     bounds: { south: 47.0, north: 49.0, west: -123.0, east: -121.0 },
     size: { x: 800, y: 600 },
   } as MockMap;
+  map.getContainer = vi.fn(() => map.container);
   map.fire = (event) => (map.handlers[event] ?? []).forEach((fn) => fn());
   map.getBounds = vi.fn(() => ({
     getSouth: () => map.bounds.south,
@@ -99,6 +106,13 @@ function makeMap(): MockMap {
     getEast: () => map.bounds.east,
   }));
   map.getSize = vi.fn(() => map.size);
+  // Panes are detached divs: jsdom has no layout, and the gradient layer only needs a
+  // parent it can remove on unmount (SCRUM-123).
+  map.createPane = vi.fn(() => document.createElement('div'));
+  map.containerPointToLatLng = vi.fn(([x, y]: [number, number]) => ({
+    lat: map.bounds.north - (y / map.size.y) * (map.bounds.north - map.bounds.south),
+    lng: map.bounds.west + (x / map.size.x) * (map.bounds.east - map.bounds.west),
+  }));
   map.on = vi.fn((event: string, fn: Handler) => {
     (map.handlers[event] ??= []).push(fn);
     return map;
@@ -116,7 +130,7 @@ function makeMap(): MockMap {
 const layer = () => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn() });
 
 const leaflet = {
-  map: vi.fn(() => makeMap()),
+  map: vi.fn((container?: HTMLElement) => makeMap(container)),
   marker: vi.fn((latlng: [number, number], options?: Record<string, unknown>) => makeMarker(latlng, options)),
   divIcon: vi.fn((options: Record<string, unknown>) => ({ ...options })),
   tileLayer: vi.fn(layer),

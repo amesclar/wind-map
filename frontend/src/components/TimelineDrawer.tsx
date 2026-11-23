@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   WeatherForecastResponse,
   SavedLocation,
@@ -24,6 +24,9 @@ import {
   formatSpeed,
   formatTemperature,
 } from '../utils/units';
+
+/** Visible height of the collapsed drawer: matches translate-y-[calc(100%-42px)] below. */
+export const DRAWER_BAR_HEIGHT_PX = 42;
 
 interface TimelineDrawerProps {
   selectedLocation?: SavedLocation | null;
@@ -55,12 +58,38 @@ export const TimelineDrawer: React.FC<TimelineDrawerProps> = ({
     }
   }, [placeKey]);
 
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Publish how much of the viewport the drawer covers, so bottom-anchored map overlays
+  // (the wind color legend) sit above it instead of disappearing behind it (SCRUM-144).
+  useEffect(() => {
+    const el = drawerRef.current;
+    const root = document.documentElement;
+    if (!el) {
+      root.style.removeProperty('--drawer-height');
+      return;
+    }
+    const publish = () => {
+      // Collapsed, only the header bar is on screen; expanded, the whole panel is.
+      const height = isCollapsed ? DRAWER_BAR_HEIGHT_PX : el.offsetHeight;
+      root.style.setProperty('--drawer-height', `${Math.min(height, window.innerHeight)}px`);
+    };
+    publish();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
+    observer?.observe(el);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty('--drawer-height');
+    };
+  }, [isCollapsed, weatherData, isLoading]);
+
   if (!weatherData && !isLoading) {
     return null;
   }
 
   return (
     <div
+      ref={drawerRef}
       data-testid="timeline-drawer"
       className={`fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-md border-t border-dark-600 shadow-2xl transition-all duration-300 ease-in-out ${
         isCollapsed ? 'translate-y-[calc(100%-42px)]' : 'translate-y-0'

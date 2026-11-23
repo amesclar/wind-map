@@ -6,6 +6,8 @@ import {
   formatSliceTime,
   formatSpeed,
   formatTemperature,
+  knotsToUnit,
+  roundKnotsInUnit,
 } from './units';
 import { makePoint } from '../test/fixtures';
 import type { WindSpeedUnit } from '../types';
@@ -25,6 +27,22 @@ describe('formatSpeed (SCRUM-92)', () => {
 
   it('has a label for every unit', () => {
     expect(Object.keys(SPEED_UNIT_LABEL).sort()).toEqual(['kmh', 'knots', 'mph', 'ms']);
+  });
+});
+
+describe('knotsToUnit (SCRUM-124)', () => {
+  it('converts knots to each display unit', () => {
+    expect(knotsToUnit(10, 'knots')).toBe(10);
+    expect(knotsToUnit(10, 'kmh')).toBeCloseTo(18.52, 5);
+    expect(knotsToUnit(10, 'mph')).toBeCloseTo(11.5078, 5);
+    expect(knotsToUnit(10, 'ms')).toBeCloseTo(5.14444, 5);
+  });
+
+  it('rounds to whole numbers for legend ticks', () => {
+    expect(roundKnotsInUnit(10, 'kmh')).toBe(19);
+    expect(roundKnotsInUnit(10, 'mph')).toBe(12);
+    expect(roundKnotsInUnit(10, 'ms')).toBe(5);
+    expect(roundKnotsInUnit(50, 'kmh')).toBe(93);
   });
 });
 
