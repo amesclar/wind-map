@@ -6,6 +6,7 @@ import {
   buildExportFileName,
   buildExportFooter,
   buildExportHeader,
+  sanitizeExportFileName,
   temperatureBands,
 } from './mapExport';
 import { getTemperatureColor } from '../components/WindBarb';
@@ -95,6 +96,37 @@ describe('buildExportFileName (SCRUM-116)', () => {
       now: new Date('2026-11-18T08:30:00Z'),
     });
     expect(name).toMatch(/^wind-map_2026-11-18_1400[A-Za-z0-9]+\.png$/);
+  });
+});
+
+describe('sanitizeExportFileName (SCRUM-162)', () => {
+  const fallback = 'wind-map_2026-11-18_1400PST';
+
+  it('keeps a plain name and appends the chosen extension', () => {
+    expect(sanitizeExportFileName('my map', 'png', fallback)).toBe('my map.png');
+    expect(sanitizeExportFileName('my map', 'jpeg', fallback)).toBe('my map.jpeg');
+    expect(sanitizeExportFileName('my map', 'pdf', fallback)).toBe('my map.pdf');
+  });
+
+  it('removes path separators and reserved characters', () => {
+    expect(sanitizeExportFileName('../a\\b:c*?"<>|d', 'png', fallback)).toBe('abcd.png');
+    expect(sanitizeExportFileName('folder/name\\', 'pdf', fallback)).toBe('foldername.pdf');
+  });
+
+  it('ignores a typed extension so it cannot double up', () => {
+    expect(sanitizeExportFileName('chart.PNG', 'jpeg', fallback)).toBe('chart.jpeg');
+    expect(sanitizeExportFileName('chart.jpg', 'png', fallback)).toBe('chart.png');
+    expect(sanitizeExportFileName('chart.pdf', 'png', fallback)).toBe('chart.png');
+  });
+
+  it('falls back when the name is empty, whitespace or only dots', () => {
+    expect(sanitizeExportFileName('', 'png', fallback)).toBe(`${fallback}.png`);
+    expect(sanitizeExportFileName('   ', 'png', fallback)).toBe(`${fallback}.png`);
+    expect(sanitizeExportFileName('...', 'pdf', fallback)).toBe(`${fallback}.pdf`);
+  });
+
+  it('keeps spaces and non-ASCII letters, trimming the ends', () => {
+    expect(sanitizeExportFileName('  Carte été  ', 'png', fallback)).toBe('Carte été.png');
   });
 });
 
