@@ -22,7 +22,7 @@ const TEMPERATURE_OPTIONS: ReadonlyArray<{ id: UnitSystem; label: string }> = [
 ];
 
 const SELECT_CLASS =
-  'w-full bg-dark-900 text-gray-100 text-xs border border-dark-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-sky-500';
+  'w-full bg-dark-900 text-gray-100 text-xs border border-dark-600 rounded-lg px-2.5 py-1.5 focus:outline-hidden focus:border-sky-500';
 const LABEL_CLASS =
   'block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5';
 
@@ -42,7 +42,7 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
       <div className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-full">
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-dark-600">

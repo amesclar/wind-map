@@ -2,7 +2,7 @@
 
 A standalone, minimalist dark-mode application that displays live weather forecasts and meteorological wind barbs on an interactive map.
 
-Built with **FastAPI (Python 3.11+)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
+Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
 
 ---
 
@@ -105,6 +105,8 @@ docker stop wind-map && docker rm wind-map
 
 ## Local Development Setup
 
+Requires **Node 24** (`frontend/package.json` `engines`) and **Python 3.14** — the same versions CI and the Docker image use.
+
 ### Backend (Python)
 
 1. Create and activate a virtual environment:
@@ -119,9 +121,9 @@ docker stop wind-map && docker rm wind-map
    (`requirements.txt` holds pinned runtime dependencies only and is what the Docker image installs; `requirements-dev.txt` adds the pinned test tools.)
 
 #### Updating Python dependencies
-`requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions. Do not edit them by hand. To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
+`requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`, so every build installs the same versions, and the top-level `requirements.in` and `requirements-dev.in` are pinned to exact versions too: no `>=` ranges, so a rebuild never resolves something newer than what was tested. Do not edit the generated files by hand. To add or upgrade a package, change the exact version in `requirements.in` (runtime) or `requirements-dev.in` (tests), then regenerate in the same Python and OS as the Docker image, run the tests, and commit all changed files:
 ```bash
-docker run --rm -v "$PWD":/w -w /w python:3.11-alpine sh -c \
+docker run --rm -v "$PWD":/w -w /w python:3.14-alpine sh -c \
   "pip install -q pip-tools && \
    pip-compile -q --strip-extras --annotation-style=line -o requirements.txt requirements.in && \
    pip-compile -q --strip-extras --annotation-style=line -o requirements-dev.txt requirements-dev.in"
@@ -223,6 +225,10 @@ cd frontend && npm run lint
 
 # Frontend type check, including test files
 cd frontend && npm run typecheck
+
+# Backend suite inside the Docker test stage (SCRUM-152), which adds the bash that the
+# shipped image omits; a plain `docker build .` still produces the runtime image
+docker build --target test -t wind-map:test . && docker run --rm wind-map:test pytest --cov
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.
@@ -233,7 +239,7 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 
 | Check | What it does | Run locally |
 | :--- | :--- | :--- |
-| Ruff | Python lint, including security rules (`ruff.toml`) | `ruff check .` |
+| Ruff | Python lint, including security and `UP` pyupgrade rules, and formatting (`ruff.toml`) | `ruff check . && ruff format --check .` |
 | pytest coverage | Backend tests; fails below the threshold in `.coveragerc` | `pytest --cov` |
 | pip-audit | Known vulnerabilities in `requirements.txt` | `pip-audit -r requirements.txt` |
 | ESLint, `tsc` | Frontend lint and type-check | `cd frontend && npm run lint && npm run typecheck` |
@@ -245,4 +251,4 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 
 Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
 
-Ruff runs lint only. Auto-formatting (`ruff format`) and the `UP` modernization rules are not enabled, because they would rewrite many files with no behavior change.
+Ruff enforces lint and formatting (SCRUM-109): `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).

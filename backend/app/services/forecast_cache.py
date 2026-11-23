@@ -7,7 +7,7 @@ forecast cached for one timezone must not be served for another.
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Protocol
 
 from backend.app.config import CACHE_TTL_SECONDS
 from backend.app.database import db_connection
@@ -16,17 +16,17 @@ from backend.app.units import coord_key
 
 @dataclass(frozen=True)
 class CachedForecast:
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     cached_at: float
 
 
 class ForecastCache(Protocol):
-    def get(self, now: float) -> Optional[CachedForecast]: ...
+    def get(self, now: float) -> CachedForecast | None: ...
 
-    def put(self, payload: Dict[str, Any], now: float) -> None: ...
+    def put(self, payload: dict[str, Any], now: float) -> None: ...
 
 
-def _fresh(row, now: float) -> Optional[CachedForecast]:
+def _fresh(row, now: float) -> CachedForecast | None:
     if row and row["expires_at"] > now:
         return CachedForecast(payload=json.loads(row["payload_json"]), cached_at=row["cached_at"])
     return None
@@ -40,7 +40,7 @@ class SavedLocationCache:
     model: str
     timezone: str
 
-    def get(self, now: float) -> Optional[CachedForecast]:
+    def get(self, now: float) -> CachedForecast | None:
         with db_connection() as conn:
             row = conn.execute(
                 "SELECT payload_json, cached_at, expires_at FROM weather_cache "
@@ -49,7 +49,7 @@ class SavedLocationCache:
             ).fetchone()
         return _fresh(row, now)
 
-    def put(self, payload: Dict[str, Any], now: float) -> None:
+    def put(self, payload: dict[str, Any], now: float) -> None:
         with db_connection() as conn:
             conn.execute(
                 """
@@ -77,7 +77,7 @@ class PointCache:
     def key(self) -> tuple:
         return (*coord_key(self.latitude, self.longitude), self.model, self.timezone)
 
-    def get(self, now: float) -> Optional[CachedForecast]:
+    def get(self, now: float) -> CachedForecast | None:
         with db_connection() as conn:
             row = conn.execute(
                 "SELECT payload_json, cached_at, expires_at FROM point_weather_cache "
@@ -86,7 +86,7 @@ class PointCache:
             ).fetchone()
         return _fresh(row, now)
 
-    def put(self, payload: Dict[str, Any], now: float) -> None:
+    def put(self, payload: dict[str, Any], now: float) -> None:
         with db_connection() as conn:
             conn.execute(
                 """

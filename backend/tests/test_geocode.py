@@ -1,4 +1,5 @@
 """Geocoder service and /api/geocode router tests."""
+
 import httpx
 import pytest
 

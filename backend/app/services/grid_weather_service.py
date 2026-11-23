@@ -1,7 +1,6 @@
 """Grid weather service: current wind for a lat/lon grid using Open-Meteo batch requests."""
 
 import time
-from typing import List, Tuple
 
 import httpx
 
@@ -18,9 +17,9 @@ from backend.app.units import as_float, c_to_f, coord_key
 
 
 async def get_grid_wind(
-    points: List[Tuple[float, float]],
+    points: list[tuple[float, float]],
     model: str = DEFAULT_MODEL,
-) -> List[GridWindPoint]:
+) -> list[GridWindPoint]:
     """
     Return current wind speed (knots), direction (degrees) and temperature (°F) for each (lat, lon) point.
     Hits the cache first; fetches any misses in a single batched Open-Meteo request.
@@ -40,11 +39,11 @@ async def get_grid_wind(
 
 
 def _read_cached_points(
-    points: List[Tuple[float, float]], model: str, now: float
-) -> Tuple[List[GridWindPoint], List[Tuple[float, float]]]:
+    points: list[tuple[float, float]], model: str, now: float
+) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
     """Split points into cached results and coordinates that still need fetching."""
-    results: List[GridWindPoint] = []
-    missing: List[Tuple[float, float]] = []  # original coords for missing cache entries
+    results: list[GridWindPoint] = []
+    missing: list[tuple[float, float]] = []  # original coords for missing cache entries
     with db_connection() as conn:
         for lat, lon in points:
             lk, lnk = coord_key(lat, lon)
@@ -68,7 +67,7 @@ def _read_cached_points(
     return results, missing
 
 
-def _store_points(fetched: List[GridWindPoint], model: str, now: float) -> None:
+def _store_points(fetched: list[GridWindPoint], model: str, now: float) -> None:
     expires_at = now + CACHE_TTL_SECONDS
     with db_connection() as conn:
         conn.executemany(
@@ -84,17 +83,24 @@ def _store_points(fetched: List[GridWindPoint], model: str, now: float) -> None:
                 temperature_f=excluded.temperature_f
             """,
             [
-                (*coord_key(p.latitude, p.longitude), model, now, expires_at,
-                 p.wind_speed_knots, p.wind_direction_deg, p.temperature_f)
+                (
+                    *coord_key(p.latitude, p.longitude),
+                    model,
+                    now,
+                    expires_at,
+                    p.wind_speed_knots,
+                    p.wind_direction_deg,
+                    p.temperature_f,
+                )
                 for p in fetched
             ],
         )
 
 
 async def _fetch_from_open_meteo(
-    points: List[Tuple[float, float]],
+    points: list[tuple[float, float]],
     model: str,
-) -> List[GridWindPoint]:
+) -> list[GridWindPoint]:
     """
     Open-Meteo supports comma-separated lat/lon arrays for batch current-weather fetches.
     One HTTP request returns current conditions for all points.
@@ -116,7 +122,7 @@ async def _fetch_from_open_meteo(
         # Treated as an upstream failure (502), not silently truncated.
         raise httpx.HTTPError(f"Open-Meteo returned {len(data)} grid points for {len(points)} requested")
 
-    output: List[GridWindPoint] = []
+    output: list[GridWindPoint] = []
     for (lat, lon), item in zip(points, data, strict=True):
         current = item.get("current", {})
         output.append(

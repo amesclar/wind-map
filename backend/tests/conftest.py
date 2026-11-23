@@ -1,4 +1,5 @@
 """Shared test setup: isolated temp database, TestClient and a strict Open-Meteo stub."""
+
 import atexit
 import os
 import shutil

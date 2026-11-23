@@ -76,7 +76,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setIsOpen(true)}
           placeholder="Add location (e.g. Seattle, Paris)..."
-          className="w-full pl-9 pr-9 py-1.5 bg-dark-800 text-gray-100 text-xs placeholder-gray-400 rounded-lg border border-dark-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+          className="w-full pl-9 pr-9 py-1.5 bg-dark-800 text-gray-100 text-xs placeholder:text-gray-400 rounded-lg border border-dark-600 focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
         />
         {isLoading && (
           <Loader2 className="w-3.5 h-3.5 text-sky-400 absolute right-3 animate-spin" />
