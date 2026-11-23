@@ -163,7 +163,9 @@ Docker: Multi-stage build producing a single lightweight image run via docker ru
 the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔ release/tag v0.2.0)
 + Single source of truth: `VERSION` file in the project root (plain `MAJOR.MINOR.PATCH`, no "v").
 + Backend reads it for the FastAPI app version (`/docs`) and returns it from `GET /api/health` as `version`.
-+ Frontend reads it at build time (Vite `__APP_VERSION__`) and shows it in the navbar as `vX.Y.Z`.
++ Frontend reads it at build time (Vite `__APP_VERSION__`) and shows it in the navbar as `vX.Y.Z-<hash>`.
++ Build hash (SCRUM-159): the displayed version appends the short commit hash (`git rev-parse --short HEAD`), so the navbar badge and `GET /api/health` identify the exact build (`0.7.1-db9f569`). `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata passed as the `GIT_SHA` Docker build arg by `scripts/rebuild-container.sh`, with local builds falling back to git and a build without a hash showing plain `X.Y.Z`.
++ User-testing builds (SCRUM-159): a build requested for testing bumps the PATCH digit as well as adding the hash, so it never shares a version with a release; it is not a release, so it needs no release notes or tag.
 + `frontend/package.json` `version` must match `VERSION`; tests fail if they differ.
 + For every release: update `VERSION` and `frontend/package.json` to the release number before tagging `vX.Y.Z`.
 + Release notes (SCRUM-130): every release requires release notes saved in the `release-notes/` directory as `x-x-x.md` (e.g. `0-4-0.md`, replacing dots with hyphens) committed alongside the version bump and used when publishing the release on GitHub.
