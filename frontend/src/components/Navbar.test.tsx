@@ -17,6 +17,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onSelectAndAddLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
     onOpenPreferences: vi.fn(),
+    onOpenModelGuide: vi.fn(),
     hasCartoKey: false,
     ...overrides,
   };
@@ -53,6 +54,13 @@ describe('Navbar (SCRUM-92)', () => {
     const { props, selectWith } = renderNavbar();
     fireEvent.change(selectWith('gfs_seamless'), { target: { value: 'gfs_seamless' } });
     expect(props.onSelectModel).toHaveBeenCalledWith('gfs_seamless');
+  });
+
+  it('opens the model update frequency guide from the icon beside the model selector (SCRUM-110)', () => {
+    const { props } = renderNavbar();
+    const button = screen.getByRole('button', { name: 'Model Update Cycles & Frequency' });
+    fireEvent.click(button);
+    expect(props.onOpenModelGuide).toHaveBeenCalled();
   });
 
   it('opens Preferences from the gear button; unit and timezone controls are gone (SCRUM-107)', () => {

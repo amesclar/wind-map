@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
+import refreshIcon from '../assets/refresh-icon.png';
 
 interface NavbarProps {
   models: WeatherModel[];
@@ -19,6 +20,7 @@ interface NavbarProps {
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
   onOpenPreferences: () => void;
+  onOpenModelGuide: () => void;
   hasCartoKey: boolean;
 }
 
@@ -31,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAndAddLocation,
   onOpenMapSettings,
   onOpenPreferences,
+  onOpenModelGuide,
   hasCartoKey,
 }) => {
   return (
@@ -101,6 +104,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             ))}
           </select>
         </div>
+
+        {/* Model update frequency guide (SCRUM-110). Sits right of the model
+            selector and left of the gear; outside the lg-only block so it stays
+            reachable when the selector itself is hidden. */}
+        <button
+          onClick={onOpenModelGuide}
+          title="Model Update Cycles & Frequency"
+          aria-label="Model Update Cycles & Frequency"
+          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 transition"
+        >
+          <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
+        </button>
 
         {/* Preferences: timezone and units (SCRUM-107) */}
         <button
