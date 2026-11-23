@@ -26,3 +26,4 @@ Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the cont
    gh release create vX.Y.Z --target master --title "vX.Y.Z" --notes-file release-notes/x-x-x.md
    ```
 10. Comment the `master` merge hash on each included ticket (or the release ticket), mark any that are not yet Done as Done, and report the release URL.
+11. Rebuild and restart the container by running `scripts/rebuild-container.sh` so the new release is running on http://localhost:5005 for user verification.

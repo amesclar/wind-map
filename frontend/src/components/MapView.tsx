@@ -3,10 +3,13 @@ import L from 'leaflet';
 import { SavedLocation, WeatherForecastResponse, MapTileLayer, UnitSystem, WindSpeedUnit } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay } from './WindOverlay';
+import { WindColorOverlay } from './WindColorOverlay';
+import { WindColorLegend } from './WindColorLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
 import { useLatest } from '../hooks/useLatest';
+import { useWindGrid } from '../hooks/useWindGrid';
 import { tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
@@ -19,6 +22,8 @@ interface MapViewProps {
   cartoApiKey: string;
   selectedModel: string;
   windOverlayVisible: boolean;
+  /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
+  windColorOverlayVisible: boolean;
   selectedGridPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
@@ -40,13 +45,13 @@ const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 export function buildLocationIcon(weather: WeatherForecastResponse | undefined, isSelected: boolean): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
-  const svg = generateWindBarbSvg(
-    current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
-    current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
-    current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
+  const svg = generateWindBarbSvg({
+    speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
+    directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
+    tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
     size,
-    true,
-  );
+    showLabel: true,
+  });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
@@ -94,6 +99,7 @@ export const MapView: React.FC<MapViewProps> = ({
   cartoApiKey,
   selectedModel,
   windOverlayVisible,
+  windColorOverlayVisible,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -110,6 +116,14 @@ export const MapView: React.FC<MapViewProps> = ({
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+
+  // One grid fetch per view change, shared by every layer that draws it (SCRUM-122);
+  // either layer keeps it alive (SCRUM-124).
+  const gridPoints = useWindGrid(
+    mapInstance,
+    selectedModel,
+    windOverlayVisible || windColorOverlayVisible,
+  );
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -221,11 +235,17 @@ export const MapView: React.FC<MapViewProps> = ({
       />
       <WindOverlay
         map={mapInstance}
-        model={selectedModel}
-        visible={windOverlayVisible}
+        points={gridPoints}
         selectedPoint={selectedGridPoint}
         onGridPointSelect={onGridPointSelect}
+        halo={windColorOverlayVisible}
       />
+      {windColorOverlayVisible && (
+        <>
+          <WindColorOverlay map={mapInstance} points={gridPoints} visible />
+          <WindColorLegend speedUnit={speedUnit} />
+        </>
+      )}
     </div>
   );
 };

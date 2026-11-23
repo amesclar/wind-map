@@ -7,7 +7,7 @@
       "description": "After every agentic task, rebuilds the Docker image and restarts the container so the running app always reflects the latest code changes.",
       "action": {
         "type": "command",
-        "command": "cd /Users/fredames/Projects/wind-map && docker build -t wind-map . && docker stop wind-map 2>/dev/null; docker rm wind-map 2>/dev/null; docker run -d --name wind-map -p 5005:5005 -v wind_data:/app/data wind-map",
+        "command": "\"$(git rev-parse --show-toplevel)/scripts/rebuild-container.sh\"",
         "timeout": 300
       }
     }

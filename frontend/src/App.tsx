@@ -12,6 +12,7 @@ import { TimelineDrawer } from './components/TimelineDrawer';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
+import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
 
@@ -47,6 +48,7 @@ export const App: React.FC = () => {
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
 
   const selectedLocation = selection?.kind === 'saved' ? selection.location : null;
   const selectedGridPoint = useMemo<SelectedGridPoint | null>(
@@ -154,6 +156,7 @@ export const App: React.FC = () => {
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
+        onOpenModelGuide={() => setIsModelGuideOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
       />
 
@@ -167,6 +170,7 @@ export const App: React.FC = () => {
           cartoApiKey={mapSettings.cartoApiKey}
           selectedModel={selectedModel}
           windOverlayVisible={mapSettings.windOverlayVisible}
+          windColorOverlayVisible={mapSettings.windColorOverlayVisible}
           selectedGridPoint={selectedGridPoint}
           onGridPointSelect={handleGridPointSelect}
           unitSystem={units.unitSystem}
@@ -201,6 +205,13 @@ export const App: React.FC = () => {
         onSaveCartoApiKey={mapSettings.saveCartoApiKey}
         windOverlayVisible={mapSettings.windOverlayVisible}
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
+        windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+        onToggleWindColorOverlay={mapSettings.setWindColorOverlayVisible}
+      />
+
+      <WeatherModelGuideModal
+        isOpen={isModelGuideOpen}
+        onClose={() => setIsModelGuideOpen(false)}
       />
 
       <PreferencesModal

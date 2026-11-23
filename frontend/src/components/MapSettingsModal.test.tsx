@@ -11,6 +11,8 @@ const BASE_PROPS = {
   onSaveCartoApiKey: vi.fn(),
   windOverlayVisible: true,
   onToggleWindOverlay: vi.fn(),
+  windColorOverlayVisible: false,
+  onToggleWindColorOverlay: vi.fn(),
 };
 
 describe('MapSettingsModal wind overlay toggle', () => {
@@ -46,5 +48,33 @@ describe('MapSettingsModal wind overlay toggle', () => {
   it('does not render when isOpen is false', () => {
     const { container } = render(<MapSettingsModal {...BASE_PROPS} isOpen={false} />);
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe('MapSettingsModal wind color gradient toggle (SCRUM-124)', () => {
+  it('reflects the current state', () => {
+    const { rerender } = render(<MapSettingsModal {...BASE_PROPS} windColorOverlayVisible={false} />);
+    expect(
+      screen.getByTestId('wind-color-overlay-toggle').getAttribute('aria-pressed'),
+    ).toBe('false');
+
+    rerender(<MapSettingsModal {...BASE_PROPS} windColorOverlayVisible />);
+    expect(
+      screen.getByTestId('wind-color-overlay-toggle').getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('toggles the gradient independently of the barbs', () => {
+    const onToggle = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        windOverlayVisible
+        onToggleWindColorOverlay={onToggle}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('wind-color-overlay-toggle'));
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(BASE_PROPS.onToggleWindOverlay).not.toHaveBeenCalled();
   });
 });

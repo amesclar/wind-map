@@ -73,6 +73,20 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(localStorage.getItem(STORAGE_KEYS.windOverlayVisible)).toBe('false');
     expect(renderHook(() => useMapSettings()).result.current.windOverlayVisible).toBe(false);
   });
+
+  it('defaults the wind color gradient to off (SCRUM-124)', () => {
+    expect(renderHook(() => useMapSettings()).result.current.windColorOverlayVisible).toBe(false);
+  });
+
+  it('persists the wind color gradient toggle (SCRUM-124)', () => {
+    const { result } = renderHook(() => useMapSettings());
+    act(() => result.current.setWindColorOverlayVisible(true));
+    expect(localStorage.getItem(STORAGE_KEYS.windColorOverlayVisible)).toBe('true');
+    expect(renderHook(() => useMapSettings()).result.current.windColorOverlayVisible).toBe(true);
+
+    act(() => result.current.setWindColorOverlayVisible(false));
+    expect(localStorage.getItem(STORAGE_KEYS.windColorOverlayVisible)).toBe('false');
+  });
 });
 
 describe('useUnitPreferences (SCRUM-92, SCRUM-107)', () => {

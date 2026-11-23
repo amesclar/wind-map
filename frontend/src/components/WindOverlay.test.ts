@@ -22,7 +22,9 @@ const colorsIn = (svg: string) =>
 
 describe('generateGridBarbSvg (SCRUM-89)', () => {
   it('draws exactly the same barb as the drawer, including temperature color', () => {
-    expect(generateGridBarbSvg(27, 305, 50, 32)).toBe(generateWindBarbSvg(27, 305, 50, 32, false));
+    expect(generateGridBarbSvg(27, 305, 50, 32)).toBe(
+      generateWindBarbSvg({ speedKnots: 27, directionDeg: 305, tempF: 50, size: 32, showLabel: false })
+    );
   });
 
   it('colors the barb by temperature like the drawer', () => {
@@ -68,6 +70,15 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).not.toContain('box-shadow');
     expect(html).toContain('rotate(90, 25, 25)');
     expect(html).toContain(getTemperatureColor(85));
+  });
+
+  it('adds the dark halo class only when asked (SCRUM-123)', () => {
+    const plain = buildGridBarbIcon(pt(15, 90, 85), false).options.html as string;
+    expect(plain).not.toContain('wind-barb-halo');
+
+    const haloed = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
+    expect(haloed).toContain('wind-barb-halo');
+    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 32));
   });
 
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {

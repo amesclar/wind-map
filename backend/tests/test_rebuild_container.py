@@ -1,5 +1,6 @@
 """scripts/rebuild-container.sh, run by the Devin Stop hook, must never block the agent (SCRUM-128)."""
 
+import json
 import os
 import shutil
 import stat
@@ -10,6 +11,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "rebuild-container.sh"
+KIRO_HOOK = ROOT / ".kiro" / "hooks" / "rebuild-wind-map.json"
+DEVIN_HOOK = ROOT / ".devin" / "hooks.v1.json"
 BASH = shutil.which("bash") or "/bin/bash"
 
 FAKE_DOCKER = """#!/usr/bin/env bash
@@ -78,3 +81,33 @@ def test_success_replaces_the_container_with_the_data_volume(fake_env):
         "run -d --name wind-map -p 5005:5005 -e CARTO_API_KEY -v wind_data:/app/data wind-map",
     ]
     assert "running on http://localhost:5005" in result.stderr
+
+
+def _hook_commands(path: Path) -> list[str]:
+    """Return every shell command declared in a Kiro standalone hook file or a Devin hooks file."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if "hooks" in data:  # Kiro standalone hook file
+        return [hook["action"]["command"] for hook in data["hooks"]]
+    return [hook["command"] for entries in data.values() for entry in entries for hook in entry.get("hooks", [])]
+
+
+def test_both_hooks_run_the_rebuild_script_with_the_same_invocation():
+    assert _hook_commands(KIRO_HOOK) == _hook_commands(DEVIN_HOOK)
+    for command in _hook_commands(KIRO_HOOK):
+        assert "scripts/rebuild-container.sh" in command
+
+
+def test_hook_commands_have_no_machine_specific_paths():
+    for path in (KIRO_HOOK, DEVIN_HOOK):
+        for command in _hook_commands(path):
+            assert "/Users/" not in command, f"{path.name} hardcodes a user path: {command}"
+            assert not command.strip('"').startswith("/"), f"{path.name} uses an absolute path: {command}"
+
+
+def test_kiro_hook_keeps_its_trigger_and_timeout():
+    data = json.loads(KIRO_HOOK.read_text(encoding="utf-8"))
+    (hook,) = data["hooks"]
+    assert data["version"] == "v1"
+    assert hook["trigger"] == "PostTaskExec"
+    assert hook["action"]["type"] == "command"
+    assert hook["action"]["timeout"] == 300
