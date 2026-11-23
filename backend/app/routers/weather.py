@@ -1,7 +1,6 @@
 """Weather API router: weather forecast endpoints."""
 
 import logging
-from typing import Dict, List
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,7 +22,7 @@ def upstream_error(message: str) -> HTTPException:
 
 
 @router.get("/models")
-def list_models() -> List[Dict[str, str]]:
+def list_models() -> list[dict[str, str]]:
     return AVAILABLE_MODELS
 
 
@@ -47,12 +46,12 @@ async def get_location_weather(
         raise upstream_error("Failed to fetch weather forecast from Open-Meteo") from exc
 
 
-@router.get("/all", response_model=List[WeatherForecastResponse])
+@router.get("/all", response_model=list[WeatherForecastResponse])
 async def get_all_locations_weather(
     model: str = Depends(model_param),
     timezone: str = Depends(timezone_param),
-) -> List[WeatherForecastResponse]:
-    results: List[WeatherForecastResponse] = []
+) -> list[WeatherForecastResponse]:
+    results: list[WeatherForecastResponse] = []
     for location in sorted(locations_repo.list_locations(), key=lambda loc: loc.id):
         try:
             results.append(await get_location_forecast(location, model=model, timezone=timezone))

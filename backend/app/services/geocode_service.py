@@ -1,7 +1,5 @@
 """Geocoding service using the Open-Meteo Geocoding API."""
 
-from typing import List
-
 from backend.app.config import (
     OPEN_METEO_GEOCODING_RETRIES,
     OPEN_METEO_GEOCODING_TIMEOUT_SECONDS,
@@ -13,7 +11,7 @@ from backend.app.services import open_meteo
 MIN_QUERY_LENGTH = 2
 
 
-async def search_locations(query: str, count: int = 10) -> List[GeocodeResult]:
+async def search_locations(query: str, count: int = 10) -> list[GeocodeResult]:
     """Search places by name. Returns [] for short queries or no matches.
     Raises httpx.HTTPError when the geocoder is unavailable (SCRUM-92: the router
     reports that as 502, so it isn't confused with "no matches")."""

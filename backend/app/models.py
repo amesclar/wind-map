@@ -1,7 +1,5 @@
 """Pydantic models and schemas for API requests and responses."""
 
-from typing import List, Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -9,8 +7,8 @@ class LocationBase(BaseModel):
     name: str = Field(..., description="Location name / label")
     latitude: float = Field(..., ge=-90.0, le=90.0)
     longitude: float = Field(..., ge=-180.0, le=180.0)
-    admin1: Optional[str] = Field(None, description="State / Province / Region")
-    country: Optional[str] = Field(None, description="Country name")
+    admin1: str | None = Field(None, description="State / Province / Region")
+    country: str | None = Field(None, description="Country name")
 
 
 class LocationCreate(LocationBase):
@@ -20,15 +18,15 @@ class LocationCreate(LocationBase):
 class LocationResponse(LocationBase):
     id: int
     is_default: bool = False
-    created_at: Optional[str] = None
+    created_at: str | None = None
 
 
 class GeocodeResult(BaseModel):
     name: str
     latitude: float
     longitude: float
-    admin1: Optional[str] = None
-    country: Optional[str] = None
+    admin1: str | None = None
+    country: str | None = None
     display_name: str
 
 
@@ -64,7 +62,7 @@ class WeatherForecastResponse(BaseModel):
     cached: bool
     cached_at: float
     current: WeatherForecastPoint
-    forecast: List[WeatherForecastPoint]
+    forecast: list[WeatherForecastPoint]
 
 
 class GridWindPoint(BaseModel):
@@ -74,4 +72,4 @@ class GridWindPoint(BaseModel):
     longitude: float
     wind_speed_knots: float
     wind_direction_deg: float
-    temperature_f: Optional[float] = None
+    temperature_f: float | None = None

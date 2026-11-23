@@ -1,8 +1,9 @@
 """Pure parsing of Open-Meteo forecast responses (SCRUM-92). No I/O, so it is tested
 directly with plain dicts."""
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional, Sequence
+from typing import Any
 
 from backend.app.config import FORECAST_POINTS, FORECAST_STEP_HOURS
 from backend.app.models import WeatherForecastPoint
@@ -22,7 +23,7 @@ FORECAST_VARIABLES = (
 @dataclass(frozen=True)
 class ParsedForecast:
     current: WeatherForecastPoint
-    points: List[WeatherForecastPoint]
+    points: list[WeatherForecastPoint]
 
 
 def build_weather_point(
@@ -69,7 +70,7 @@ def _point_from(values: Mapping[str, Any], time_str: str) -> WeatherForecastPoin
     )
 
 
-def _at(series: Optional[Sequence[Any]], idx: int) -> Any:
+def _at(series: Sequence[Any] | None, idx: int) -> Any:
     """Value at idx, or None if the series is missing or too short."""
     return series[idx] if series is not None and idx < len(series) else None
 
@@ -99,7 +100,7 @@ def parse_forecast(raw: Mapping[str, Any]) -> ParsedForecast:
     times: Sequence[str] = hourly.get("time") or []
     start = _start_index(times, current_time)
 
-    points: List[WeatherForecastPoint] = []
+    points: list[WeatherForecastPoint] = []
     for i in range(FORECAST_POINTS):
         idx = start + i * FORECAST_STEP_HOURS
         if idx >= len(times):

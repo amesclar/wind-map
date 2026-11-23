@@ -6,8 +6,8 @@ All tables are defined here (SCRUM-92). Services assume they exist.
 import logging
 import sqlite3
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from backend.app.config import DATABASE_PATH, DEFAULT_LOCATION
 

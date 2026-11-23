@@ -1,7 +1,6 @@
 """Grid weather router: returns current wind for a lat/lon bounding box."""
 
 import logging
-from typing import List
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,7 +19,7 @@ MAX_COLS = GRID_MAX_DIM
 MAX_ROWS = GRID_MAX_DIM
 
 
-@router.get("", response_model=List[GridWindPoint])
+@router.get("", response_model=list[GridWindPoint])
 async def get_wind_grid(
     min_lat: float = Query(..., ge=-90, le=90),
     max_lat: float = Query(..., ge=-90, le=90),
@@ -29,7 +28,7 @@ async def get_wind_grid(
     cols: int = Query(..., ge=2, le=MAX_COLS),
     rows: int = Query(..., ge=2, le=MAX_ROWS),
     model: str = Depends(model_param),
-) -> List[GridWindPoint]:
+) -> list[GridWindPoint]:
     if min_lat >= max_lat:
         raise HTTPException(
             status_code=422,

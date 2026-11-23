@@ -1,7 +1,6 @@
 """Data access for saved locations (SCRUM-92). Routers use these instead of raw SQL."""
 
 import sqlite3
-from typing import List, Optional
 
 from backend.app.config import DUPLICATE_LOCATION_RADIUS_DEG
 from backend.app.database import db_connection
@@ -23,14 +22,14 @@ def _to_location(row: sqlite3.Row) -> LocationResponse:
     )
 
 
-def list_locations() -> List[LocationResponse]:
+def list_locations() -> list[LocationResponse]:
     """Default location first, then in creation order."""
     with db_connection() as conn:
         rows = conn.execute(f"SELECT {_COLUMNS} FROM locations ORDER BY is_default DESC, id ASC;").fetchall()
     return [_to_location(r) for r in rows]
 
 
-def get_location(location_id: int) -> Optional[LocationResponse]:
+def get_location(location_id: int) -> LocationResponse | None:
     with db_connection() as conn:
         row = conn.execute(f"SELECT {_COLUMNS} FROM locations WHERE id = ?;", (location_id,)).fetchone()
     return _to_location(row) if row else None
