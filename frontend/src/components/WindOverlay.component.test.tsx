@@ -73,6 +73,23 @@ describe('WindOverlay drawing (SCRUM-122)', () => {
     expect(htmlOf(marker)).toContain('box-shadow:0 0 0 2px #ffffff');
   });
 
+  it('adds the dark halo to the existing barbs when the gradient turns on (SCRUM-123)', () => {
+    const { map } = fakeMap();
+    const points = [point(48)];
+    const props = { map, points, selectedPoint: null, onGridPointSelect: () => {} };
+    const { rerender } = render(<WindOverlay {...props} halo={false} />);
+    const marker = created[0];
+    expect(htmlOf(marker)).not.toContain('wind-barb-halo');
+
+    rerender(<WindOverlay {...props} halo />);
+    expect(created).toHaveLength(1); // icons are updated, markers are not recreated
+    expect(marker.setIcon).toHaveBeenCalled();
+    expect(htmlOf(marker)).toContain('wind-barb-halo');
+
+    rerender(<WindOverlay {...props} halo={false} />);
+    expect(htmlOf(marker)).not.toContain('wind-barb-halo');
+  });
+
   it('replaces the markers when new points arrive', () => {
     const { map } = fakeMap();
     const props = { map, selectedPoint: null, onGridPointSelect: () => {} };

@@ -10,6 +10,8 @@ interface WindOverlayProps {
   points: GridWindPoint[];
   selectedPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
+  /** Dark halo so temperature colors stay readable over the gradient (SCRUM-123). */
+  halo?: boolean;
 }
 
 function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boolean {
@@ -43,7 +45,7 @@ export function generateGridBarbSvg(
   });
 }
 
-export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.DivIcon {
+export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean, halo = false): L.DivIcon {
   const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
   const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
   // Selected barb gets a white highlight ring.
@@ -52,25 +54,30 @@ export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.Div
     : '';
   return L.divIcon({
     className: 'wind-grid-barb-marker',
-    html: `<div data-wind-barb data-selected="${isSelected}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
+    html: `<div data-wind-barb data-selected="${isSelected}" class="${halo ? 'wind-barb-halo' : ''}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
 }
 
 /** Draws the shared wind grid as clickable barb markers. Never fetches (SCRUM-122). */
-export function WindOverlay({ map, points, selectedPoint, onGridPointSelect }: WindOverlayProps) {
+export function WindOverlay({ map, points, selectedPoint, onGridPointSelect, halo = false }: WindOverlayProps) {
   // Each point is stored with its marker, so icon updates can't get out of step.
   const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
   const onSelectRef = useLatest(onGridPointSelect);
   const selectedRef = useLatest(selectedPoint);
+  const haloRef = useLatest(halo);
 
   // Draw one barb marker per grid point; replaced whenever the points change.
   useEffect(() => {
     if (!map) return;
     const entries = points.map((point) => {
       const marker = L.marker([point.latitude, point.longitude], {
-        icon: buildGridBarbIcon(point, isSamePoint(selectedRef.current, point.latitude, point.longitude)),
+        icon: buildGridBarbIcon(
+          point,
+          isSamePoint(selectedRef.current, point.latitude, point.longitude),
+          haloRef.current,
+        ),
         interactive: true,
       }).addTo(map);
       marker.on('click', () => onSelectRef.current(point));
@@ -81,14 +88,16 @@ export function WindOverlay({ map, points, selectedPoint, onGridPointSelect }: W
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, onSelectRef]);
+  }, [map, points, selectedRef, haloRef, onSelectRef]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {
     entriesRef.current.forEach(({ point, marker }) => {
-      marker.setIcon(buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude)));
+      marker.setIcon(
+        buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude), halo),
+      );
     });
-  }, [selectedPoint]);
+  }, [selectedPoint, halo]);
 
   return null;
 }
