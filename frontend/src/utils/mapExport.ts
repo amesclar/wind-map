@@ -139,6 +139,33 @@ export function buildExportFileName({ extension, ...input }: ExportFileNameInput
   return `${buildExportBaseName(input)}.${extension}`;
 }
 
+export type RangeArchiveExtension = 'zip' | 'pdf';
+
+export interface RangeArchiveNameInput {
+  modelId: string;
+  /** The captured hours, used for the first hour and the count. */
+  hours: string[];
+  timezone: string;
+  extension: RangeArchiveExtension;
+}
+
+/**
+ * Name for a whole-range download (SCRUM-156): the model, the first hour and the frame count, e.g.
+ * "best_match_2026-11-23_1200PST_5hours.zip". The count keeps cross-day ranges unambiguous.
+ */
+export function buildRangeArchiveName({
+  modelId,
+  hours,
+  timezone,
+  extension,
+}: RangeArchiveNameInput): string {
+  const prefix = exportModelPrefix(modelId);
+  if (hours.length === 0) return `${prefix}_range.${extension}`;
+  const first = buildExportBaseName({ modelId, validTime: hours[0], timezone });
+  const count = hours.length;
+  return `${first}_${count}hour${count === 1 ? '' : 's'}.${extension}`;
+}
+
 /** Path separators, reserved characters and control characters that are stripped from user names. */
 // Control characters cannot appear in a portable file name, so they are matched deliberately.
 // eslint-disable-next-line no-control-regex

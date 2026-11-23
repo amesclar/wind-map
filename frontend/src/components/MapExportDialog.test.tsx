@@ -158,7 +158,6 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
       '3 captures from Mon 14:00 to Mon 16:00 PST',
     );
     expect(screen.queryByLabelText('File name')).toBeNull();
-    expect(screen.queryByRole('radio', { name: /PDF/ })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
@@ -166,6 +165,8 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
       mode: 'range',
       format: 'png',
       jpegQuality: 0.92,
+      pageSize: 'letter',
+      orientation: 'portrait',
       hours: RANGE_HOURS.slice(0, 3),
     });
   });
@@ -250,7 +251,7 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     expect(onSaveCaptured).toHaveBeenCalledTimes(1);
   });
 
-  it('offers PNG and JPEG only, and sends JPEG with its quality', () => {
+  it('sends JPEG with its quality for a ZIP range', () => {
     const props = renderDialog();
     openRange();
 
@@ -261,5 +262,27 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     expect(props.onExport).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'range', format: 'jpeg', jpegQuality: 0.8 }),
     );
+  });
+
+  it('offers a multi-page PDF with page size and orientation for a range (SCRUM-156)', () => {
+    const props = renderDialog();
+    openRange();
+
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    expect(screen.getByText(/One page per hour/)).toBeTruthy();
+    expect(screen.queryByLabelText('File name')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    expect(props.onExport).toHaveBeenCalledWith({
+      mode: 'range',
+      format: 'pdf',
+      jpegQuality: 0.92,
+      pageSize: 'a4',
+      orientation: 'landscape',
+      hours: RANGE_HOURS.slice(0, 3),
+    });
   });
 });

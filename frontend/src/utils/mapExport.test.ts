@@ -6,6 +6,7 @@ import {
   buildExportFileName,
   buildExportFooter,
   buildExportHeader,
+  buildRangeArchiveName,
   exportModelPrefix,
   sanitizeExportFileName,
   temperatureBands,
@@ -143,6 +144,42 @@ describe('buildExportFileName (SCRUM-116)', () => {
       now: new Date('2026-11-18T08:30:00Z'),
     });
     expect(name).toMatch(/^best_match_2026-11-18_1400[A-Za-z0-9]+\.png$/);
+  });
+});
+
+describe('buildRangeArchiveName (SCRUM-156)', () => {
+  const hours = [
+    '2026-11-23T22:00:00.000Z',
+    '2026-11-23T23:00:00.000Z',
+    '2026-11-24T00:00:00.000Z',
+  ];
+
+  it('names a ZIP from the model, the first hour and the frame count', () => {
+    expect(
+      buildRangeArchiveName({
+        modelId: 'best_match',
+        hours,
+        timezone: 'America/Los_Angeles',
+        extension: 'zip',
+      }),
+    ).toBe('best_match_2026-11-23_1400PST_3hours.zip');
+  });
+
+  it('names a PDF the same way and uses the singular for one hour', () => {
+    expect(
+      buildRangeArchiveName({
+        modelId: 'ecmwf_ifs',
+        hours: [hours[0]],
+        timezone: 'America/Los_Angeles',
+        extension: 'pdf',
+      }),
+    ).toBe('ecmwf_ifs_2026-11-23_1400PST_1hour.pdf');
+  });
+
+  it('falls back to wind-map and a range suffix without hours', () => {
+    expect(
+      buildRangeArchiveName({ modelId: '', hours: [], timezone: 'UTC', extension: 'zip' }),
+    ).toBe('wind-map_range.zip');
   });
 });
 

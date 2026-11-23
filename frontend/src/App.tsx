@@ -17,17 +17,13 @@ import {
   buildExportHeader,
   temperatureBands,
 } from './utils/mapExport';
-import {
-  captureMapCanvas,
-  downloadCanvas,
-  saveMapImage,
-  waitForTiles,
-  type MapImageFormat,
-} from './utils/captureMap';
-import { saveMapPdf } from './utils/pdfExport';
+import { captureMapCanvas, saveMapImage, waitForTiles } from './utils/captureMap';
+import { saveMapPdf, type PdfOrientation, type PdfPageSize } from './utils/pdfExport';
+import { saveRangeImages, saveRangePdf } from './utils/rangeOutput';
 import {
   MapExportDialog,
   type MapExportError,
+  type MapExportFormat,
   type MapExportOptions,
   type MapExportRangeOptions,
 } from './components/MapExportDialog';
@@ -82,7 +78,12 @@ export const App: React.FC = () => {
   const [rangeError, setRangeError] = useState<MapExportError | null>(null);
   const [rangeFrames, setRangeFrames] = useState<RangeFrame[]>([]);
   const rangeAbortRef = useRef<AbortController | null>(null);
-  const rangeOptionsRef = useRef<{ format: MapImageFormat; quality: number } | null>(null);
+  const rangeOptionsRef = useRef<{
+    format: MapExportFormat;
+    jpegQuality: number;
+    pageSize: PdfPageSize;
+    orientation: PdfOrientation;
+  } | null>(null);
   // Latest accepted grid response per hour, the range loop's readiness signal.
   const gridFrameRef = useRef<{ validTime: string | null; points: GridWindPoint[] } | null>(null);
   const weatherLoadingRef = useRef(true);
@@ -247,7 +248,12 @@ export const App: React.FC = () => {
     async (options: MapExportRangeOptions, element: HTMLElement, capturedAt: Date) => {
       const controller = new AbortController();
       rangeAbortRef.current = controller;
-      rangeOptionsRef.current = { format: options.format, quality: options.jpegQuality };
+      rangeOptionsRef.current = {
+        format: options.format,
+        jpegQuality: options.jpegQuality,
+        pageSize: options.pageSize,
+        orientation: options.orientation,
+      };
       setSavingMap(true);
       setRangeError(null);
       setRangeProgress(null);
@@ -273,14 +279,22 @@ export const App: React.FC = () => {
           onProgress: setRangeProgress,
         });
         setRangeFrames(result.frames);
-        // Cancelling downloads nothing; a completed range saves one file per hour, by its hour.
+        // Cancelling downloads nothing; a completed range saves one ZIP, image or PDF (SCRUM-156).
         if (result.status === 'cancelled') return;
-        for (const frame of result.frames) {
-          await downloadCanvas(
-            frame.canvas,
-            buildExportFileName({ modelId, validTime: frame.time, timezone, extension: options.format }),
-            { format: options.format, quality: options.jpegQuality },
-          );
+        if (options.format === 'pdf') {
+          await saveRangePdf(result.frames, {
+            modelId,
+            timezone,
+            pageSize: options.pageSize,
+            orientation: options.orientation,
+          });
+        } else {
+          await saveRangeImages(result.frames, {
+            modelId,
+            timezone,
+            format: options.format,
+            jpegQuality: options.jpegQuality,
+          });
         }
         setIsExportDialogOpen(false);
       } catch (err) {
@@ -349,13 +363,13 @@ export const App: React.FC = () => {
     setSavingMap(true);
     const modelId = selectedModelInfo?.id ?? selectedModel;
     try {
-      for (const frame of rangeFrames) {
-        await downloadCanvas(
-          frame.canvas,
-          buildExportFileName({ modelId, validTime: frame.time, timezone, extension: saveOptions.format }),
-          saveOptions,
-        );
-      }
+      // Recovery is always images: a failed PDF run saves its frames as a ZIP (or one PNG).
+      await saveRangeImages(rangeFrames, {
+        modelId,
+        timezone,
+        format: saveOptions.format === 'pdf' ? 'png' : saveOptions.format,
+        jpegQuality: saveOptions.jpegQuality,
+      });
     } finally {
       setSavingMap(false);
     }
