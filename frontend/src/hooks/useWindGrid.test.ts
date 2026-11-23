@@ -7,7 +7,7 @@ import type { GridWindPoint } from '../types';
 
 // SCRUM-122: the grid hook lives in MapView, so its fetch behavior is tested here rather
 // than through WindOverlay.
-vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn() }));
+vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn(), parseQuotaExhausted: vi.fn() }));
 
 /** Only bounds, size and event registration are used by the hook. */
 function fakeMap() {
@@ -58,6 +58,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.mocked(api.fetchWindGrid).mockReset();
+  vi.mocked(api.parseQuotaExhausted).mockReset().mockReturnValue(null);
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -184,6 +185,18 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     rerender({ time: '2026-11-25T12:00:00Z' });
     await new Promise((r) => setTimeout(r, 0));
     expect(api.fetchWindGrid).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a quota-exhausted grid failure instead of logging it (SCRUM-170)', async () => {
+    vi.mocked(api.parseQuotaExhausted).mockReturnValue({ resetAt: '2026-11-24T00:00:29+00:00' });
+    vi.mocked(api.fetchWindGrid).mockRejectedValueOnce(new Error('limit reached'));
+    const onQuotaExhausted = vi.fn();
+    const { map } = fakeMap();
+
+    renderHook(() => useWindGrid(map, 'best_match', true, null, undefined, onQuotaExhausted));
+
+    await waitFor(() => expect(onQuotaExhausted).toHaveBeenCalledWith('2026-11-24T00:00:29+00:00'));
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it('retries the same viewport after a failed request', async () => {

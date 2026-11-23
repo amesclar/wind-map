@@ -7,6 +7,7 @@ import {
   fetchPointWeather,
   fetchWeather,
   fetchWindGrid,
+  parseQuotaExhausted,
   searchGeocode,
 } from './client';
 
@@ -115,6 +116,27 @@ describe('fetchWindGrid', () => {
     vi.stubGlobal('fetch', mockFetch({ detail: 'Validation error' }, 422));
 
     await expect(fetchWindGrid(BASE_PARAMS)).rejects.toThrow('Failed to fetch wind grid');
+  });
+
+  it('carries the structured quota detail and reset time (SCRUM-170)', async () => {
+    const detail = {
+      code: 'open_meteo_quota_exhausted',
+      message: 'Open-Meteo request limit reached',
+      reset_at: '2026-11-24T00:00:29+00:00',
+    };
+    vi.stubGlobal('fetch', mockFetch({ detail }, 503));
+
+    const err = await fetchWindGrid(BASE_PARAMS).catch((e) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.detail).toEqual(detail);
+    expect(parseQuotaExhausted(err)).toEqual({ resetAt: detail.reset_at });
+  });
+
+  it('returns null for quota errors that do not carry the marker (SCRUM-170)', async () => {
+    vi.stubGlobal('fetch', mockFetch({ detail: 'Bad Gateway' }, 502));
+    const err = await fetchWindGrid(BASE_PARAMS).catch((e) => e);
+    expect(parseQuotaExhausted(err)).toBeNull();
   });
 
   it('propagates network errors', async () => {

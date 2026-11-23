@@ -36,6 +36,7 @@ import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
 import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
+import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
 /**
@@ -100,6 +101,9 @@ export const App: React.FC = () => {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  // Open-Meteo quota warning: shown once per reset window, however many grid requests fail.
+  const [quotaWarning, setQuotaWarning] = useState<{ resetAt: string | null } | null>(null);
+  const warnedQuotaRef = useRef<string | null>(null);
   // Range window: model horizon from the hour the dialog opened (SCRUM-155).
   const [rangeWindowStart, setRangeWindowStart] = useState(() => floorToHour(new Date()).toISOString());
   useEffect(() => {
@@ -195,6 +199,14 @@ export const App: React.FC = () => {
 
   const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
+  }, []);
+
+  /** Show the quota dialog once per reset instant; panning must not reopen a dismissed one. */
+  const handleGridQuotaExhausted = useCallback((resetAt: string | null) => {
+    const key = resetAt ?? 'unknown';
+    if (warnedQuotaRef.current === key) return;
+    warnedQuotaRef.current = key;
+    setQuotaWarning({ resetAt });
   }, []);
 
   /** The header, footer and legend every export carries; the hour decides the header. */
@@ -428,6 +440,7 @@ export const App: React.FC = () => {
             validTimeLabel={validTimeLabel}
             containerRef={mapContainerRef}
             onGridLoaded={handleGridLoaded}
+            onGridQuotaExhausted={handleGridQuotaExhausted}
           />
         </div>
         <ForecastTimeSelector
@@ -464,6 +477,13 @@ export const App: React.FC = () => {
       <WeatherModelGuideModal
         isOpen={isModelGuideOpen}
         onClose={() => setIsModelGuideOpen(false)}
+      />
+
+      <QuotaWarningDialog
+        isOpen={quotaWarning !== null}
+        resetAt={quotaWarning?.resetAt ?? null}
+        timezone={timezone}
+        onClose={() => setQuotaWarning(null)}
       />
 
       <PreferencesModal
