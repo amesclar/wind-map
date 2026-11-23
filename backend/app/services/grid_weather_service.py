@@ -1,8 +1,9 @@
 """Grid weather service: wind for a lat/lon grid at the current hour or a forecast hour.
 
 Current values come from Open-Meteo's `current` block; a requested hour comes from the hourly
-series for that UTC day (SCRUM-115). Rows are cached per (rounded lat, lon, model, hour), so a
-scrub or a play-through reuses the same hour it has already fetched.
+series for that UTC day (SCRUM-115). Rows are cached per (rounded lat, lon, model, hour), and one
+forecast-hour request stores every hour of that day from the same response (SCRUM-166), so a
+multi-hour range reads the rest of the day from SQLite instead of calling Open-Meteo again.
 """
 
 import time
@@ -44,10 +45,19 @@ async def get_grid_wind(
     if not missing:
         return results
 
-    # No DB connection is held during the HTTP call.
-    fetched = await _fetch_from_open_meteo(missing, model, at)
-    _store_points(fetched, model, hour, now)
-    return results + fetched
+    if at is None:
+        # No DB connection is held during the HTTP call.
+        fetched = await _fetch_current(missing, model)
+        _store_points(fetched, model, hour, now)
+        return results + fetched
+
+    # One response already carries the whole UTC day, so cache every hour of it. The rest of a
+    # multi-hour range is then served from SQLite instead of repeating the Open-Meteo call
+    # (SCRUM-166), which used to trip its rate limit.
+    series = await _fetch_hourly_day(missing, model, at)
+    for series_hour, hour_points in series.items():
+        _store_points(hour_points, model, series_hour, now)
+    return results + series[hour]
 
 
 def _read_cached_points(
@@ -160,26 +170,34 @@ def _point_from_hourly(lat: float, lon: float, item: dict, index: int, hour: str
     )
 
 
-async def _fetch_from_open_meteo(
+async def _fetch_current(
     points: list[tuple[float, float]],
     model: str,
-    at: datetime | None = None,
 ) -> list[GridWindPoint]:
-    """One batched request for every point, either `current` or the requested UTC hour."""
-    if at is None:
-        data = await open_meteo.get_json(
-            OPEN_METEO_FORECAST_URL,
-            {
-                **_batch_params(points, model),
-                "current": ",".join(GRID_VARIABLES),
-                "forecast_days": 1,
-            },
-            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
-        )
-        items = _as_list(data, len(points))
-        return [_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(points, items, strict=True)]
+    """One batched request for every point's live values."""
+    data = await open_meteo.get_json(
+        OPEN_METEO_FORECAST_URL,
+        {
+            **_batch_params(points, model),
+            "current": ",".join(GRID_VARIABLES),
+            "forecast_days": 1,
+        },
+        timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+    )
+    items = _as_list(data, len(points))
+    return [_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(points, items, strict=True)]
 
-    hour = hour_key(at)
+
+async def _fetch_hourly_day(
+    points: list[tuple[float, float]],
+    model: str,
+    at: datetime,
+) -> dict[str, list[GridWindPoint]]:
+    """One request for the requested UTC day, parsed into every hour it contains.
+
+    Keys are cache hours (`2026-11-25T14:00`), so the caller can store the whole day and return
+    the requested hour without a second request.
+    """
     day = at.astimezone(UTC).strftime("%Y-%m-%d")
     data = await open_meteo.get_json(
         OPEN_METEO_FORECAST_URL,
@@ -193,19 +211,38 @@ async def _fetch_from_open_meteo(
         timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
     )
     items = _as_list(data, len(points))
-    index = _hour_index(items, hour)
-
-    output: list[GridWindPoint] = []
+    times = _series_times(items)
+    series: dict[str, list[GridWindPoint]] = {_series_hour(stamp): [] for stamp in times}
     for (lat, lon), item in zip(points, items, strict=True):
-        output.append(_point_from_hourly(lat, lon, item, index, hour))
-    return output
+        for index, stamp in enumerate(times):
+            series_hour = _series_hour(stamp)
+            series[series_hour].append(_point_from_hourly(lat, lon, item, index, series_hour))
+
+    requested = hour_key(at)
+    if requested not in series:
+        raise httpx.HTTPError(f"Open-Meteo response did not include the requested hour {requested}")
+    return series
 
 
-def _hour_index(items: list[dict], hour: str) -> int:
-    """Position of `hour` in the hourly series; every point shares the same time axis."""
+async def _fetch_from_open_meteo(
+    points: list[tuple[float, float]],
+    model: str,
+    at: datetime | None = None,
+) -> list[GridWindPoint]:
+    """One batched request for every point, either `current` or the requested UTC hour."""
+    if at is None:
+        return await _fetch_current(points, model)
+    return (await _fetch_hourly_day(points, model, at))[hour_key(at)]
+
+
+def _series_times(items: list[dict]) -> list[str]:
+    """The shared hourly time axis; every point in one response uses the same one."""
     times = (items[0].get("hourly") or {}).get("time") or []
-    stamp = hour.replace(":00", "")  # "2026-11-25T12:00" and "2026-11-25T12" both occur
-    for index, value in enumerate(times):
-        if value.startswith(stamp) or value.startswith(hour):
-            return index
-    raise httpx.HTTPError(f"Open-Meteo response did not include the requested hour {hour}")
+    if not times:
+        raise httpx.HTTPError("Open-Meteo grid response did not include hourly times")
+    return times
+
+
+def _series_hour(stamp: str) -> str:
+    """Normalise an Open-Meteo hourly stamp to the grid cache's hour key."""
+    return f"{stamp[:13]}:00" if len(stamp) >= 13 else stamp

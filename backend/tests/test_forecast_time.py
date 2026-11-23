@@ -191,11 +191,8 @@ def test_grid_time_serves_that_hours_values_and_caches_per_hour(client, open_met
     assert again.status_code == 200
     assert open_meteo.call_count == calls
 
-    # Another hour misses the cache and fetches again.
-    other = hour + timedelta(hours=1)
-    open_meteo.respond(grid_payload(*[grid_hourly_item(other.strftime("%Y-%m-%dT%H:00")) for _ in range(4)]))
-    client.get("/api/weather/grid", params=grid_params(time=iso(other)))
-    assert open_meteo.call_count == calls + 1
+    # Other hours of that day are cached by the same response (SCRUM-166); the same-day cases
+    # and the cross-day boundary are covered in test_grid.py.
 
 
 def test_grid_without_time_still_serves_current_conditions(client, open_meteo):

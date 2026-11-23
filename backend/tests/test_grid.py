@@ -1,11 +1,13 @@
 """Tests for the wind grid endpoint and grid_weather_service."""
 
+from datetime import UTC, datetime
+
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
 from backend.app.services.grid_weather_service import _fetch_from_open_meteo, get_grid_wind
 from backend.app.units import coord_key as _cache_key
-from factories import grid_item, grid_payload, insert_grid_row, upstream_error
+from factories import grid_hourly_item, grid_item, grid_payload, insert_grid_row, upstream_error
 
 BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
 
@@ -167,6 +169,46 @@ async def test_get_grid_wind_expired_cache_refetches(open_meteo):
 
     # Stale value (3.0) replaced by fresh value (18.0)
     assert result[0].wind_speed_knots == 18.0
+
+
+@pytest.mark.asyncio
+async def test_get_grid_wind_caches_every_hour_of_the_day(open_meteo):
+    """One response carries the whole UTC day, so a later hour of that day is a cache hit."""
+    pts = [(48.0, -122.0), (47.0, -121.0)]
+    open_meteo.respond(
+        grid_payload(
+            grid_hourly_item("2026-11-25T12:00", speed=12.0, direction=250.0, temp_c=15.0),
+            grid_hourly_item("2026-11-25T12:00", speed=20.0, direction=90.0, temp_c=5.0),
+        )
+    )
+
+    first = await get_grid_wind(pts, "best_match", datetime(2026, 11, 25, 12, tzinfo=UTC))
+    assert open_meteo.call_count == 1
+    assert first[0].wind_speed_knots == 12.0
+    assert first[0].time == "2026-11-25T12:00"
+
+    # A later hour of the same day comes from the rows stored by that one response.
+    later = await get_grid_wind(pts, "best_match", datetime(2026, 11, 25, 18, tzinfo=UTC))
+    assert open_meteo.call_count == 1
+    assert later[0].time == "2026-11-25T18:00"
+    assert later[0].wind_speed_knots == 1.0  # the payload's value for every other hour
+
+
+@pytest.mark.asyncio
+async def test_get_grid_wind_crosses_the_day_with_one_call_per_day(open_meteo):
+    open_meteo.respond_sequence(
+        grid_payload(grid_hourly_item("2026-11-25T23:00", speed=13.0)),
+        grid_payload(grid_hourly_item("2026-11-26T01:00", speed=14.0)),
+    )
+    pts = [(48.0, -122.0)]
+
+    await get_grid_wind(pts, "best_match", datetime(2026, 11, 25, 23, tzinfo=UTC))
+    assert open_meteo.call_count == 1
+
+    next_day = await get_grid_wind(pts, "best_match", datetime(2026, 11, 26, 1, tzinfo=UTC))
+    assert open_meteo.call_count == 2  # a new UTC day needs its own response
+    assert next_day[0].wind_speed_knots == 14.0
+    assert next_day[0].time == "2026-11-26T01:00"
 
 
 @pytest.mark.asyncio
