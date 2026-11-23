@@ -145,7 +145,7 @@ You must automatically create or update unit tests for every functional code cha
 
 ## 5. Pinned Python Dependencies (SCRUM-103)
 - `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`. Never edit them by hand.
-- To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.11-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
+- To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.14-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
 
 ## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139)
 - `.kiro/steering/*.md` is the single source of truth for the project rules.

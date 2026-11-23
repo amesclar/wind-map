@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Build React/Vite Frontend Assets
 # ==========================================
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 WORKDIR /build
 
 # Install dependencies
@@ -17,14 +17,14 @@ RUN npm run build
 # ==========================================
 # Stage 2: Install Python dependencies (SCRUM-102)
 # ==========================================
-FROM python:3.11-alpine AS python-deps
+FROM python:3.14-alpine AS python-deps
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ==========================================
 # Stage 3: Python Backend Runtime (Alpine, no build tools or test deps)
 # ==========================================
-FROM python:3.11-alpine AS runtime
+FROM python:3.14-alpine AS runtime
 WORKDIR /app
 
 # Environment variables

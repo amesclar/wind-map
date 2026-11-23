@@ -13,7 +13,7 @@ ruff check .
 ruff format --check .   # line-length 120 in ruff.toml
 pytest --cov            # threshold in .coveragerc
 ```
-Python 3.11. If needed, install tools with `pip install -r requirements-dev.txt`.
+Python 3.14. If needed, install tools with `pip install -r requirements-dev.txt`.
 
 ## Frontend
 ```bash
