@@ -82,6 +82,36 @@ FORECAST_DAYS = 4
 if not 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24:
     raise ValueError("FORECAST_DAYS too small for FORECAST_POINTS and FORECAST_STEP_HOURS")
 
+# Per-model forecast metadata (SCRUM-115). The UI shows the update cadence, the time horizon and
+# the derived run times, and `/api/weather/grid?time=` only accepts hours inside the selected
+# model's horizon. Source of truth for the values is the model table at
+# frontend/src/assets/weather-models.md (update frequency and time horizon columns); horizons are
+# capped at Open-Meteo's 16-day maximum. best_match is a composite, so it uses Open-Meteo's
+# documented 7-day default rather than a single model's horizon.
+MODEL_METADATA: dict[str, dict[str, object]] = {
+    "best_match": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
+    "ecmwf_ifs04": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
+    "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
+}
+if set(MODEL_METADATA) != MODEL_IDS:
+    raise ValueError("MODEL_METADATA must describe every entry in AVAILABLE_MODELS")
+
+
+def model_metadata(model: str) -> dict[str, object]:
+    """Metadata for `model`; unknown ids fall back to the default model's entry."""
+    return MODEL_METADATA.get(model, MODEL_METADATA[DEFAULT_MODEL])
+
+
+def model_horizon_hours(model: str) -> int:
+    return int(model_metadata(model)["horizon_hours"])
+
+
+def model_horizon_days(model: str) -> int:
+    """Whole days needed to cover the model's horizon (Open-Meteo caps a request at 16)."""
+    return min(16, -(-model_horizon_hours(model) // 24))
+
+
 # Cache keys round coordinates to 2 decimals (~1.1 km), for point and grid caches.
 COORD_CACHE_PRECISION = 2
 

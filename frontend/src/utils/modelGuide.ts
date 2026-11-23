@@ -9,6 +9,10 @@ export interface ModelGuideRow {
   /** Badge cadence derived from the frequency cell; null when it is not 1h, 3h or 6h. */
   cadence: ModelCadence | null;
   notes: string;
+  /** Time Horizon cell as written, e.g. "7.5 days" (SCRUM-115); empty when not stated. */
+  horizon: string;
+  /** The horizon in whole hours when the cell states one ("7.5 days" → 180), else null. */
+  horizonHours: number | null;
 }
 
 export interface ModelGuide {
@@ -20,6 +24,16 @@ export interface ModelGuide {
 const SEPARATOR_CELL = /^:?-{3,}:?$/;
 const HOURS = /(\d+)\s*(?:h|hr|hrs|hour|hours)\b/i;
 const BADGE_HOURS: ReadonlyArray<number> = [1, 3, 6];
+const HORIZON = /(\d+(?:\.\d+)?)\s*-?\s*(days?|d|hours?|h)\b/i;
+const HOURS_IN_DAY = 24;
+
+/** Hours stated by a Time Horizon cell: "7.5 days" → 180, "18 h (48 h …)" → 18, "—" → null. */
+export function horizonHoursFromText(text: string): number | null {
+  const match = HORIZON.exec(text);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Math.round(match[2].toLowerCase().startsWith('d') ? value * HOURS_IN_DAY : value);
+}
 
 /** Map a frequency cell ("Every 1 hour") to a badge cadence, or null when unknown. */
 export function cadenceFromFrequency(frequency: string): ModelCadence | null {
@@ -61,6 +75,8 @@ export function parseModelGuide(markdown: string): ModelGuide {
       frequency: cells[2] ?? '',
       cadence: cadenceFromFrequency(cells[2] ?? ''),
       notes: cells[3] ?? '',
+      horizon: cells[4] ?? '',
+      horizonHours: horizonHoursFromText(cells[4] ?? ''),
     }));
 
   return { title, headers, rows };

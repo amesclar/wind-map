@@ -3,9 +3,11 @@ directly with plain dicts."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from backend.app.config import FORECAST_POINTS, FORECAST_STEP_HOURS
+from backend.app.config import DEFAULT_TIMEZONE, FORECAST_POINTS, FORECAST_STEP_HOURS
 from backend.app.models import WeatherForecastPoint
 from backend.app.units import as_float, c_to_f, deg_to_cardinal, knots_to_units
 
@@ -24,6 +26,8 @@ FORECAST_VARIABLES = (
 class ParsedForecast:
     current: WeatherForecastPoint
     points: list[WeatherForecastPoint]
+    # Hour `current` describes when one was requested (SCRUM-115); None means live values.
+    valid_time: str | None = None
 
 
 def build_weather_point(
@@ -85,20 +89,36 @@ def _start_index(hourly_times: Sequence[str], current_time: str) -> int:
         return 0
 
 
-def parse_forecast(raw: Mapping[str, Any]) -> ParsedForecast:
-    """Turn an Open-Meteo response into the current conditions plus FORECAST_POINTS
-    slices every FORECAST_STEP_HOURS, starting at the current hour.
+def parse_forecast(
+    raw: Mapping[str, Any],
+    at: datetime | None = None,
+    timezone: str = DEFAULT_TIMEZONE,
+) -> ParsedForecast:
+    """Turn an Open-Meteo response into one frame plus FORECAST_POINTS slices every
+    FORECAST_STEP_HOURS.
 
-    The first ("Now") slice is the `current` block, not the top-of-hour hourly value, so
-    it matches the map grid barbs, which also use `current` (SCRUM-89).
+    Without `at`, the frame is the `current` block and the slices start at the current hour;
+    that matches the map grid barbs, which also use `current` (SCRUM-89). With `at` (SCRUM-115),
+    the frame is that hour's value from the hourly series, in the requested timezone, and the
+    slices start there. Raises ValueError when the response does not cover `at`.
     """
-    current_values = raw.get("current") or {}
-    current_time = current_values.get("time") or ""
-    current = _point_from(current_values, current_time)
-
     hourly = raw.get("hourly") or {}
     times: Sequence[str] = hourly.get("time") or []
-    start = _start_index(times, current_time)
+
+    if at is not None:
+        wanted = at.astimezone(ZoneInfo(timezone)).strftime("%Y-%m-%dT%H:00")
+        if wanted not in times:
+            raise ValueError(f"Open-Meteo response has no hourly values for {wanted}")
+        start = list(times).index(wanted)
+        values = {name: _at(hourly.get(name), start) for name in FORECAST_VARIABLES}
+        current = _point_from(values, wanted)
+        valid_time: str | None = wanted
+    else:
+        current_values = raw.get("current") or {}
+        current_time = current_values.get("time") or ""
+        current = _point_from(current_values, current_time)
+        start = _start_index(times, current_time)
+        valid_time = None
 
     points: list[WeatherForecastPoint] = []
     for i in range(FORECAST_POINTS):
@@ -108,10 +128,13 @@ def parse_forecast(raw: Mapping[str, Any]) -> ParsedForecast:
         values = {name: _at(hourly.get(name), idx) for name in FORECAST_VARIABLES}
         points.append(_point_from(values, times[idx]))
 
-    if current_time:
+    if at is not None:
+        points[0] = current  # the requested hour is the first slice
+    elif current_time:
         if points:
             points[0] = current
         else:
             points.append(current)
+    # Without a current time there is nothing to anchor "now" to: keep the hourly slices.
 
-    return ParsedForecast(current=current, points=points)
+    return ParsedForecast(current=current, points=points, valid_time=valid_time)

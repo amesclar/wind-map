@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 # `locations` need an explicit, data-preserving step in `_migrate`.
 #   0 → 1 (SCRUM-92): all tables created here; grid cache has temperature_f.
 #   1 → 2 (SCRUM-92): forecast caches keyed by timezone too.
-SCHEMA_VERSION = 2
+#   2 → 3 (SCRUM-115): every cache row is keyed by the forecast hour too ('current' = live).
+SCHEMA_VERSION = 3
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -33,17 +34,18 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 """
 
-# Forecast cache for saved locations, keyed by (location_id, model, timezone).
+# Forecast cache for saved locations, keyed by (location_id, model, timezone, hour).
 WEATHER_CACHE_DDL = """
 CREATE TABLE IF NOT EXISTS weather_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     location_id INTEGER NOT NULL,
     model TEXT NOT NULL,
     timezone TEXT NOT NULL,
+    hour TEXT NOT NULL DEFAULT 'current',
     cached_at REAL NOT NULL,
     expires_at REAL NOT NULL,
     payload_json TEXT NOT NULL,
-    UNIQUE(location_id, model, timezone),
+    UNIQUE(location_id, model, timezone, hour),
     FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE
 );
 """
@@ -56,25 +58,28 @@ CREATE TABLE IF NOT EXISTS point_weather_cache (
     lon_key      REAL NOT NULL,
     model        TEXT NOT NULL,
     timezone     TEXT NOT NULL,
+    hour         TEXT NOT NULL DEFAULT 'current',
     cached_at    REAL NOT NULL,
     expires_at   REAL NOT NULL,
     payload_json TEXT NOT NULL,
-    PRIMARY KEY (lat_key, lon_key, model, timezone)
+    PRIMARY KEY (lat_key, lon_key, model, timezone, hour)
 );
 """
 
-# Current wind and temperature for wind-grid points, keyed by rounded coordinates.
+# Wind and temperature for wind-grid points, keyed by rounded coordinates and forecast hour
+# ('current' for live values, else the UTC hour — SCRUM-115).
 GRID_CACHE_DDL = """
 CREATE TABLE IF NOT EXISTS grid_weather_cache (
     lat_key            REAL NOT NULL,
     lon_key            REAL NOT NULL,
     model              TEXT NOT NULL,
+    hour               TEXT NOT NULL DEFAULT 'current',
     cached_at          REAL NOT NULL,
     expires_at         REAL NOT NULL,
     wind_speed_knots   REAL NOT NULL,
     wind_direction_deg REAL NOT NULL,
     temperature_f      REAL,
-    PRIMARY KEY (lat_key, lon_key, model)
+    PRIMARY KEY (lat_key, lon_key, model, hour)
 );
 """
 

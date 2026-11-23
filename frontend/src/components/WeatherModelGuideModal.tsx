@@ -89,6 +89,12 @@ export const WeatherModelGuideModal: React.FC<WeatherModelGuideModalProps> = ({
                       )}
                     </td>
                     <td className={`${BODY_CELL} text-[11px] text-gray-400`}>{row.notes}</td>
+                    <td
+                      className={`${BODY_CELL} text-[11px] text-gray-300 whitespace-nowrap`}
+                      title="Time horizon this model's forecast covers"
+                    >
+                      {row.horizon || '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

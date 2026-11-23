@@ -20,13 +20,29 @@ describe('useAllWeather (SCRUM-92)', () => {
     });
     await waitFor(() => expect(Object.keys(result.current.weatherMap)).toEqual(['1', '2']));
     expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
-    expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', { signal: expect.any(AbortSignal) });
+    expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', {
+      signal: expect.any(AbortSignal),
+      time: null,
+    });
 
     rerender({ model: 'gfs_seamless', tz: 'UTC' });
     await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(2));
 
     rerender({ model: 'gfs_seamless', tz: 'Asia/Tokyo' });
     await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(3));
+  });
+
+  it('requests the selected forecast hour and reloads when it changes (SCRUM-115)', async () => {
+    const { rerender } = renderHook(
+      ({ time }: { time: string | null }) => useAllWeather('best_match', 'UTC', time),
+      { initialProps: { time: null as string | null } },
+    );
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.fetchAllWeather).mock.calls[0][2]).toMatchObject({ time: null });
+
+    rerender({ time: '2026-11-25T12:00:00Z' });
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.fetchAllWeather).mock.calls[1][2]).toMatchObject({ time: '2026-11-25T12:00:00Z' });
   });
 
   it('drops a deleted location and keeps the rest', async () => {

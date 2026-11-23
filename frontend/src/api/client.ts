@@ -5,7 +5,7 @@ import {
   NewLocation,
   SavedLocation,
   WeatherForecastResponse,
-  WeatherModel,
+  WeatherModelInfo,
 } from '../types';
 import { DEFAULT_MODEL, DEFAULT_TIMEZONE } from '../constants';
 
@@ -27,6 +27,12 @@ export class ApiError extends Error {
 
 export interface RequestOptions {
   signal?: AbortSignal;
+}
+
+/** Request options for the forecast endpoints plus the selected forecast hour (SCRUM-115). */
+export interface ForecastRequestOptions extends RequestOptions {
+  /** ISO 8601 hour; omitted means current conditions. */
+  time?: string | null;
 }
 
 type Params = Record<string, string | number>;
@@ -67,7 +73,7 @@ export function deleteLocation(id: number): Promise<void> {
   return request(`/locations/${id}`, 'Failed to delete location', { init: { method: 'DELETE' } });
 }
 
-export function fetchModels(): Promise<WeatherModel[]> {
+export function fetchModels(): Promise<WeatherModelInfo[]> {
   return request('/weather/models', 'Failed to load weather models');
 }
 
@@ -86,9 +92,11 @@ export function fetchWeather(
 export function fetchAllWeather(
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal }: RequestOptions = {},
+  { signal, time }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse[]> {
-  return request('/weather/all', 'Failed to load all weather data', { params: { model, timezone }, signal });
+  const params: Params = { model, timezone };
+  if (time) params.time = time;
+  return request('/weather/all', 'Failed to load all weather data', { params, signal });
 }
 
 /**
@@ -124,13 +132,15 @@ export function fetchWindGrid(
     cols: number;
     rows: number;
     model?: string;
+    /** ISO 8601 hour inside the model's horizon; omitted means current (SCRUM-115). */
+    time?: string | null;
   },
   { signal }: RequestOptions = {},
 ): Promise<GridWindPoint[]> {
-  return request('/weather/grid', 'Failed to fetch wind grid', {
-    params: { ...params, model: params.model ?? DEFAULT_MODEL },
-    signal,
-  });
+  const { time, ...box } = params;
+  const query: Params = { ...box, model: params.model ?? DEFAULT_MODEL };
+  if (time) query.time = time;
+  return request('/weather/grid', 'Failed to fetch wind grid', { params: query, signal });
 }
 
 export function fetchPointWeather(

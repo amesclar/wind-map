@@ -1,6 +1,7 @@
-"""Grid weather router: returns current wind for a lat/lon bounding box."""
+"""Grid weather router: returns wind for a lat/lon bounding box, now or at a forecast hour."""
 
 import logging
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +10,7 @@ from backend.app.config import GRID_MAX_DIM
 from backend.app.dependencies import model_param
 from backend.app.models import GridWindPoint
 from backend.app.services.grid_weather_service import get_grid_wind
+from backend.app.services.time_window import validate_forecast_time
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,12 @@ router = APIRouter(prefix="/api/weather/grid", tags=["grid"])
 # Hard limits to prevent runaway requests
 MAX_COLS = GRID_MAX_DIM
 MAX_ROWS = GRID_MAX_DIM
+
+TIME_QUERY = Query(
+    None,
+    description="Forecast hour (ISO 8601 with offset, hour-aligned) up to the model's horizon. "
+    "Omit for current conditions.",
+)
 
 
 @router.get("", response_model=list[GridWindPoint])
@@ -28,7 +36,9 @@ async def get_wind_grid(
     cols: int = Query(..., ge=2, le=MAX_COLS),
     rows: int = Query(..., ge=2, le=MAX_ROWS),
     model: str = Depends(model_param),
+    time: datetime | None = TIME_QUERY,
 ) -> list[GridWindPoint]:
+    at = validate_forecast_time(time, model)
     if min_lat >= max_lat:
         raise HTTPException(
             status_code=422,
@@ -48,7 +58,7 @@ async def get_wind_grid(
     ]
 
     try:
-        return await get_grid_wind(points, model=model)
+        return await get_grid_wind(points, model=model, at=at)
     except httpx.HTTPError as exc:
         logger.exception("Open-Meteo grid request failed (%d points)", len(points))
         raise HTTPException(
