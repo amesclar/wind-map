@@ -1,7 +1,8 @@
 """Grid weather router: returns wind for a lat/lon bounding box, now or at a forecast hour."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
+from math import ceil
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,7 @@ from backend.app.config import GRID_MAX_DIM
 from backend.app.dependencies import model_param
 from backend.app.models import GridWindPoint
 from backend.app.services.grid_weather_service import get_grid_wind
+from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.services.time_window import validate_forecast_time
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,22 @@ async def get_wind_grid(
 
     try:
         return await get_grid_wind(points, model=model, at=at)
+    except QuotaExceededError as exc:
+        logger.warning("Open-Meteo quota exhausted (%d points); reset at %s", len(points), exc.reset_at)
+        detail = {
+            "code": "open_meteo_quota_exhausted",
+            "message": "Open-Meteo request limit reached",
+            "reset_at": exc.reset_at.isoformat() if exc.reset_at else None,
+        }
+        headers = None
+        if exc.reset_at:
+            seconds = max(0, ceil((exc.reset_at - datetime.now(UTC)).total_seconds()))
+            headers = {"Retry-After": str(seconds)}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+            headers=headers,
+        ) from exc
     except httpx.HTTPError as exc:
         logger.exception("Open-Meteo grid request failed (%d points)", len(points))
         raise HTTPException(

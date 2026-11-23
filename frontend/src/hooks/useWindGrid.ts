@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type L from 'leaflet';
-import { fetchWindGrid } from '../api/client';
+import { fetchWindGrid, parseQuotaExhausted } from '../api/client';
 import type { GridWindPoint } from '../types';
 
 /**
@@ -39,6 +39,8 @@ export function useWindGrid(
   validTime: string | null = null,
   /** Readiness report for the range export (SCRUM-155): the hour and points just accepted. */
   onLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void,
+  /** Called once when Open-Meteo's request limit stops the grid (SCRUM-170). */
+  onQuotaExhausted?: (resetAt: string | null) => void,
 ): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
 
@@ -79,8 +81,13 @@ export function useWindGrid(
         }
       } catch (err) {
         if (current.signal.aborted) return; // superseded or unmounted
-        console.error('Failed to load wind grid:', err);
         if (lastKey === key) lastKey = ''; // allow a retry of the same view
+        const quota = parseQuotaExhausted(err);
+        if (quota) {
+          onQuotaExhausted?.(quota.resetAt);
+          return;
+        }
+        console.error('Failed to load wind grid:', err);
       }
     };
 
@@ -92,7 +99,7 @@ export function useWindGrid(
       map.off('zoomend', refresh);
       controller?.abort();
     };
-  }, [map, model, enabled, validTime, onLoaded]);
+  }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted]);
 
   return points;
 }

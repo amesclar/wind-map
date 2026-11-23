@@ -8,7 +8,7 @@ import * as api from '../api/client';
 vi.mock('leaflet', () => import('../test/leafletMock'));
 
 // The shared wind grid fetch lives in MapView (SCRUM-122).
-vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn() }));
+vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn(), parseQuotaExhausted: vi.fn() }));
 
 beforeEach(() => {
   resetLeafletMock();

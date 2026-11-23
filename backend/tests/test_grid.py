@@ -2,10 +2,12 @@
 
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
 from backend.app.services.grid_weather_service import _fetch_from_open_meteo, get_grid_wind
+from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import coord_key as _cache_key
 from factories import grid_hourly_item, grid_item, grid_payload, insert_grid_row, upstream_error
 
@@ -380,6 +382,44 @@ def test_grid_endpoint_includes_temperature_f(client, open_meteo):
 # ---------------------------------------------------------------------------
 # SCRUM-92 phase 1: specific error handling
 # ---------------------------------------------------------------------------
+
+
+def test_grid_endpoint_quota_exhausted_reports_the_reset_time(client, open_meteo, monkeypatch):
+    reset_at = datetime(2026, 11, 24, 0, 0, tzinfo=UTC)
+
+    async def quota(*args, **kwargs):
+        raise QuotaExceededError(
+            "limit reached",
+            reset_at=reset_at,
+            request=httpx.Request("GET", "https://api.open-meteo.com/v1/forecast"),
+        )
+
+    monkeypatch.setattr("backend.app.routers.grid.get_grid_wind", quota)
+
+    resp = client.get("/api/weather/grid", params=grid_params())
+
+    assert resp.status_code == 503
+    detail = resp.json()["detail"]
+    assert detail["code"] == "open_meteo_quota_exhausted"
+    assert detail["reset_at"] == reset_at.isoformat()
+    assert int(resp.headers["retry-after"]) >= 0
+
+
+def test_grid_endpoint_quota_without_a_reset_time(client, open_meteo, monkeypatch):
+    async def quota(*args, **kwargs):
+        raise QuotaExceededError("limit reached", reset_at=None)
+
+    monkeypatch.setattr("backend.app.routers.grid.get_grid_wind", quota)
+
+    resp = client.get("/api/weather/grid", params=grid_params())
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == {
+        "code": "open_meteo_quota_exhausted",
+        "message": "Open-Meteo request limit reached",
+        "reset_at": None,
+    }
+    assert "retry-after" not in resp.headers
 
 
 def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, open_meteo):

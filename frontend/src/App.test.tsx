@@ -31,6 +31,7 @@ vi.mock('./utils/rangeOutput', () => ({
 }));
 import { saveRangeImages, saveRangePdf } from './utils/rangeOutput';
 import { buildWindColorScale } from './utils/windColorScale';
+import { formatQuotaReset } from './components/QuotaWarningDialog';
 
 // The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
 // fetchWeather/fetchPointWeather at all.
@@ -43,6 +44,7 @@ vi.mock('./api/client', () => ({
   fetchAppConfig: vi.fn(),
   searchGeocode: vi.fn(),
   fetchWindGrid: vi.fn(),
+  parseQuotaExhausted: vi.fn(),
 }));
 
 import * as api from './api/client';
@@ -124,6 +126,7 @@ describe('App map integration (SCRUM-126)', () => {
     ]);
     (api.fetchAppConfig as any).mockResolvedValue({});
     (api.fetchAllWeather as any).mockResolvedValue([oakForecast, seattleForecast]);
+    vi.mocked(api.parseQuotaExhausted).mockReturnValue(null);
     // The range loop's readiness signal needs points that name the hour that was requested; the
     // live view starts with no barbs so the grid-click tests control their own responses.
     (api.fetchWindGrid as any).mockImplementation(async (params: { time?: string | null }) =>
@@ -147,6 +150,29 @@ describe('App map integration (SCRUM-126)', () => {
 
     const mapWrapper = screen.getByTestId('map-canvas').parentElement as HTMLElement;
     expect(mapWrapper.className.split(/\s+/)).toContain('isolate');
+  });
+
+  it('warns once when the grid quota is exhausted, naming the reset time (SCRUM-170)', async () => {
+    localStorage.setItem(STORAGE_KEYS.windColorOverlayVisible, 'true');
+    vi.mocked(api.parseQuotaExhausted).mockReturnValue({ resetAt: '2026-11-24T00:00:29Z' });
+    vi.mocked(api.fetchWindGrid).mockRejectedValue(new Error('quota reached'));
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('quota-warning')).toBeTruthy());
+    const reset = formatQuotaReset('2026-11-24T00:00:29Z', 'America/Los_Angeles');
+    expect(reset).toContain('4:00 PM');
+    expect(screen.getByText(`Wind data should return at ${reset}.`)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByTestId('quota-warning')).toBeNull());
+
+    // The same quota window must not reopen the dismissed dialog on the next grid failure.
+    const map = currentMap();
+    map.bounds = { south: 46.0, north: 50.0, west: -124.0, east: -120.0 };
+    map.fire('moveend');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('quota-warning')).toBeNull();
   });
 
   it('selects a location from the saved-locations modal', async () => {
