@@ -4,17 +4,17 @@ All forecast, grid and geocoding requests go through `get_json`, so timeouts, re
 and the model rule live in one place. Callers handle `httpx.HTTPError`.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
 from backend.app.config import DEFAULT_MODEL, OPEN_METEO_RETRIES, OPEN_METEO_TIMEOUT_SECONDS
 
 
-def forecast_params(model: str) -> Dict[str, Any]:
+def forecast_params(model: str) -> dict[str, Any]:
     """Parameters every forecast request shares: speeds in knots, plus `models` unless
     Open-Meteo should choose (best_match)."""
-    params: Dict[str, Any] = {"wind_speed_unit": "kn"}
+    params: dict[str, Any] = {"wind_speed_unit": "kn"}
     if model and model != DEFAULT_MODEL:
         params["models"] = model
     return params
@@ -22,7 +22,7 @@ def forecast_params(model: str) -> Dict[str, Any]:
 
 async def get_json(
     url: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     timeout: float = OPEN_METEO_TIMEOUT_SECONDS,
     retries: int = OPEN_METEO_RETRIES,
 ) -> Any:

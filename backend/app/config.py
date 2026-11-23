@@ -90,4 +90,3 @@ GRID_MAX_DIM = 30
 
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
-

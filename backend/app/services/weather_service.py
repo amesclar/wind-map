@@ -7,7 +7,7 @@ Each step is its own function or class:
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from backend.app.config import DEFAULT_MODEL, DEFAULT_TIMEZONE, FORECAST_DAYS, OPEN_METEO_FORECAST_URL
 from backend.app.models import POINT_LOCATION_ID, LocationResponse, WeatherForecastResponse
@@ -21,7 +21,7 @@ def point_name(lat: float, lon: float) -> str:
     return f"{abs(lat):.2f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.2f}°{'E' if lon >= 0 else 'W'}"
 
 
-async def fetch_forecast(latitude: float, longitude: float, model: str, timezone: str) -> Dict[str, Any]:
+async def fetch_forecast(latitude: float, longitude: float, model: str, timezone: str) -> dict[str, Any]:
     """Raw Open-Meteo forecast (current + hourly). Raises httpx.HTTPError."""
     variables = ",".join(FORECAST_VARIABLES)
     params = {
@@ -38,7 +38,7 @@ async def fetch_forecast(latitude: float, longitude: float, model: str, timezone
 
 async def _get_forecast(
     cache: ForecastCache,
-    identity: Dict[str, Any],
+    identity: dict[str, Any],
     model: str,
     timezone: str,
 ) -> WeatherForecastResponse:
@@ -53,9 +53,7 @@ async def _get_forecast(
     if hit:
         return WeatherForecastResponse(**{**hit.payload, **identity}, cached=True, cached_at=hit.cached_at)
 
-    parsed = parse_forecast(
-        await fetch_forecast(identity["latitude"], identity["longitude"], model, timezone)
-    )
+    parsed = parse_forecast(await fetch_forecast(identity["latitude"], identity["longitude"], model, timezone))
     payload = {
         **identity,
         "model": model,

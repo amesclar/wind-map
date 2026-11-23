@@ -134,7 +134,7 @@ You must automatically create or update unit tests for every functional code cha
 ## 4. CI Checks and Branch Protection (SCRUM-108, SCRUM-119)
 - **Before pushing,** run the same checks CI runs and make sure they pass:
   ```bash
-  ruff check .                                   # Python lint and security rules
+  ruff check . && ruff format --check .          # Python lint, security and formatting
   pytest --cov                                   # backend tests, minimum coverage in .coveragerc
   cd frontend && npm run lint && npm run typecheck && npm run test:coverage
   ```

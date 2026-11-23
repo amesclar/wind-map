@@ -1,7 +1,5 @@
 """Locations API router: CRUD operations for saved locations."""
 
-from typing import List
-
 from fastapi import APIRouter, HTTPException, status
 
 from backend.app import locations_repo
@@ -10,8 +8,8 @@ from backend.app.models import LocationCreate, LocationResponse
 router = APIRouter(prefix="/api/locations", tags=["locations"])
 
 
-@router.get("", response_model=List[LocationResponse])
-def list_locations() -> List[LocationResponse]:
+@router.get("", response_model=list[LocationResponse])
+def list_locations() -> list[LocationResponse]:
     return locations_repo.list_locations()
 
 

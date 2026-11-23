@@ -1,4 +1,5 @@
 """Builders for Open-Meteo payloads, httpx responses and cache rows used by the tests."""
+
 import copy
 import time
 

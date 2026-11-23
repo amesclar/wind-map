@@ -30,6 +30,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Lint (ruff)
         run: ruff check .
+      - name: Check formatting (ruff format)
+        run: ruff format --check .
       - name: Tests with coverage (threshold in .coveragerc)
         run: pytest --cov
       - name: Audit runtime dependencies

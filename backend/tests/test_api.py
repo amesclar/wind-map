@@ -69,10 +69,10 @@ def test_weather_models_list(client):
     assert "icon_seamless" in model_ids
 
 
-
 # ---------------------------------------------------------------------------
 # SCRUM-92 phase 1: CORS is off unless CORS_ORIGINS is set
 # ---------------------------------------------------------------------------
+
 
 def test_parse_cors_origins():
     assert parse_cors_origins(None) == []
@@ -90,6 +90,7 @@ def test_cross_origin_requests_get_no_cors_headers_by_default(client):
 # ---------------------------------------------------------------------------
 # SCRUM-92 phase 3: locations repository behaviour
 # ---------------------------------------------------------------------------
+
 
 def test_deleting_a_location_cascades_to_its_cached_forecasts(client, open_meteo):
     from backend.app.database import db_connection

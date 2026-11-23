@@ -1,4 +1,5 @@
 """Shared Open-Meteo client (SCRUM-92)."""
+
 import httpx
 import pytest
 
