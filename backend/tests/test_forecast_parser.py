@@ -1,4 +1,5 @@
 """Pure forecast parsing (SCRUM-92 phase 4): plain dicts in, models out, no mocks."""
+
 from backend.app.config import FORECAST_POINTS, FORECAST_STEP_HOURS
 from backend.app.services.forecast_parser import parse_forecast
 from factories import forecast_payload

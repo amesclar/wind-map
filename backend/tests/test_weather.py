@@ -1,4 +1,5 @@
 """Weather service and caching tests."""
+
 from unittest.mock import patch
 
 import httpx
@@ -82,10 +83,10 @@ def test_point_weather_location_name_format(client, open_meteo):
     """Name should encode N/S and E/W correctly for all quadrants."""
     open_meteo.respond(forecast_payload())
     cases = [
-        (48.29,  -122.60, "N", "W"),
-        (-33.87,  151.21, "S", "E"),
-        (1.0,     -1.0,   "N", "W"),
-        (-1.0,     1.0,   "S", "E"),
+        (48.29, -122.60, "N", "W"),
+        (-33.87, 151.21, "S", "E"),
+        (1.0, -1.0, "N", "W"),
+        (-1.0, 1.0, "S", "E"),
     ]
     for lat, lon, expected_lat_hem, expected_lon_hem in cases:
         resp = client.get(f"/api/weather/point?lat={lat}&lon={lon}")
@@ -124,9 +125,7 @@ def test_saved_location_still_uses_weather_cache(client, open_meteo):
     open_meteo.respond(forecast_payload())
     client.get(f"/api/weather?location_id={loc_id}&model=best_match")
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT COUNT(*) AS n FROM weather_cache WHERE location_id = ?;", (loc_id,)
-    ).fetchone()
+    rows = conn.execute("SELECT COUNT(*) AS n FROM weather_cache WHERE location_id = ?;", (loc_id,)).fetchone()
     conn.close()
     assert rows["n"] == 1
 
@@ -174,6 +173,7 @@ def test_first_forecast_slice_uses_current_conditions(client, open_meteo):
 # SCRUM-92 phase 1: specific error handling
 # ---------------------------------------------------------------------------
 
+
 def test_location_weather_upstream_failure_is_502_without_internal_detail(client, open_meteo):
     loc_id = client.get("/api/locations").json()[0]["id"]
     open_meteo.fail(upstream_error())
@@ -214,6 +214,7 @@ def test_all_weather_skips_and_logs_failed_location(client, open_meteo, caplog):
 # SCRUM-92 phase 3: model validation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -248,6 +249,7 @@ def test_invalid_json_from_open_meteo_is_502(client, monkeypatch):
 # ---------------------------------------------------------------------------
 # SCRUM-92 phase 4: forecast caches are keyed by timezone
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("path", ["/api/weather?location_id=1", "/api/weather/point?lat=48.78&lon=-121.94"])
 def test_changing_timezone_does_not_serve_the_other_timezones_cache(client, open_meteo, path):

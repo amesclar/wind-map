@@ -53,9 +53,7 @@ async def _get_forecast(
     if hit:
         return WeatherForecastResponse(**{**hit.payload, **identity}, cached=True, cached_at=hit.cached_at)
 
-    parsed = parse_forecast(
-        await fetch_forecast(identity["latitude"], identity["longitude"], model, timezone)
-    )
+    parsed = parse_forecast(await fetch_forecast(identity["latitude"], identity["longitude"], model, timezone))
     payload = {
         **identity,
         "model": model,

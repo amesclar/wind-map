@@ -1,6 +1,5 @@
 """Tests for the wind grid endpoint and grid_weather_service."""
 
-
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
@@ -18,6 +17,7 @@ def grid_params(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 # Unit: _cache_key
 # ---------------------------------------------------------------------------
+
 
 def test_cache_key_rounds_to_precision():
     lk, lnk = _cache_key(48.29391, -122.60641)
@@ -37,6 +37,7 @@ def test_cache_key_same_for_nearby_points():
 # ---------------------------------------------------------------------------
 # Unit: _fetch_from_open_meteo
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_fetch_single_point_dict_response(open_meteo):
@@ -107,6 +108,7 @@ async def test_fetch_best_match_omits_models_param(open_meteo):
 # Unit: get_grid_wind (service layer with cache)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_grid_wind_empty_input(open_meteo):
     result = await get_grid_wind([])
@@ -149,7 +151,7 @@ async def test_get_grid_wind_partial_cache_hit(open_meteo):
     assert open_meteo.last_params["latitude"] == "47.0"
 
     speeds = {round(p.wind_speed_knots, 1) for p in result}
-    assert 7.0 in speeds   # from cache
+    assert 7.0 in speeds  # from cache
     assert 25.0 in speeds  # from API
 
 
@@ -183,6 +185,7 @@ async def test_get_grid_wind_different_models_cached_independently(open_meteo):
 # ---------------------------------------------------------------------------
 # Integration: GET /api/weather/grid
 # ---------------------------------------------------------------------------
+
 
 def test_grid_endpoint_returns_correct_point_count(client, open_meteo):
     """cols × rows must equal the number of returned points."""
@@ -281,6 +284,7 @@ def test_grid_endpoint_second_request_served_from_cache(client, open_meteo):
 # SCRUM-89: temperature for temperature-colored map barbs
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_fetch_returns_temperature_f_and_requests_temperature(open_meteo):
     """Grid points carry current temperature in °F, converted like the drawer (1 decimal)."""
@@ -334,6 +338,7 @@ def test_grid_endpoint_includes_temperature_f(client, open_meteo):
 # ---------------------------------------------------------------------------
 # SCRUM-92 phase 1: specific error handling
 # ---------------------------------------------------------------------------
+
 
 def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, open_meteo):
     open_meteo.fail(upstream_error("secret-host.internal"))

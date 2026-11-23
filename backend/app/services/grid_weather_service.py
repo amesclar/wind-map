@@ -84,8 +84,15 @@ def _store_points(fetched: List[GridWindPoint], model: str, now: float) -> None:
                 temperature_f=excluded.temperature_f
             """,
             [
-                (*coord_key(p.latitude, p.longitude), model, now, expires_at,
-                 p.wind_speed_knots, p.wind_direction_deg, p.temperature_f)
+                (
+                    *coord_key(p.latitude, p.longitude),
+                    model,
+                    now,
+                    expires_at,
+                    p.wind_speed_knots,
+                    p.wind_direction_deg,
+                    p.temperature_f,
+                )
                 for p in fetched
             ],
         )

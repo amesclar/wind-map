@@ -1,4 +1,5 @@
 """Shared unit conversions and cache keys (SCRUM-92)."""
+
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION

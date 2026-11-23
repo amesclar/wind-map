@@ -26,9 +26,7 @@ def _to_location(row: sqlite3.Row) -> LocationResponse:
 def list_locations() -> List[LocationResponse]:
     """Default location first, then in creation order."""
     with db_connection() as conn:
-        rows = conn.execute(
-            f"SELECT {_COLUMNS} FROM locations ORDER BY is_default DESC, id ASC;"
-        ).fetchall()
+        rows = conn.execute(f"SELECT {_COLUMNS} FROM locations ORDER BY is_default DESC, id ASC;").fetchall()
     return [_to_location(r) for r in rows]
 
 
@@ -65,9 +63,7 @@ def create_or_get_location(location: LocationCreate) -> LocationResponse:
                 location.country.strip() if location.country else None,
             ),
         )
-        row = conn.execute(
-            f"SELECT {_COLUMNS} FROM locations WHERE id = ?;", (cursor.lastrowid,)
-        ).fetchone()
+        row = conn.execute(f"SELECT {_COLUMNS} FROM locations WHERE id = ?;", (cursor.lastrowid,)).fetchone()
     return _to_location(row)
 
 

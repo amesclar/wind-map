@@ -45,9 +45,7 @@ async def get_wind_grid(
     lon_step = (max_lon - min_lon) / (cols - 1) if cols > 1 else 0
 
     points = [
-        (round(min_lat + r * lat_step, 6), round(min_lon + c * lon_step, 6))
-        for r in range(rows)
-        for c in range(cols)
+        (round(min_lat + r * lat_step, 6), round(min_lon + c * lon_step, 6)) for r in range(rows) for c in range(cols)
     ]
 
     try:
