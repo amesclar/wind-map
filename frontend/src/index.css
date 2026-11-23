@@ -1,6 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 is configured in CSS, not JavaScript (SCRUM-151). `@theme` replaces the four
+   `dark` colours from the old tailwind.config.js, so `bg-dark-900` and friends keep working. */
+@import "tailwindcss";
+
+@theme {
+  --color-dark-900: #0d1117;
+  --color-dark-800: #161b22;
+  --color-dark-700: #21262d;
+  --color-dark-600: #30363d;
+}
+
+/* Class-based dark mode, matching `darkMode: 'class'` in v3: `dark:` follows the `.dark`
+   class on <html> rather than the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Custom Leaflet Map styling for minimalist dark mode */
 .leaflet-container {

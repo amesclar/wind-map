@@ -40,7 +40,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
       <div className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-600">
@@ -145,7 +145,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 data-testid="wind-overlay-toggle"
                 type="button"
                 onClick={() => onToggleWindOverlay(!windOverlayVisible)}
-                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ml-3 ${
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
                   windOverlayVisible ? 'bg-sky-500' : 'bg-dark-600'
                 }`}
                 aria-pressed={windOverlayVisible}
@@ -178,7 +178,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 data-testid="wind-color-overlay-toggle"
                 type="button"
                 onClick={() => onToggleWindColorOverlay(!windColorOverlayVisible)}
-                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ml-3 ${
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
                   windColorOverlayVisible ? 'bg-sky-500' : 'bg-dark-600'
                 }`}
                 aria-pressed={windColorOverlayVisible}
@@ -220,7 +220,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 value={inputKey}
                 onChange={(e) => setInputKey(e.target.value)}
                 placeholder="Paste CARTO API Key here..."
-                className="w-full px-3 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:border-sky-500"
+                className="w-full px-3 py-1.5 bg-dark-900 border border-dark-600 rounded-lg text-xs font-mono text-gray-100 placeholder:text-gray-500 focus:outline-hidden focus:border-sky-500"
               />
 
               <div className="flex items-center justify-between">

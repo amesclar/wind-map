@@ -56,11 +56,11 @@ export const WindColorLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedU
       data-testid="wind-color-legend"
       role="img"
       aria-label={`Wind speed color scale from 0 to ${Math.round(max)} ${label}`}
-      className="wind-color-legend absolute inset-x-0 z-30 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-sm border-y border-dark-600/70"
+      className="wind-color-legend absolute inset-x-0 z-30 pointer-events-none flex items-center gap-2 px-2 bg-dark-900/75 backdrop-blur-xs border-y border-dark-600/70"
       style={{ height: LEGEND_HEIGHT_PX }}
     >
       <div
-        className="relative flex-1 h-2.5 rounded-sm border border-black/50"
+        className="relative flex-1 h-2.5 rounded-xs border border-black/50"
         style={{ background: windColorCssGradient() }}
       >
         {ticks.map((value, index) => {
