@@ -25,7 +25,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
 - **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
-- **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls.
+- **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
 ---
