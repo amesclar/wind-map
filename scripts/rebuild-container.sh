@@ -14,7 +14,10 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! docker build -q -t wind-map . >&2; then
+# Build metadata (SCRUM-159): pass the short commit hash so the app can show `X.Y.Z-<hash>`.
+# GIT_SHA wins when set; otherwise use this checkout, and leave it empty outside a repository.
+git_sha="${GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || true)}"
+if ! docker build -q --build-arg "GIT_SHA=${git_sha}" -t wind-map . >&2; then
   echo "rebuild-container: docker build failed" >&2
   exit 0
 fi

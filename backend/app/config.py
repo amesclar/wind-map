@@ -1,6 +1,7 @@
 """Application configuration settings."""
 
 import os
+import re
 from pathlib import Path
 
 # Paths
@@ -23,7 +24,25 @@ def read_app_version(path: Path = VERSION_FILE) -> str:
         return "0.0.0"
 
 
-APP_VERSION = read_app_version()
+# Build metadata (SCRUM-159): the short commit hash shown with the version. The image gets it as
+# the GIT_SHA build arg (`scripts/rebuild-container.sh`), so a source build without a repo can
+# still report which commit it came from. VERSION itself stays plain semver.
+GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{4,40}", re.IGNORECASE)
+
+
+def read_git_sha(value: str | None = None) -> str:
+    """Short commit hash from GIT_SHA, or "" when the build has none or it is malformed."""
+    sha = (os.getenv("GIT_SHA", "") if value is None else value).strip()
+    return sha if GIT_SHA_PATTERN.fullmatch(sha) else ""
+
+
+def compose_version(version: str, sha: str) -> str:
+    """`X.Y.Z-<hash>`, or plain `X.Y.Z` when there is no usable commit hash (SCRUM-159)."""
+    base, hash_value = version.strip(), sha.strip()
+    return f"{base}-{hash_value}" if GIT_SHA_PATTERN.fullmatch(hash_value) else base
+
+
+APP_VERSION = compose_version(read_app_version(), read_git_sha())
 
 # Cache settings
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "1800"))  # 30 minutes

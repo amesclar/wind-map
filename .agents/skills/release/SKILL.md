@@ -5,7 +5,7 @@ description: Cut a wind-map release vX.Y.Z by bumping VERSION and frontend/packa
 
 # Release vX.Y.Z
 
-Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the contents of `VERSION`.
+Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the contents of `VERSION`; the app displays `X.Y.Z-<short-hash>` (SCRUM-159) because the badge and `/api/health` append the hash from the `GIT_SHA` build arg, while `VERSION` and the tag stay plain semver. If the user only asks for a build to test, bump the patch digit and rebuild the container instead of cutting a release.
 
 1. If the user did not give a version, or asks for a release without a bump, ask which version to use before doing anything.
 2. Make sure a release ticket exists (create one with a story point estimate if not).

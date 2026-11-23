@@ -184,7 +184,7 @@ The weather endpoints accept `model` (one of the ids from `/api/weather/models`;
 
 ## Versioning
 
-The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.2.0`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it as `v0.2.0`. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
+The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.7.1`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
 
 ```bash
 echo "X.Y.Z" > VERSION
@@ -192,6 +192,8 @@ echo "X.Y.Z" > VERSION
 ```
 
 Tests fail if the two files disagree.
+
+The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0.7.1-db9f569` in the navbar and `"version": "0.7.1-db9f569"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.7.0` -> `0.7.1`): that is not a release, so it needs no release notes or tag.
 
 ---
 

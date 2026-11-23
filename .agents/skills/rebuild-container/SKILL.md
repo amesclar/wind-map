@@ -11,7 +11,7 @@ description: Rebuild the wind-map Docker image and restart the local container o
 scripts/rebuild-container.sh
 ```
 
-The script builds `wind-map`, replaces the `wind-map` container, keeps data in the `wind_data` volume, passes `CARTO_API_KEY` if it is set, and waits for `GET /api/health`. It exits 0 without doing anything when Docker is not installed or not running, so it never blocks a session.
+The script builds `wind-map`, replaces the `wind-map` container, keeps data in the `wind_data` volume, passes `CARTO_API_KEY` if it is set, and waits for `GET /api/health`. It passes the short commit hash as the `GIT_SHA` build arg (SCRUM-159), so the badge and `/api/health` show `X.Y.Z-<hash>`; set `GIT_SHA` yourself to label a build from another commit. It exits 0 without doing anything when Docker is not installed or not running, so it never blocks a session.
 
 Check the result:
 ```bash

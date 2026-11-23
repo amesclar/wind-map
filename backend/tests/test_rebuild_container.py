@@ -33,7 +33,7 @@ def fake_env(tmp_path):
         path = bin_dir / name
         path.write_text(body, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
-    env = {k: v for k, v in os.environ.items() if k not in ("WIND_MAP_SKIP_REBUILD", "CARTO_API_KEY")}
+    env = {k: v for k, v in os.environ.items() if k not in ("WIND_MAP_SKIP_REBUILD", "CARTO_API_KEY", "GIT_SHA")}
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     env["FAKE_LOG"] = str(tmp_path / "docker.log")
     return env
@@ -64,18 +64,18 @@ def test_unavailable_docker_is_skipped(fake_env):
 
 
 def test_build_failure_keeps_the_running_container(fake_env):
-    result, calls = _run(fake_env, FAKE_BUILD_FAIL="1")
+    result, calls = _run(fake_env, FAKE_BUILD_FAIL="1", GIT_SHA="db9f569")
     assert result.returncode == 0
-    assert calls == ["info", "build -q -t wind-map ."]
+    assert calls == ["info", "build -q --build-arg GIT_SHA=db9f569 -t wind-map ."]
     assert "docker build failed" in result.stderr
 
 
 def test_success_replaces_the_container_with_the_data_volume(fake_env):
-    result, calls = _run(fake_env, CARTO_API_KEY="key")
+    result, calls = _run(fake_env, CARTO_API_KEY="key", GIT_SHA="db9f569")
     assert result.returncode == 0
     assert calls == [
         "info",
-        "build -q -t wind-map .",
+        "build -q --build-arg GIT_SHA=db9f569 -t wind-map .",
         "stop wind-map",
         "rm wind-map",
         "run -d --name wind-map -p 5005:5005 -e CARTO_API_KEY -v wind_data:/app/data wind-map",

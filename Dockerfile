@@ -4,6 +4,10 @@
 FROM node:24-alpine AS frontend-builder
 WORKDIR /build
 
+# Build metadata (SCRUM-159): short commit hash appended to the displayed version.
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
+
 # Install dependencies
 COPY frontend/package*.json ./
 RUN npm install
@@ -56,6 +60,11 @@ CMD ["pytest", "--cov"]
 # ==========================================
 FROM python:3.14-alpine AS runtime
 WORKDIR /app
+
+# Build metadata (SCRUM-159): the same short commit hash the frontend was built with, so
+# `/api/health` and the navbar report the same `X.Y.Z-<hash>` version.
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
