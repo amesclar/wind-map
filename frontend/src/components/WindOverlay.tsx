@@ -3,12 +3,11 @@ import L from 'leaflet';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
-import { useWindGrid } from '../hooks/useWindGrid';
 
 interface WindOverlayProps {
   map: L.Map | null;
-  model: string;
-  visible: boolean;
+  /** Grid points fetched once by MapView and shared by every layer that draws them (SCRUM-122). */
+  points: GridWindPoint[];
   selectedPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
 }
@@ -59,8 +58,8 @@ export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean): L.Div
   });
 }
 
-export function WindOverlay({ map, model, visible, selectedPoint, onGridPointSelect }: WindOverlayProps) {
-  const points = useWindGrid(map, model, visible);
+/** Draws the shared wind grid as clickable barb markers. Never fetches (SCRUM-122). */
+export function WindOverlay({ map, points, selectedPoint, onGridPointSelect }: WindOverlayProps) {
   // Each point is stored with its marker, so icon updates can't get out of step.
   const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
   const onSelectRef = useLatest(onGridPointSelect);
