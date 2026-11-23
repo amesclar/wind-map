@@ -4,6 +4,8 @@
  * Stops were sampled from the reference legend attached to SCRUM-121; between stops the
  * blend is linear (blue to green passes through teal at 7.5 kt, as the legend does).
  */
+import type { WindSpeedUnit } from '../types';
+import { knotsToUnit, SPEED_UNIT_LABEL } from './units';
 
 export interface WindColorStop {
   /** Wind speed in knots. */
@@ -27,6 +29,52 @@ export const COLOR_STOPS: ReadonlyArray<WindColorStop> = [
 
 /** The scale ends here: slower is the first stop, faster is the last (50+ is gray). */
 export const MAX_WIND_KNOTS = 50;
+
+/** Smallest round step per unit that keeps the labels short. */
+const TICK_STEPS: Record<WindSpeedUnit, number> = { knots: 5, kmh: 10, mph: 5, ms: 5 };
+
+/** Whole-number ticks from 0 to the top of the scale, in the chosen unit (SCRUM-124). */
+export function legendTicks(unit: WindSpeedUnit): number[] {
+  const step = TICK_STEPS[unit];
+  const max = knotsToUnit(MAX_WIND_KNOTS, unit);
+  const ticks: number[] = [];
+  for (let value = 0; value <= max + 0.001; value += step) ticks.push(Math.round(value));
+  return ticks;
+}
+
+export interface WindColorScaleStop {
+  /** Position along the scale, 0 to 1. */
+  offset: number;
+  /** Six-digit hex colour, straight from COLOR_STOPS. */
+  color: string;
+}
+
+export interface WindColorScaleTick {
+  /** Position along the scale, 0 to 1. */
+  offset: number;
+  /** Whole-number caption in the display unit. */
+  label: string;
+}
+
+/** The wind speed scale as the export legend draws it (SCRUM-165). */
+export interface WindColorScale {
+  stops: WindColorScaleStop[];
+  ticks: WindColorScaleTick[];
+  unitLabel: string;
+}
+
+/**
+ * One scale, two renderings: the screen uses `legendTicks` with the CSS gradient, the export uses
+ * these stops and ticks, all derived from COLOR_STOPS and legendTicks so they cannot drift.
+ */
+export function buildWindColorScale(unit: WindSpeedUnit): WindColorScale {
+  const max = knotsToUnit(MAX_WIND_KNOTS, unit);
+  return {
+    stops: COLOR_STOPS.map(({ knots, hex }) => ({ offset: knots / MAX_WIND_KNOTS, color: hex })),
+    ticks: legendTicks(unit).map((value) => ({ offset: value / max, label: String(value) })),
+    unitLabel: SPEED_UNIT_LABEL[unit],
+  };
+}
 
 export type Rgba = [number, number, number, number];
 type Rgb = [number, number, number];

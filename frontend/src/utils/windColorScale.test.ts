@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildWindColorScale,
   buildWindGrid,
   COLOR_STOPS,
   interpolateWindSpeed,
+  legendTicks,
   MAX_WIND_KNOTS,
   windColorCssGradient,
   windSpeedToColor,
 } from './windColorScale';
+import { knotsToUnit, SPEED_UNIT_LABEL } from './units';
 
 const rgb = (speed: number) => windSpeedToColor(speed).slice(0, 3);
 
@@ -52,6 +55,37 @@ describe('windSpeedToColor (SCRUM-123)', () => {
     expect(gradient.startsWith('linear-gradient(to right, ')).toBe(true);
     for (const stop of COLOR_STOPS) expect(gradient).toContain(stop.hex);
     expect(gradient).toContain('#646464 100%');
+  });
+});
+
+describe('legendTicks (SCRUM-124, moved in SCRUM-165)', () => {
+  it('uses a round step per unit and never runs past the top of the scale', () => {
+    expect(legendTicks('knots')).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]);
+    for (const unit of ['kmh', 'mph', 'ms'] as const) {
+      const values = legendTicks(unit);
+      expect(values[0]).toBe(0);
+      expect(values[values.length - 1]).toBeLessThanOrEqual(knotsToUnit(MAX_WIND_KNOTS, unit));
+      expect(values[values.length - 1]).toBeGreaterThan(knotsToUnit(MAX_WIND_KNOTS, unit) - 10);
+    }
+    expect(legendTicks('kmh').slice(0, 3)).toEqual([0, 10, 20]);
+  });
+});
+
+describe('buildWindColorScale (SCRUM-165)', () => {
+  it('derives the export stops and captions from COLOR_STOPS and legendTicks for every unit', () => {
+    for (const unit of ['knots', 'kmh', 'mph', 'ms'] as const) {
+      const scale = buildWindColorScale(unit);
+      const max = knotsToUnit(MAX_WIND_KNOTS, unit);
+
+      expect(scale.stops).toEqual(
+        COLOR_STOPS.map(({ knots, hex }) => ({ offset: knots / MAX_WIND_KNOTS, color: hex })),
+      );
+      expect(scale.ticks.map((tick) => tick.label)).toEqual(legendTicks(unit).map(String));
+      expect(scale.ticks.map((tick) => tick.offset)).toEqual(
+        legendTicks(unit).map((value) => value / max),
+      );
+      expect(scale.unitLabel).toBe(SPEED_UNIT_LABEL[unit]);
+    }
   });
 });
 
