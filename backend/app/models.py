@@ -63,6 +63,8 @@ class WeatherForecastResponse(BaseModel):
     cached_at: float
     current: WeatherForecastPoint
     forecast: list[WeatherForecastPoint]
+    # Hour the `current` values describe (SCRUM-115); null means live current conditions.
+    valid_time: str | None = None
 
 
 class GridWindPoint(BaseModel):
@@ -73,3 +75,20 @@ class GridWindPoint(BaseModel):
     wind_speed_knots: float
     wind_direction_deg: float
     temperature_f: float | None = None
+    # Forecast hour these values describe (SCRUM-115); null means current conditions.
+    time: str | None = None
+
+
+class WeatherModelInfo(BaseModel):
+    """One entry of GET /api/weather/models (SCRUM-115)."""
+
+    id: str
+    name: str
+    # Hours between model runs, and the UTC cycle hours those runs happen at.
+    update_hours: int
+    update_cycles_utc: list[int]
+    # Forecast hours the model covers; the grid's `time` must stay inside it.
+    horizon_hours: int
+    # Most recent and next cycle boundary (ISO 8601 UTC), derived from the cycle hours.
+    last_run_utc: str
+    next_run_utc: str

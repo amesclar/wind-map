@@ -82,7 +82,16 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current).toHaveLength(1));
     expect(api.fetchWindGrid).toHaveBeenCalledWith(
-      { min_lat: 47, max_lat: 49, min_lon: -123, max_lon: -121, cols: 10, rows: 8, model: 'best_match' },
+      {
+        min_lat: 47,
+        max_lat: 49,
+        min_lon: -123,
+        max_lon: -121,
+        cols: 10,
+        rows: 8,
+        model: 'best_match',
+        time: null,
+      },
       { signal: expect.any(AbortSignal) },
     );
 
@@ -154,6 +163,27 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     first.resolve([point(47.5)]);
     await new Promise((r) => setTimeout(r, 0));
     expect(result.current.map((p) => p.latitude)).toEqual([48]);
+  });
+
+  it('requests the selected forecast hour and refetches when it changes (SCRUM-115)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map } = fakeMap();
+    const { rerender } = renderHook(
+      ({ time }: { time: string | null }) => useWindGrid(map, 'best_match', true, time),
+      { initialProps: { time: null as string | null } },
+    );
+
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[0][0]).toMatchObject({ time: null });
+
+    rerender({ time: '2026-11-25T12:00:00Z' });
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[1][0]).toMatchObject({ time: '2026-11-25T12:00:00Z' });
+
+    // Same hour again: no new request.
+    rerender({ time: '2026-11-25T12:00:00Z' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(2);
   });
 
   it('retries the same viewport after a failed request', async () => {

@@ -38,6 +38,8 @@ interface MapViewProps {
   speedUnit?: WindSpeedUnit;
   /** How the barb pop-up shows direction (SCRUM-126); default barb. */
   dirDisplay?: WindDirDisplay;
+  /** Selected forecast hour, ISO 8601 (SCRUM-115); null or absent means current conditions. */
+  validTime?: string | null;
 }
 
 interface LocationMarker {
@@ -114,6 +116,7 @@ export const MapView: React.FC<MapViewProps> = ({
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
+  validTime = null,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -133,6 +136,7 @@ export const MapView: React.FC<MapViewProps> = ({
     mapInstance,
     selectedModel,
     windOverlayVisible || windColorOverlayVisible,
+    validTime,
   );
 
   // Initialize Leaflet Map

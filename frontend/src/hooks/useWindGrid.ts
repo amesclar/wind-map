@@ -28,8 +28,16 @@ export function gridDimensions(size: { x: number; y: number }): { cols: number; 
  *
  * A newer request aborts the previous one, so only the latest response is used; a failed
  * request is retried on the next pan or zoom, even for the same view.
+ *
+ * `validTime` (SCRUM-115) is the selected forecast hour; null means current conditions. A new
+ * hour refetches the same view, and hours are cached separately by the backend.
  */
-export function useWindGrid(map: L.Map | null, model: string, enabled: boolean): GridWindPoint[] {
+export function useWindGrid(
+  map: L.Map | null,
+  model: string,
+  enabled: boolean,
+  validTime: string | null = null,
+): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
 
   useEffect(() => {
@@ -51,15 +59,18 @@ export function useWindGrid(map: L.Map | null, model: string, enabled: boolean):
         min_lon: Number(bounds.getWest().toFixed(4)),
         max_lon: Number(bounds.getEast().toFixed(4)),
       };
-      const key = `${box.min_lat},${box.max_lat},${box.min_lon},${box.max_lon},${cols},${rows}`;
-      if (key === lastKey) return; // same view as the last request
+      const key = `${box.min_lat},${box.max_lat},${box.min_lon},${box.max_lon},${cols},${rows},${validTime ?? 'current'}`;
+      if (key === lastKey) return; // same view and hour as the last request
       lastKey = key;
 
       controller?.abort();
       const current = new AbortController();
       controller = current;
       try {
-        const next = await fetchWindGrid({ ...box, cols, rows, model }, { signal: current.signal });
+        const next = await fetchWindGrid(
+          { ...box, cols, rows, model, time: validTime }, 
+          { signal: current.signal },
+        );
         if (!current.signal.aborted) setPoints(next);
       } catch (err) {
         if (current.signal.aborted) return; // superseded or unmounted
@@ -76,7 +87,7 @@ export function useWindGrid(map: L.Map | null, model: string, enabled: boolean):
       map.off('zoomend', refresh);
       controller?.abort();
     };
-  }, [map, model, enabled]);
+  }, [map, model, enabled, validTime]);
 
   return points;
 }

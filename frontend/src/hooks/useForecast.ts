@@ -8,15 +8,15 @@ export type Selection =
   | { kind: 'point'; latitude: number; longitude: number };
 
 /**
- * Current forecasts for every saved location (map markers), reloaded when the model or
- * timezone changes. Deleted locations are dropped with `remove`.
+ * Forecasts for every saved location (map markers) at the selected hour, reloaded when the
+ * model, timezone or hour changes (SCRUM-115). Deleted locations are dropped with `remove`.
  */
-export function useAllWeather(model: string, timezone: string) {
+export function useAllWeather(model: string, timezone: string, validTime: string | null = null) {
   const [weatherMap, setWeatherMap] = useState<Record<number, WeatherForecastResponse>>({});
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchAllWeather(model, timezone, { signal: controller.signal })
+    fetchAllWeather(model, timezone, { signal: controller.signal, time: validTime })
       .then((all) => {
         if (controller.signal.aborted) return;
         setWeatherMap((prev) => {
@@ -31,7 +31,7 @@ export function useAllWeather(model: string, timezone: string) {
         if (!controller.signal.aborted) console.error('Failed to load weather for all locations:', err);
       });
     return () => controller.abort();
-  }, [model, timezone]);
+  }, [model, timezone, validTime]);
 
   const remove = (locationId: number) => {
     setWeatherMap((prev) => {
