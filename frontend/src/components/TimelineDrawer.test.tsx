@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TimelineDrawer } from './TimelineDrawer';
 import { MapView } from './MapView';
@@ -77,6 +77,34 @@ describe('timeline drawer forecast', () => {
       />
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('publishes the visible drawer height so the color legend can sit above it (SCRUM-144)', () => {
+    const { unmount } = render(
+      <TimelineDrawer
+        weatherData={forecast}
+        isLoading={false}
+        unitSystem="imperial"
+        speedUnit="knots"
+        dirDisplay="barb"
+      />
+    );
+    const root = document.documentElement;
+    const toggle = screen.getByRole('button', { name: /48-Hour Forecast Timeline/ });
+    const drawer = screen.getByTestId('timeline-drawer');
+
+    // Expanded: jsdom has no layout, so offsetHeight is the value that gets published.
+    expect(root.style.getPropertyValue('--drawer-height')).toBe('0px');
+
+    fireEvent.click(toggle);
+    expect(root.style.getPropertyValue('--drawer-height')).toBe('42px');
+
+    Object.defineProperty(drawer, 'offsetHeight', { configurable: true, value: 300 });
+    fireEvent.click(toggle);
+    expect(root.style.getPropertyValue('--drawer-height')).toBe('300px');
+
+    unmount();
+    expect(root.style.getPropertyValue('--drawer-height')).toBe('');
   });
 
   it('keeps Leaflet layers from painting over the drawer', () => {

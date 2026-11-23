@@ -1,7 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  LEGEND_BOTTOM_OFFSET_PX,
   LEGEND_HEIGHT_PX,
   legendTicks,
   NARROW_LEGEND_PX,
@@ -38,7 +37,10 @@ describe('WindColorLegend (SCRUM-124)', () => {
     const strip = screen.getByTestId('wind-color-legend');
     expect(strip.getAttribute('role')).toBe('img');
     expect(strip.getAttribute('aria-label')).toBe('Wind speed color scale from 0 to 50 kt');
-    expect(strip.style.bottom).toBe(`${LEGEND_BOTTOM_OFFSET_PX}px`);
+    // Vertical offset is `.wind-color-legend` in index.css: it rides on --drawer-height so
+    // the expanded timeline drawer cannot cover the strip (SCRUM-144).
+    expect(strip.className).toContain('wind-color-legend');
+    expect(strip.style.bottom).toBe('');
     expect(strip.style.height).toBe(`${LEGEND_HEIGHT_PX}px`);
     expect(strip.className).toContain('pointer-events-none');
 
