@@ -1,12 +1,36 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import App from './App';
+import App, { RANGE_FRAME_TIMEOUT_MS } from './App';
 import type { GridWindPoint } from './api/client';
 import { STORAGE_KEYS } from './constants';
 import { makeForecast, makeLocation } from './test/fixtures';
 import { currentMap, markerAt, resetLeafletMock, type MockMarker } from './test/leafletMock';
 
 vi.mock('leaflet', () => import('./test/leafletMock'));
+
+// The capture itself is covered by captureMap.test; here only the wiring matters (SCRUM-116).
+vi.mock('./utils/captureMap', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/captureMap')>()),
+  saveMapImage: vi.fn().mockResolvedValue(undefined),
+  captureMapCanvas: vi.fn().mockResolvedValue({ width: 10, height: 10 }),
+  waitForTiles: vi.fn().mockResolvedValue(undefined),
+}));
+import { captureMapCanvas, saveMapImage } from './utils/captureMap';
+
+// The page layout is covered by pdfExport.test; here only the wiring matters (SCRUM-117).
+vi.mock('./utils/pdfExport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/pdfExport')>()),
+  saveMapPdf: vi.fn().mockResolvedValue(undefined),
+}));
+import { saveMapPdf } from './utils/pdfExport';
+
+// Whole-range outputs are covered by rangeOutput.test; here only the wiring (SCRUM-156).
+vi.mock('./utils/rangeOutput', () => ({
+  saveRangeImages: vi.fn().mockResolvedValue(undefined),
+  saveRangePdf: vi.fn().mockResolvedValue(undefined),
+}));
+import { saveRangeImages, saveRangePdf } from './utils/rangeOutput';
+import { buildWindColorScale } from './utils/windColorScale';
 
 // The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
 // fetchWeather/fetchPointWeather at all.
@@ -72,6 +96,9 @@ const gridPoint = {
 };
 
 describe('App map integration (SCRUM-126)', () => {
+  it('allows each range hour 60 s for its grid data (SCRUM-164)', () => {
+    expect(RANGE_FRAME_TIMEOUT_MS).toBe(60_000);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     resetLeafletMock();
@@ -97,7 +124,15 @@ describe('App map integration (SCRUM-126)', () => {
     ]);
     (api.fetchAppConfig as any).mockResolvedValue({});
     (api.fetchAllWeather as any).mockResolvedValue([oakForecast, seattleForecast]);
-    (api.fetchWindGrid as any).mockResolvedValue([]);
+    // The range loop's readiness signal needs points that name the hour that was requested; the
+    // live view starts with no barbs so the grid-click tests control their own responses.
+    (api.fetchWindGrid as any).mockImplementation(async (params: { time?: string | null }) =>
+      params.time ? [{ ...gridPoint, time: params.time }] : [],
+    );
+    (captureMapCanvas as any).mockReset();
+    (captureMapCanvas as any).mockResolvedValue({ width: 10, height: 10 });
+    vi.mocked(saveRangeImages).mockClear();
+    vi.mocked(saveRangePdf).mockClear();
   });
 
   it('marks the first saved location as selected on initial load', async () => {
@@ -202,6 +237,180 @@ describe('App map integration (SCRUM-126)', () => {
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('🕒'));
 
     fireEvent.click(screen.getByText('Now'));
+    await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
+  });
+
+  it('saves the visible hour as an image with its header, legend and footer (SCRUM-116)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByLabelText('Next hour'));
+    await waitFor(() =>
+      expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toMatch(/T\d{2}:00:00\.000Z$/),
+    );
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [element, content, options] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(element).toBe(screen.getByTestId('map-canvas'));
+    expect(options).toEqual({ format: 'png', quality: 0.92 });
+    expect(content.fileName).toMatch(/^best_match_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.png$/);
+    expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
+    expect(content.header.lines[1]).toContain('Open-Meteo');
+    expect(content.footer).toContain('Wind Map v');
+    expect(content.barbs).toHaveLength(4);
+    expect(content.temperatures.length).toBeGreaterThan(0);
+    expect(content.windColorScale).toBeUndefined(); // the gradient is off by default
+    // The dialog closes once the file is handed to the browser.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('passes the shared wind speed scale to the export when the gradient is on (SCRUM-165)', async () => {
+    localStorage.setItem(STORAGE_KEYS.windColorOverlayVisible, 'true');
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [, content] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(content.windColorScale).toEqual(buildWindColorScale('knots'));
+  });
+
+  it('exports with the edited file name, cleaned of reserved characters (SCRUM-162)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'my/map: 2026.png' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [, content] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(content.fileName).toBe('mymap 2026.png');
+  });
+
+  it('exports the current view as a single-page PDF in the chosen size and orientation (SCRUM-117)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    expect((screen.getByTestId('export-file-name') as HTMLInputElement).value).toMatch(/\.pdf$/);
+
+    fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapPdf)).toHaveBeenCalledTimes(1));
+    const [element, content, options] = vi.mocked(saveMapPdf).mock.calls[0];
+    expect(element).toBe(screen.getByTestId('map-canvas'));
+    expect(options).toEqual({ fileName: content.fileName, pageSize: 'a4', orientation: 'landscape' });
+    expect(content.fileName).toMatch(/^best_match_\d{4}-\d{2}-\d{2}_\d{4}[A-Za-z0-9]+\.pdf$/);
+    expect(vi.mocked(saveMapImage)).not.toHaveBeenCalled();
+  });
+
+  it('captures one frame per hour for a range, saves one ZIP and restores the hour (SCRUM-155, SCRUM-156)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
+    const start = (screen.getByLabelText('Start') as HTMLSelectElement).value;
+    const end = new Date(Date.parse(start) + 2 * 3_600_000).toISOString();
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: end } });
+
+    expect(screen.getByTestId('range-summary').textContent).toMatch(/^3 captures from /);
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveRangeImages)).toHaveBeenCalledTimes(1));
+    const [frames, options] = vi.mocked(saveRangeImages).mock.calls[0];
+    expect(frames).toHaveLength(3);
+    expect(options).toEqual({
+      modelId: 'best_match',
+      timezone: 'America/Los_Angeles',
+      format: 'png',
+      jpegQuality: 0.92,
+    });
+    expect(vi.mocked(saveRangePdf)).not.toHaveBeenCalled();
+
+    // One composed frame per hour, each with that hour's header; the capture saw each hour once.
+    const contents = vi.mocked(captureMapCanvas).mock.calls.map(([, content]) => content);
+    expect(contents).toHaveLength(3);
+    expect(new Set(contents.map((content) => content.header.title)).size).toBe(3);
+    expect(contents.every((content) => content.header.lines[0].startsWith('Forecast hour'))).toBe(true);
+    expect(contents.every((content) => content.fileName.startsWith('best_match_'))).toBe(true);
+
+    // Back on the live hour that was showing before the export.
+    await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('saves a range as one multi-page PDF with the chosen page size (SCRUM-156)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveRangePdf)).toHaveBeenCalledTimes(1));
+    const [frames, options] = vi.mocked(saveRangePdf).mock.calls[0];
+    expect(frames).toHaveLength(3);
+    expect(options).toEqual({
+      modelId: 'best_match',
+      timezone: 'America/Los_Angeles',
+      pageSize: 'a4',
+      orientation: 'landscape',
+    });
+    expect(vi.mocked(saveRangeImages)).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('stops a range on cancel, downloads nothing and restores the original hour (SCRUM-155)', async () => {
+    vi.mocked(captureMapCanvas).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ width: 10, height: 10 } as unknown as HTMLCanvasElement), 50)),
+    );
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop capturing' }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop capturing' })).toBeNull());
+    expect(vi.mocked(saveRangeImages)).not.toHaveBeenCalled();
+    expect(vi.mocked(saveRangePdf)).not.toHaveBeenCalled();
+    await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
+  });
+
+  it('names a failing range hour, offers the captured frames and restores the hour (SCRUM-155)', async () => {
+    vi.mocked(captureMapCanvas)
+      .mockResolvedValueOnce({ width: 10, height: 10 } as unknown as HTMLCanvasElement)
+      .mockRejectedValueOnce(new Error('canvas failed'));
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    const error = await screen.findByTestId('range-error');
+    expect(error.textContent).toContain('Could not capture');
+    expect(error.textContent).toContain('canvas failed');
+    expect(vi.mocked(saveRangeImages)).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save captured frames (1)' }));
+    await waitFor(() => expect(vi.mocked(saveRangeImages)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(saveRangeImages).mock.calls[0][0]).toHaveLength(1);
     await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
   });
 

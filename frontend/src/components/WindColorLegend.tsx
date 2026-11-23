@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import type { WindSpeedUnit } from '../types';
-import { MAX_WIND_KNOTS, windColorCssGradient } from '../utils/windColorScale';
+import { legendTicks, MAX_WIND_KNOTS, windColorCssGradient } from '../utils/windColorScale';
 import { knotsToUnit, SPEED_UNIT_LABEL } from '../utils/units';
+
+// The scale belongs to windColorScale so the export legend can share it; re-exported here for the
+// component's existing imports and tests (SCRUM-165).
+export { legendTicks } from '../utils/windColorScale';
 
 /**
  * The strip's fixed offset above the bottom of the map, which keeps it clear of the attribution.
@@ -12,18 +16,6 @@ export const LEGEND_BOTTOM_PX = 24;
 export const LEGEND_HEIGHT_PX = 24;
 /** Below this width only every second tick is labelled. */
 export const NARROW_LEGEND_PX = 640;
-
-/** Smallest round step per unit that keeps the labels short. */
-const TICK_STEPS: Record<WindSpeedUnit, number> = { knots: 5, kmh: 10, mph: 5, ms: 5 };
-
-/** Whole-number ticks from 0 to the top of the scale, in the chosen unit (SCRUM-124). */
-export function legendTicks(unit: WindSpeedUnit): number[] {
-  const step = TICK_STEPS[unit];
-  const max = knotsToUnit(MAX_WIND_KNOTS, unit);
-  const ticks: number[] = [];
-  for (let value = 0; value <= max + 0.001; value += step) ticks.push(Math.round(value));
-  return ticks;
-}
 
 function useNarrowLegend(): boolean {
   const [narrow, setNarrow] = useState(

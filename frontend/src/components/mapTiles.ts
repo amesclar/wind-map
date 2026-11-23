@@ -11,6 +11,11 @@ export interface TileLayerConfig {
   options: L.TileLayerOptions;
 }
 
+/** Plain-text attribution for the exported image (SCRUM-116); OSM and CARTO require it. */
+export function attributionText(layer: MapTileLayer): string {
+  return layer === 'carto_dark' ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors';
+}
+
 /** URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set. */
 export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLayerConfig {
   switch (layer) {
@@ -20,13 +25,16 @@ export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLaye
         url: key
           ? `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${encodeURIComponent(key)}`
           : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        options: { attribution: CARTO_ATTRIBUTION, subdomains: 'abcd', maxZoom: 19 },
+        options: { attribution: CARTO_ATTRIBUTION, subdomains: 'abcd', maxZoom: 19, crossOrigin: true },
       };
     }
     case 'osm_dark':
       // Same OSM tiles, darkened by the .osm-dark-tiles CSS filter.
-      return { url: OSM_URL, options: { attribution: OSM_ATTRIBUTION, className: 'osm-dark-tiles', maxZoom: 19 } };
+      return {
+        url: OSM_URL,
+        options: { attribution: OSM_ATTRIBUTION, className: 'osm-dark-tiles', maxZoom: 19, crossOrigin: true },
+      };
     case 'osm_standard':
-      return { url: OSM_URL, options: { attribution: OSM_ATTRIBUTION, maxZoom: 19 } };
+      return { url: OSM_URL, options: { attribution: OSM_ATTRIBUTION, maxZoom: 19, crossOrigin: true } };
   }
 }

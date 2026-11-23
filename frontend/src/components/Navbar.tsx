@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
+import { MapExportControl } from './MapExportControl';
 import refreshIcon from '../assets/refresh-icon.png';
 
 interface NavbarProps {
@@ -22,6 +23,10 @@ interface NavbarProps {
   onOpenPreferences: () => void;
   onOpenModelGuide: () => void;
   hasCartoKey: boolean;
+  /** Opens the export dialog (SCRUM-117). */
+  onOpenExportDialog: () => void;
+  /** True while an export is being captured. */
+  savingMap: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -35,6 +40,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenPreferences,
   onOpenModelGuide,
   hasCartoKey,
+  onOpenExportDialog,
+  savingMap,
 }) => {
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -87,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Right Controls: Model, Preferences */}
+      {/* Right Controls: Model, guide, export, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
@@ -116,6 +123,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
         </button>
+
+        {/* Export trigger: download icon beside Preferences (SCRUM-157) */}
+        <MapExportControl onOpen={onOpenExportDialog} busy={savingMap} />
 
         {/* Preferences: timezone and units (SCRUM-107) */}
         <button
