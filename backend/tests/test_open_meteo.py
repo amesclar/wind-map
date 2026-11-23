@@ -1,5 +1,7 @@
 """Shared Open-Meteo client (SCRUM-92)."""
 
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
 
@@ -73,10 +75,11 @@ async def test_get_json_raises_after_exhausting_retries(monkeypatch):
     monkeypatch.setattr(client.asyncio, "sleep", fake_sleep)
     calls = _status_sequence(monkeypatch, [429], retry_after="1")
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(client.QuotaExceededError) as raised:
         await client.get_json(FORECAST_URL, {}, retries=2)
     assert len(calls) == 3
     assert sleeps == [1, 1]
+    assert raised.value.reset_at is not None
 
 
 @pytest.mark.asyncio
@@ -93,6 +96,43 @@ async def test_get_json_does_not_retry_other_client_errors(monkeypatch):
         await client.get_json(FORECAST_URL, {}, retries=3)
     assert len(calls) == 1
     assert sleeps == []
+
+
+def test_quota_reset_at_prefers_the_epoch_header():
+    request = httpx.Request("GET", FORECAST_URL)
+    response = httpx.Response(
+        429,
+        headers={"X-RateLimit-Reset": "1795478429", "Retry-After": "5396"},
+        request=request,
+    )
+
+    assert client.quota_reset_at(response) == datetime.fromtimestamp(1795478429, UTC)
+
+
+def test_quota_reset_at_falls_back_to_retry_after():
+    request = httpx.Request("GET", FORECAST_URL)
+    response = httpx.Response(429, headers={"Retry-After": "90"}, request=request)
+    now = datetime(2026, 11, 23, 22, 0, tzinfo=UTC)
+
+    assert client.quota_reset_at(response, now) == now + timedelta(seconds=90)
+
+
+def test_quota_reset_at_ignores_an_unusable_epoch_header():
+    request = httpx.Request("GET", FORECAST_URL)
+    response = httpx.Response(
+        429,
+        headers={"X-RateLimit-Reset": "soon", "Retry-After": "90"},
+        request=request,
+    )
+    now = datetime(2026, 11, 23, 22, 0, tzinfo=UTC)
+
+    assert client.quota_reset_at(response, now) == now + timedelta(seconds=90)
+
+
+def test_quota_reset_at_is_none_without_usable_headers():
+    assert client.quota_reset_at(httpx.Response(429, request=httpx.Request("GET", FORECAST_URL))) is None
+    unusable = httpx.Response(429, headers={"Retry-After": "later"}, request=httpx.Request("GET", FORECAST_URL))
+    assert client.quota_reset_at(unusable) is None
 
 
 def test_retry_delay_falls_back_without_a_usable_header():

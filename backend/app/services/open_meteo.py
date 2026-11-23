@@ -5,6 +5,7 @@ and the model rule live in one place. Callers handle `httpx.HTTPError`.
 """
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -15,6 +16,36 @@ from backend.app.config import DEFAULT_MODEL, OPEN_METEO_RETRIES, OPEN_METEO_TIM
 # briefly (SCRUM-166) keeps a range export from turning a momentary limit into a failed hour.
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 MAX_RETRY_WAIT_SECONDS = 5.0
+
+
+class QuotaExceededError(httpx.HTTPError):
+    """Open-Meteo is still throttling after every retry (SCRUM-170).
+
+    `reset_at` is the upstream's advertised reset instant when it sent one, so the UI can say
+    when data will return instead of only reporting a generic upstream failure.
+    """
+
+    def __init__(self, message: str, *, reset_at: datetime | None, request: httpx.Request | None = None):
+        super().__init__(message)
+        self.request = request
+        self.reset_at = reset_at
+
+
+def quota_reset_at(response: httpx.Response, now: datetime | None = None) -> datetime | None:
+    """The instant Open-Meteo says the limit resets, from its headers when present."""
+    reset = response.headers.get("x-ratelimit-reset")
+    if reset:
+        try:
+            return datetime.fromtimestamp(float(reset), UTC)
+        except TypeError, ValueError:
+            pass
+    retry_after = response.headers.get("retry-after")
+    if retry_after:
+        try:
+            return (now or datetime.now(UTC)) + timedelta(seconds=max(0.0, float(retry_after)))
+        except TypeError, ValueError:
+            pass
+    return None
 
 
 def retry_delay(response: httpx.Response, attempt: int) -> float:
@@ -52,6 +83,12 @@ async def get_json(
             if resp.status_code in RETRYABLE_STATUS and attempt < retries:
                 await asyncio.sleep(retry_delay(resp, attempt))
                 continue
+            if resp.status_code == 429:
+                raise QuotaExceededError(
+                    "Open-Meteo request limit reached",
+                    reset_at=quota_reset_at(resp),
+                    request=resp.request,
+                )
             resp.raise_for_status()
             try:
                 return resp.json()

@@ -19,10 +19,27 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The response's `detail` when it was JSON, for structured API errors (SCRUM-170). */
+    readonly detail?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+export interface QuotaExhausted {
+  /** ISO instant when Open-Meteo's limit resets, or null when it did not say. */
+  resetAt: string | null;
+}
+
+/** Read the grid API's quota-exhausted error, or null for every other failure (SCRUM-170). */
+export function parseQuotaExhausted(err: unknown): QuotaExhausted | null {
+  if (!(err instanceof ApiError) || err.status !== 503) return null;
+  const detail = err.detail;
+  if (!detail || typeof detail !== 'object') return null;
+  const { code, reset_at: resetAt } = detail as { code?: unknown; reset_at?: unknown };
+  if (code !== 'open_meteo_quota_exhausted') return null;
+  return { resetAt: typeof resetAt === 'string' ? resetAt : null };
 }
 
 export interface RequestOptions {
@@ -55,7 +72,15 @@ async function request<T>(
   { params, init, signal }: { params?: Params; init?: RequestInit; signal?: AbortSignal } = {},
 ): Promise<T> {
   const res = await fetch(url(path, params), { ...init, signal });
-  if (!res.ok) throw new ApiError(errorMessage, res.status);
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = ((await res.json()) as { detail?: unknown })?.detail;
+    } catch {
+      // A non-JSON error body (proxy page, empty response) keeps the generic message.
+    }
+    throw new ApiError(errorMessage, res.status, detail);
+  }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 

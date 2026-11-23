@@ -46,6 +46,8 @@ interface MapViewProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
   /** The hour and points of each accepted grid response, for the range export (SCRUM-155). */
   onGridLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void;
+  /** Open-Meteo's request limit stopped the grid; carries its reset instant (SCRUM-170). */
+  onGridQuotaExhausted?: (resetAt: string | null) => void;
 }
 
 interface LocationMarker {
@@ -128,6 +130,7 @@ export const MapView: React.FC<MapViewProps> = ({
   validTimeLabel = null,
   containerRef,
   onGridLoaded,
+  onGridQuotaExhausted,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -149,6 +152,7 @@ export const MapView: React.FC<MapViewProps> = ({
     windOverlayVisible || windColorOverlayVisible,
     validTime,
     onGridLoaded,
+    onGridQuotaExhausted,
   );
 
   // Initialize Leaflet Map
