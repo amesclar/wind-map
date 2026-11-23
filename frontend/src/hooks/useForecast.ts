@@ -13,9 +13,12 @@ export type Selection =
  */
 export function useAllWeather(model: string, timezone: string, validTime: string | null = null) {
   const [weatherMap, setWeatherMap] = useState<Record<number, WeatherForecastResponse>>({});
+  // True while the current step's data is in flight, so playback can wait for it (SCRUM-127).
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
     fetchAllWeather(model, timezone, { signal: controller.signal, time: validTime })
       .then((all) => {
         if (controller.signal.aborted) return;
@@ -26,9 +29,13 @@ export function useAllWeather(model: string, timezone: string, validTime: string
           });
           return next;
         });
+        setLoading(false);
       })
       .catch((err) => {
-        if (!controller.signal.aborted) console.error('Failed to load weather for all locations:', err);
+        if (!controller.signal.aborted) {
+          console.error('Failed to load weather for all locations:', err);
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [model, timezone, validTime]);
@@ -41,5 +48,5 @@ export function useAllWeather(model: string, timezone: string, validTime: string
     });
   };
 
-  return { weatherMap, remove };
+  return { weatherMap, remove, loading };
 }

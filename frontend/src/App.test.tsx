@@ -84,7 +84,17 @@ describe('App map integration (SCRUM-126)', () => {
     });
 
     (api.fetchLocations as any).mockResolvedValue(mockLocations);
-    (api.fetchModels as any).mockResolvedValue([{ id: 'best_match', name: 'Open-Meteo' }]);
+    (api.fetchModels as any).mockResolvedValue([
+      {
+        id: 'best_match',
+        name: 'Open-Meteo',
+        update_hours: 1,
+        update_cycles_utc: Array.from({ length: 24 }, (_, i) => i),
+        horizon_hours: 168,
+        last_run_utc: '2026-11-23T12:00:00Z',
+        next_run_utc: '2026-11-23T18:00:00Z',
+      },
+    ]);
     (api.fetchAppConfig as any).mockResolvedValue({});
     (api.fetchAllWeather as any).mockResolvedValue([oakForecast, seattleForecast]);
     (api.fetchWindGrid as any).mockResolvedValue([]);
@@ -174,6 +184,25 @@ describe('App map integration (SCRUM-126)', () => {
       expect(popup).toContain('25.9 km/h');
       expect(popup).toContain('12°C');
     });
+  });
+
+  it('moves the whole map to the chosen forecast hour (SCRUM-127)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+    expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Next hour'));
+
+    await waitFor(() =>
+      expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toMatch(/T\d{2}:00:00\.000Z$/),
+    );
+    const time = vi.mocked(api.fetchWindGrid).mock.calls.at(-1)![0].time as string;
+    await waitFor(() => expect(vi.mocked(api.fetchAllWeather).mock.calls.at(-1)?.[2]?.time).toBe(time));
+    // Both pop-ups name the hour the values describe.
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)?.popupHtml).toContain('🕒'));
+
+    fireEvent.click(screen.getByText('Now'));
+    await waitFor(() => expect(vi.mocked(api.fetchWindGrid).mock.calls.at(-1)?.[0].time).toBeNull());
   });
 
   it('fetches every saved location once on initial load (SCRUM-92)', async () => {
