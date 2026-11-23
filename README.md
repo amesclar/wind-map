@@ -232,7 +232,7 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 
 | Check | What it does | Run locally |
 | :--- | :--- | :--- |
-| Ruff | Python lint, including security rules (`ruff.toml`) | `ruff check .` |
+| Ruff | Python lint, including security and `UP` pyupgrade rules, and formatting (`ruff.toml`) | `ruff check . && ruff format --check .` |
 | pytest coverage | Backend tests; fails below the threshold in `.coveragerc` | `pytest --cov` |
 | pip-audit | Known vulnerabilities in `requirements.txt` | `pip-audit -r requirements.txt` |
 | ESLint, `tsc` | Frontend lint and type-check | `cd frontend && npm run lint && npm run typecheck` |
@@ -244,4 +244,4 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 
 Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
 
-Ruff runs lint only. Auto-formatting (`ruff format`) and the `UP` modernization rules are not enabled, because they would rewrite many files with no behavior change.
+Ruff enforces lint and formatting (SCRUM-109): `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
