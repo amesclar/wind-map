@@ -253,6 +253,7 @@ export const App: React.FC = () => {
       setRangeProgress(null);
       setRangeFrames([]);
       const original = forecastTime;
+      const modelId = selectedModelInfo?.id ?? selectedModel;
       try {
         const result = await captureRange(options.hours, {
           setHour: setForecastTime,
@@ -262,7 +263,7 @@ export const App: React.FC = () => {
               element,
               buildContent(
                 hour,
-                buildExportFileName({ validTime: hour, timezone, extension: options.format }),
+                buildExportFileName({ modelId, validTime: hour, timezone, extension: options.format }),
                 capturedAt,
               ),
               { tileTimeoutMs: 0 },
@@ -277,7 +278,7 @@ export const App: React.FC = () => {
         for (const frame of result.frames) {
           await downloadCanvas(
             frame.canvas,
-            buildExportFileName({ validTime: frame.time, timezone, extension: options.format }),
+            buildExportFileName({ modelId, validTime: frame.time, timezone, extension: options.format }),
             { format: options.format, quality: options.jpegQuality },
           );
         }
@@ -296,7 +297,7 @@ export const App: React.FC = () => {
         setForecastTime(original);
       }
     },
-    [forecastTime, timezone, buildContent, waitForHour],
+    [forecastTime, timezone, selectedModel, selectedModelInfo?.id, buildContent, waitForHour],
   );
 
   /** Capture the current view with its header, legend and footer, or run a range (SCRUM-116, SCRUM-117, SCRUM-155). */
@@ -346,18 +347,19 @@ export const App: React.FC = () => {
     const saveOptions = rangeOptionsRef.current;
     if (!saveOptions || rangeFrames.length === 0) return;
     setSavingMap(true);
+    const modelId = selectedModelInfo?.id ?? selectedModel;
     try {
       for (const frame of rangeFrames) {
         await downloadCanvas(
           frame.canvas,
-          buildExportFileName({ validTime: frame.time, timezone, extension: saveOptions.format }),
+          buildExportFileName({ modelId, validTime: frame.time, timezone, extension: saveOptions.format }),
           saveOptions,
         );
       }
     } finally {
       setSavingMap(false);
     }
-  }, [rangeFrames, timezone]);
+  }, [rangeFrames, timezone, selectedModel, selectedModelInfo?.id]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
@@ -452,7 +454,11 @@ export const App: React.FC = () => {
         isOpen={isExportDialogOpen}
         onClose={() => setIsExportDialogOpen(false)}
         onExport={handleExport}
-        fileBaseName={buildExportBaseName({ validTime: forecastTime, timezone })}
+        fileBaseName={buildExportBaseName({
+          modelId: selectedModelInfo?.id ?? selectedModel,
+          validTime: forecastTime,
+          timezone,
+        })}
         busy={savingMap}
         timezone={timezone}
         rangeHours={rangeHours}
