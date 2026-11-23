@@ -1,4 +1,4 @@
-/** Display formatting for forecast values (SCRUM-92). Used by the drawer and map popups. */
+/** Display formatting for forecast values (SCRUM-92). Used by the map and barb popups. */
 import type { UnitSystem, WeatherForecastPoint, WindSpeedUnit } from '../types';
 
 export const SPEED_UNIT_LABEL: Record<WindSpeedUnit, string> = {
@@ -31,12 +31,35 @@ export function roundKnotsInUnit(knots: number, unit: WindSpeedUnit): number {
   return Math.round(knotsToUnit(knots, unit));
 }
 
+/**
+ * A knot value converted for display, e.g. "12.8 kt" or "14 kt" (SCRUM-126). Grid barbs carry
+ * only knots, unlike a full forecast point which already has every unit.
+ */
+export function formatKnotsInUnit(knots: number, unit: WindSpeedUnit): string {
+  return `${Number(knotsToUnit(knots, unit).toFixed(1))} ${SPEED_UNIT_LABEL[unit]}`;
+}
+
 /** Temperature rounded to a whole degree, e.g. "54°F" or "12°C". */
 export function formatTemperature(
   pt: Pick<WeatherForecastPoint, 'temperature_f' | 'temperature_c'>,
   system: UnitSystem,
 ): string {
   return system === 'imperial' ? `${Math.round(pt.temperature_f)}°F` : `${Math.round(pt.temperature_c)}°C`;
+}
+
+/** Temperature from a source that only carries °F, e.g. "54°F" or "12°C" (SCRUM-126). */
+export function formatTemperatureFromF(tempF: number, system: UnitSystem): string {
+  return system === 'imperial' ? `${Math.round(tempF)}°F` : `${Math.round(((tempF - 32) * 5) / 9)}°C`;
+}
+
+const CARDINALS = [
+  'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+] as const;
+
+/** 16-point cardinal for a direction in degrees, e.g. "SW" for 220° (SCRUM-126). */
+export function degreesToCardinal(deg: number): string {
+  return CARDINALS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
 }
 
 /** Wind direction in whole degrees true, normalized to 0–359, e.g. "220°T". */
@@ -48,15 +71,4 @@ export function formatDegreesTrue(deg: number): string {
 /** Cardinal plus degrees, e.g. "SW (220°)". */
 export function formatDirection(pt: Pick<WeatherForecastPoint, 'wind_direction_cardinal' | 'wind_direction_deg'>): string {
   return `${pt.wind_direction_cardinal} (${Math.round(pt.wind_direction_deg)}°)`;
-}
-
-/**
- * Forecast slice label such as "Mon 9 PM". Open-Meteo returns local wall-clock times
- * without an offset ("2026-11-16T21:00") in the requested timezone; parsing and
- * formatting both in the browser's zone keeps that wall-clock time.
- */
-export function formatSliceTime(time: string): string {
-  const date = new Date(time);
-  if (Number.isNaN(date.getTime())) return time;
-  return date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', hour12: true });
 }

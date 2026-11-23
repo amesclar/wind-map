@@ -15,9 +15,6 @@ export const TIMEZONES: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'Asia/Tokyo', label: 'Tokyo (JST)' },
 ];
 
-/** Hours between forecast slices (backend FORECAST_STEP_HOURS). */
-export const FORECAST_STEP_HOURS = 3;
-
 /** Default map view when no location is selected yet (Oak Harbor, WA). */
 export const DEFAULT_MAP_CENTER: [number, number] = [48.2939, -122.6064];
 export const DEFAULT_MAP_ZOOM = 8;

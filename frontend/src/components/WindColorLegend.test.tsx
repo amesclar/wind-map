@@ -32,13 +32,13 @@ describe('legendTicks (SCRUM-124)', () => {
 });
 
 describe('WindColorLegend (SCRUM-124)', () => {
-  it('sits above the drawer as a labelled image with the overlay gradient', () => {
+  it('sits above the map attribution as a labelled image with the overlay gradient', () => {
     const { container } = render(<WindColorLegend speedUnit="knots" />);
     const strip = screen.getByTestId('wind-color-legend');
     expect(strip.getAttribute('role')).toBe('img');
     expect(strip.getAttribute('aria-label')).toBe('Wind speed color scale from 0 to 50 kt');
-    // Vertical offset is `.wind-color-legend` in index.css: it rides on --drawer-height so
-    // the expanded timeline drawer cannot cover the strip (SCRUM-144).
+    // Vertical offset is `.wind-color-legend` in index.css: a fixed 24px since the timeline
+    // drawer was removed (SCRUM-126).
     expect(strip.className).toContain('wind-color-legend');
     expect(strip.style.bottom).toBe('');
     expect(strip.style.height).toBe(`${LEGEND_HEIGHT_PX}px`);

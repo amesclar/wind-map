@@ -82,9 +82,9 @@
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
 }
 
-/* Wind color legend: rides just above the timeline drawer, whose visible height the drawer
-   publishes as --drawer-height on :root (SCRUM-144). The 24px floor keeps the strip off the
-   attribution when no forecast drawer is open. Mirrors LEGEND_GAP_PX/LEGEND_MIN_BOTTOM_PX. */
+/* Wind color legend: sits just above the map attribution. The forecast drawer that used to
+   push the strip up (via --drawer-height) is gone (SCRUM-126), so the offset is fixed. Mirrors
+   LEGEND_BOTTOM_PX. */
 .wind-color-legend {
-  bottom: max(24px, calc(var(--drawer-height, 0px) + 6px));
+  bottom: 24px;
 }

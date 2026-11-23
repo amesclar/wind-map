@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { generateGridBarbSvg, buildGridBarbIcon, GRID_BARB_FALLBACK_COLOR } from './WindOverlay';
+import {
+  buildGridBarbIcon,
+  buildGridPointPopup,
+  generateGridBarbSvg,
+  GRID_BARB_FALLBACK_COLOR,
+} from './WindOverlay';
 import { generateWindBarbSvg, getTemperatureColor } from './WindBarb';
 
 const parse = (html: string) => {
@@ -89,5 +94,40 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).toContain('data-selected="true"');
     expect(html).toContain('box-shadow:0 0 0 2px #ffffff');
     expect(html).toContain(generateGridBarbSvg(15, 90, 85, 40));
+  });
+});
+
+describe('buildGridPointPopup (SCRUM-126)', () => {
+  const point = {
+    latitude: 48.78,
+    longitude: -121.94,
+    wind_speed_knots: 12.8,
+    wind_direction_deg: 220,
+    temperature_f: 53.6,
+  };
+
+  it('shows the coordinates and the point values in the user units', () => {
+    const el = parse(buildGridPointPopup(point, 'imperial', 'knots', 'deg'));
+    expect(el.textContent).toContain('Wind point');
+    expect(el.textContent).toContain('48.78°, -121.94°');
+    expect(el.textContent).toContain('12.8 kt');
+    expect(el.textContent).toContain('54°F');
+    expect(el.textContent).toContain('220°T');
+  });
+
+  it('converts the knots and °F it was given to metric and the chosen speed unit', () => {
+    const el = parse(buildGridPointPopup(point, 'metric', 'kmh', 'cardinal'));
+    expect(el.textContent).toContain('23.7 km/h');
+    expect(el.textContent).toContain('12°C');
+    expect(el.textContent).toContain('SW (220°)');
+    expect(el.textContent).not.toContain('°F');
+  });
+
+  it('draws the barb when barb display is chosen, and shows -- without a temperature', () => {
+    const el = parse(buildGridPointPopup({ ...point, temperature_f: null }, 'imperial', 'knots'));
+    expect(el.querySelector('svg')).not.toBeNull();
+    expect(el.textContent).toContain('🌡️ --');
+    expect(el.textContent).not.toContain('°F');
+    expect(el.textContent).not.toContain('°T');
   });
 });

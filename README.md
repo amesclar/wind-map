@@ -10,10 +10,10 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 
 - **Interactive Map:** Powered by Leaflet.js with CartoDB Dark Matter tiles.
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
-- **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the drawer's barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
-- **Wind Color Gradient *(SCRUM-121, SCRUM-122, SCRUM-123, SCRUM-124)*:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the drawer (it rides up when the forecast panel expands) labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
-- **Clickable Barbs *(SCRUM-88, SCRUM-89)*:** Clicking any grid barb loads a full 48-hour forecast for that exact lat/lon into the drawer without saving it as a location — useful over open water where no place name exists. The selected barb is drawn larger with a white highlight ring and matches the drawer's leftmost barb. Clicking a saved location marker restores normal drawer behaviour.
-- **48-Hour Forecast Timeline Drawer:** Collapsible bottom drawer showing 16 time slices (every 3 hours for 48 hours) with temperature and wind speed/direction. The first ("Now") slice shows Open-Meteo current conditions. Each slice also shows the wind direction in whole degrees true (e.g. `220°T`) below the wind barb and above the wind speed *(SCRUM-90)*.
+- **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
+- **Wind Color Gradient *(SCRUM-121, SCRUM-122, SCRUM-123, SCRUM-124)*:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
+- **Clickable Barbs *(SCRUM-88, SCRUM-89, SCRUM-126)*:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
+- **Current conditions only *(SCRUM-126)*:** the map and its pop-ups show current conditions; the 48-hour timeline drawer that used to sit at the bottom of the screen has been removed, and a forecast date/time selector is tracked as SCRUM-127.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS 0.4°*
@@ -51,9 +51,9 @@ wind-map/
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
-    │   ├── components/          # MapView, WindOverlay, WindBarb, TimelineDrawer, Navbar, modals, mapTiles.ts
+    │   ├── components/          # MapView, WindOverlay, WindBarb, Navbar, modals, mapTiles.ts
     │   ├── hooks/               # useMapSettings, useUnitPreferences, useTimezone, useLocations, useAllWeather,
-    │   │                        # useDrawerForecast, useWindGrid, useLocalStorageState, useLatest
+    │   │                        # useWindGrid, useLocalStorageState, useLatest
     │   ├── api/                 # Typed API client (one request() helper, ApiError)
     │   ├── utils/               # units.ts (display formatting), html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
@@ -203,11 +203,11 @@ Backend test suite coverage includes:
 Frontend test suite coverage includes:
 - Wind barb SVG generation (feather counts, pennants, calm circles, direction encoding, temperature color, label rendering)
 - Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring) *(SCRUM-89)*
-- Selected map barb matches the drawer's leftmost barb (direction, barb count and color) *(SCRUM-89)*
+- Barb pop-up values in the chosen units, and the barb highlight clearing when a saved location is picked *(SCRUM-126)*
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
 - `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
-- Timeline drawer rendering, empty state, stacking context isolation
+- Map stacking context isolation, selected-marker highlight and pop-ups in the chosen units
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
 
 
