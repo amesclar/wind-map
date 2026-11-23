@@ -8,6 +8,7 @@
  */
 import type { BarbLegendEntry, ExportHeader, TemperatureBand } from './mapExport';
 import { barbFeatures } from './windBarb';
+import type { WindColorScale } from './windColorScale';
 
 export interface CaptureContent {
   fileName: string;
@@ -17,6 +18,8 @@ export interface CaptureContent {
   temperatures: TemperatureBand[];
   speedUnitLabel: string;
   temperatureUnitLabel: string;
+  /** Set when the wind colour gradient is on: replaces the temperature bands (SCRUM-165). */
+  windColorScale?: WindColorScale;
 }
 
 export type MapImageFormat = 'png' | 'jpeg';
@@ -246,7 +249,11 @@ function drawLegend(
 
   ctx.fillStyle = MUTED;
   ctx.font = `normal ${8.5 * unit}px sans-serif`;
-  ctx.fillText(`Wind barbs (${content.speedUnitLabel})`, pad, top + 12 * unit);
+  const scale = content.windColorScale;
+  const barbTitle = scale
+    ? `Wind barbs (${content.speedUnitLabel}) · colour = temperature (${content.temperatureUnitLabel})`
+    : `Wind barbs (${content.speedUnitLabel})`;
+  ctx.fillText(barbTitle, pad, top + 12 * unit);
   const barbsWidth = Math.max(width * 0.52, 240 * unit);
   const slot = barbsWidth / content.barbs.length;
   content.barbs.forEach((entry, index) => {
@@ -256,6 +263,32 @@ function drawLegend(
     ctx.font = `normal ${8.5 * unit}px sans-serif`;
     ctx.fillText(entry.caption, cx + 18 * unit, top + 34 * unit);
   });
+
+  if (scale) {
+    // Same stops and tick labels as the on-screen strip, drawn as a canvas gradient. The export
+    // always labels every tick; only the narrow screen strip drops some (SCRUM-165).
+    const unitGap = 26 * unit;
+    const barWidth = Math.max(1, width - pad * 2 - unitGap);
+    const barY = top + 54 * unit;
+    const barHeight = 10 * unit;
+    const gradient = ctx.createLinearGradient(pad, barY, pad + barWidth, barY);
+    for (const stop of scale.stops) gradient.addColorStop(stop.offset, stop.color);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(pad, barY, barWidth, barHeight);
+
+    ctx.fillStyle = TEXT;
+    ctx.font = `normal ${7.5 * unit}px sans-serif`;
+    scale.ticks.forEach((tick, index) => {
+      const x = pad + tick.offset * barWidth;
+      const labelWidth = ctx.measureText(tick.label).width;
+      const drawX =
+        index === 0 ? x : index === scale.ticks.length - 1 ? x - labelWidth : x - labelWidth / 2;
+      ctx.fillText(tick.label, drawX, top + 75 * unit);
+    });
+    ctx.fillStyle = MUTED;
+    ctx.fillText(scale.unitLabel, pad + barWidth + 6 * unit, barY + 9 * unit);
+    return;
+  }
 
   ctx.fillStyle = MUTED;
   ctx.font = `normal ${8.5 * unit}px sans-serif`;

@@ -20,6 +20,7 @@ import {
 import { captureMapCanvas, saveMapImage, waitForTiles } from './utils/captureMap';
 import { saveMapPdf, type PdfOrientation, type PdfPageSize } from './utils/pdfExport';
 import { saveRangeImages, saveRangePdf } from './utils/rangeOutput';
+import { buildWindColorScale } from './utils/windColorScale';
 import {
   MapExportDialog,
   type MapExportError,
@@ -217,8 +218,19 @@ export const App: React.FC = () => {
       temperatures: temperatureBands(units.unitSystem),
       speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
       temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
+      // The export shows the same scale as the on-screen strip only when the gradient is on.
+      windColorScale: mapSettings.windColorOverlayVisible
+        ? buildWindColorScale(units.speedUnit)
+        : undefined,
     }),
-    [timezone, selectedModelInfo, units.unitSystem, units.speedUnit, mapSettings.tileLayer],
+    [
+      timezone,
+      selectedModelInfo,
+      units.unitSystem,
+      units.speedUnit,
+      mapSettings.tileLayer,
+      mapSettings.windColorOverlayVisible,
+    ],
   );
 
   /** Resolve once the map shows `hour` with that hour's grid data (when drawn) and its tiles. */

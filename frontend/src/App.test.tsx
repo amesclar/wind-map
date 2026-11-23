@@ -30,6 +30,7 @@ vi.mock('./utils/rangeOutput', () => ({
   saveRangePdf: vi.fn().mockResolvedValue(undefined),
 }));
 import { saveRangeImages, saveRangePdf } from './utils/rangeOutput';
+import { buildWindColorScale } from './utils/windColorScale';
 
 // The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
 // fetchWeather/fetchPointWeather at all.
@@ -261,8 +262,22 @@ describe('App map integration (SCRUM-126)', () => {
     expect(content.footer).toContain('Wind Map v');
     expect(content.barbs).toHaveLength(4);
     expect(content.temperatures.length).toBeGreaterThan(0);
+    expect(content.windColorScale).toBeUndefined(); // the gradient is off by default
     // The dialog closes once the file is handed to the browser.
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('passes the shared wind speed scale to the export when the gradient is on (SCRUM-165)', async () => {
+    localStorage.setItem(STORAGE_KEYS.windColorOverlayVisible, 'true');
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [, content] = vi.mocked(saveMapImage).mock.calls[0];
+    expect(content.windColorScale).toEqual(buildWindColorScale('knots'));
   });
 
   it('exports with the edited file name, cleaned of reserved characters (SCRUM-162)', async () => {

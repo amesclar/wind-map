@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildWindColorScale, COLOR_STOPS } from './windColorScale';
 import {
   captureMapCanvas,
   collectTiles,
@@ -38,6 +39,7 @@ function fakeContext() {
     closePath: vi.fn(),
     drawImage: vi.fn(),
     measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
+    createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
   };
 }
 
@@ -170,6 +172,43 @@ describe('captureMapCanvas (SCRUM-116)', () => {
     expect(texts).toContain('5 kt');
     expect(texts).toContain(content.footer);
     expect(ctx.fillRect).toHaveBeenCalled();
+  });
+
+  it('draws the shared wind speed scale and barb caption when the gradient is on (SCRUM-165)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+    const scale = buildWindColorScale('mph');
+
+    await captureMapCanvas(
+      element,
+      { ...content, windColorScale: scale, speedUnitLabel: 'mph', temperatureUnitLabel: '°C' },
+      { domToCanvas, tileTimeoutMs: 0 },
+    );
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    expect(texts).toContain('Wind barbs (mph) · colour = temperature (°C)');
+    expect(texts).not.toContain('Temperature (°C)');
+    for (const tick of scale.ticks) expect(texts).toContain(tick.label);
+
+    expect(ctx.createLinearGradient).toHaveBeenCalledTimes(1);
+    const gradient = ctx.createLinearGradient.mock.results[0].value as { addColorStop: ReturnType<typeof vi.fn> };
+    expect(gradient.addColorStop).toHaveBeenCalledTimes(COLOR_STOPS.length);
+    for (const stop of scale.stops) {
+      expect(gradient.addColorStop).toHaveBeenCalledWith(stop.offset, stop.color);
+    }
+  });
+
+  it('keeps the barb and temperature rows when the gradient is off (SCRUM-165)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+
+    await captureMapCanvas(element, content, { domToCanvas, tileTimeoutMs: 0 });
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    expect(texts).toContain('Wind barbs (kt)');
+    expect(texts).toContain('Temperature (°F)');
+    expect(texts.some((text) => text.includes('colour = temperature'))).toBe(false);
+    expect(ctx.createLinearGradient).not.toHaveBeenCalled();
   });
 
   it('draws calm circles and feathered barbs', () => {
