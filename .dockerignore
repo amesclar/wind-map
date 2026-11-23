@@ -21,7 +21,6 @@ frontend/coverage
 .coverage
 htmlcov
 ruff.toml
-.coveragerc
 .github
-GEMINI.md
-.config
+# .coveragerc, GEMINI.md and .config stay in the context for the `test` stage (SCRUM-152); no
+# shipped stage copies them.
