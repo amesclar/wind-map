@@ -64,3 +64,9 @@
 .osm-dark-tiles {
   filter: invert(100%) hue-rotate(185deg) brightness(92%) contrast(90%);
 }
+
+/* Dark halo keeps the temperature-colored barbs readable over the wind color gradient
+   (SCRUM-123); the two shadows give a soft outer glow rather than a hard outline. */
+.wind-barb-halo {
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
+}

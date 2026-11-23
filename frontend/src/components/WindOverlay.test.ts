@@ -72,6 +72,15 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).toContain(getTemperatureColor(85));
   });
 
+  it('adds the dark halo class only when asked (SCRUM-123)', () => {
+    const plain = buildGridBarbIcon(pt(15, 90, 85), false).options.html as string;
+    expect(plain).not.toContain('wind-barb-halo');
+
+    const haloed = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
+    expect(haloed).toContain('wind-barb-halo');
+    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 32));
+  });
+
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), true);
     const html = icon.options.html as string;
