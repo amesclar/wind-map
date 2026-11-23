@@ -152,7 +152,7 @@ You must automatically create or update unit tests for every functional code cha
 
 ## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139)
 - `.kiro/steering/*.md` is the single source of truth for the project rules.
-- `.config/antigravity/instructions.md`, `GEMINI.md` and `AGENTS.md` (read by Devin and Freebuff) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date, or when `AGENTS.md` grows past the 16 KiB Devin reads automatically.
+- `.config/antigravity/instructions.md`, `GEMINI.md`, `AGENTS.md` and `.devin/rules/*.md` are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. The rules are tiered (SCRUM-160): `AGENTS.md` holds only the always-on guardrails under a 14,000-byte budget, the situational files become `.devin/rules/*.md` with `trigger: glob` front matter (12,000 characters each), and `GEMINI.md`, the Antigravity file and `.freebuff/rules.md` keep the complete body. A pytest test fails when a generated file is out of date or a budget is exceeded.
 - Freebuff (SCRUM-139): Freebuff Desktop reads the root `AGENTS.md` and the skills in `.agents/skills/`. `.freebuff/rules.md` is generated from the same steering files plus a workflow inventory (the skills and the post-task hooks), so changing a steering file, a skill in `.agents/skills/` or a hook in `.kiro/hooks/` or `.devin/hooks.v1.json` requires running `python scripts/sync-ai-rules.py` and committing the regenerated files. Do not copy skills into `.freebuff/skills/`, because Freebuff already loads `.agents/skills/`. Freebuff has no project hooks, so the post-task container rebuild follows `release-versioning.md`.
 - Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.
 
@@ -191,6 +191,11 @@ Load a skill when the task matches its description.
 - `rebuild-container` — Rebuild the wind-map Docker image and restart the local container on port 5005 so the running app reflects the latest code. Use after changing app code when the user wants to see it running, or to verify the Docker build. (`.agents/skills/rebuild-container/SKILL.md`)
 - `release` — Cut a wind-map release vX.Y.Z by bumping VERSION and frontend/package.json, authoring release notes, merging develop into master, and tagging. Use when the user asks to release, tag, or bump the version. (`.agents/skills/release/SKILL.md`)
 - `spec-workflow` — Plan and implement a SCRUM ticket as a Kiro-style spec in .kiro/specs/<ticket>/ (requirements or bugfix, design, tasks). Use for any feature or bug fix bigger than a one-line change, or when the user asks for a spec, design or task plan. (`.agents/skills/spec-workflow/SKILL.md`)
+
+## Situational rules for Devin
+
+- `.devin/rules/quality-gates.md` — Testing policy, CI parity, branch protection and pinned dependencies.
+- `.devin/rules/release-versioning.md` — Version source of truth, build hash, releases and container rebuilds.
 
 ## Post-task hooks
 
