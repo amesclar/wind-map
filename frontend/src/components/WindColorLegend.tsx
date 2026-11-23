@@ -4,12 +4,11 @@ import { MAX_WIND_KNOTS, windColorCssGradient } from '../utils/windColorScale';
 import { knotsToUnit, SPEED_UNIT_LABEL } from '../utils/units';
 
 /**
- * Gap above the timeline drawer and the floor used when no drawer is showing, so the strip
- * still clears the attribution. The offsets live in index.css (`.wind-color-legend`, which
- * reads `--drawer-height` published by the drawer), so the constants stay documented here.
+ * The strip's fixed offset above the bottom of the map, which keeps it clear of the attribution.
+ * The offset itself lives in index.css (`.wind-color-legend`), so the constant stays documented
+ * here. The forecast drawer that used to push the strip up is gone (SCRUM-126).
  */
-export const LEGEND_GAP_PX = 6;
-export const LEGEND_MIN_BOTTOM_PX = 24;
+export const LEGEND_BOTTOM_PX = 24;
 export const LEGEND_HEIGHT_PX = 24;
 /** Below this width only every second tick is labelled. */
 export const NARROW_LEGEND_PX = 640;
@@ -39,11 +38,10 @@ function useNarrowLegend(): boolean {
 }
 
 /**
- * Full-width strip under the map, above the drawer: the same gradient as the overlay with
- * tick labels in the user's speed unit (SCRUM-124). It never takes pointer events, and on
- * narrow screens it drops every second label so they stop colliding. Its vertical offset is
- * `.wind-color-legend` in index.css, which rides on the drawer's published height so an
- * expanded forecast panel cannot cover it (SCRUM-144).
+ * Full-width strip under the map: the same gradient as the overlay with tick labels in the
+ * user's speed unit (SCRUM-124). It never takes pointer events, and on narrow screens it drops
+ * every second label so they stop colliding. Its vertical offset is `.wind-color-legend` in
+ * index.css, a fixed 24px above the map attribution (SCRUM-126).
  */
 export const WindColorLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedUnit }) => {
   const narrow = useNarrowLegend();

@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { SavedLocation, WeatherForecastResponse, MapTileLayer, UnitSystem, WindSpeedUnit } from '../types';
+import {
+  SavedLocation,
+  WeatherForecastResponse,
+  MapTileLayer,
+  UnitSystem,
+  WindDirDisplay,
+  WindSpeedUnit,
+} from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay } from './WindOverlay';
 import { WindColorOverlay } from './WindColorOverlay';
@@ -29,6 +36,8 @@ interface MapViewProps {
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
+  /** How the barb pop-up shows direction (SCRUM-126); default barb. */
+  dirDisplay?: WindDirDisplay;
 }
 
 interface LocationMarker {
@@ -104,6 +113,7 @@ export const MapView: React.FC<MapViewProps> = ({
   onGridPointSelect,
   unitSystem = 'imperial',
   speedUnit = 'knots',
+  dirDisplay = 'barb',
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -239,6 +249,9 @@ export const MapView: React.FC<MapViewProps> = ({
         selectedPoint={selectedGridPoint}
         onGridPointSelect={onGridPointSelect}
         halo={windColorOverlayVisible}
+        unitSystem={unitSystem}
+        speedUnit={speedUnit}
+        dirDisplay={dirDisplay}
       />
       {windColorOverlayVisible && (
         <>

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SPEED_UNIT_LABEL,
+  degreesToCardinal,
   formatDegreesTrue,
   formatDirection,
-  formatSliceTime,
+  formatKnotsInUnit,
   formatSpeed,
   formatTemperature,
+  formatTemperatureFromF,
   knotsToUnit,
   roundKnotsInUnit,
+  SPEED_UNIT_LABEL,
 } from './units';
 import { makePoint } from '../test/fixtures';
 import type { WindSpeedUnit } from '../types';
@@ -46,10 +48,41 @@ describe('knotsToUnit (SCRUM-124)', () => {
   });
 });
 
+describe('formatKnotsInUnit (SCRUM-126)', () => {
+  it('converts a knot-only value, keeping one decimal only when it says something', () => {
+    expect(formatKnotsInUnit(14, 'knots')).toBe('14 kt');
+    expect(formatKnotsInUnit(12.8, 'knots')).toBe('12.8 kt');
+    expect(formatKnotsInUnit(14, 'kmh')).toBe('25.9 km/h');
+    expect(formatKnotsInUnit(14, 'mph')).toBe('16.1 mph');
+    expect(formatKnotsInUnit(14, 'ms')).toBe('7.2 m/s');
+  });
+});
+
 describe('formatTemperature (SCRUM-92)', () => {
   it('rounds to whole degrees in the chosen system', () => {
     expect(formatTemperature(pt, 'imperial')).toBe('54°F');
     expect(formatTemperature(pt, 'metric')).toBe('12°C');
+  });
+});
+
+describe('formatTemperatureFromF (SCRUM-126)', () => {
+  it('shows °F as given and converts to whole °C for grid points', () => {
+    expect(formatTemperatureFromF(53.6, 'imperial')).toBe('54°F');
+    expect(formatTemperatureFromF(53.6, 'metric')).toBe('12°C');
+    expect(formatTemperatureFromF(32, 'metric')).toBe('0°C');
+  });
+});
+
+describe('degreesToCardinal (SCRUM-126)', () => {
+  it('maps each sector to a 16-point cardinal and wraps at 360', () => {
+    expect(degreesToCardinal(0)).toBe('N');
+    expect(degreesToCardinal(45)).toBe('NE');
+    expect(degreesToCardinal(90)).toBe('E');
+    expect(degreesToCardinal(180)).toBe('S');
+    expect(degreesToCardinal(220)).toBe('SW');
+    expect(degreesToCardinal(305)).toBe('NW');
+    expect(degreesToCardinal(360)).toBe('N');
+    expect(degreesToCardinal(-45)).toBe('NW');
   });
 });
 
@@ -68,16 +101,5 @@ describe('formatDegreesTrue (SCRUM-90)', () => {
 describe('formatDirection', () => {
   it('shows cardinal and rounded degrees', () => {
     expect(formatDirection({ wind_direction_cardinal: 'SW', wind_direction_deg: 220.4 })).toBe('SW (220°)');
-  });
-});
-
-describe('formatSliceTime', () => {
-  it('keeps the wall-clock time Open-Meteo returned', () => {
-    expect(formatSliceTime('2026-11-16T21:00')).toBe('Mon 9 PM');
-    expect(formatSliceTime('2026-11-17T00:00')).toBe('Tue 12 AM');
-  });
-
-  it('returns the input when it is not a date', () => {
-    expect(formatSliceTime('not a time')).toBe('not a time');
   });
 });

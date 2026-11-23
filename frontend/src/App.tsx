@@ -4,11 +4,9 @@ import { fetchAppConfig, fetchModels } from './api/client';
 import { DEFAULT_MODEL } from './constants';
 import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
-import { type Selection, useAllWeather, useDrawerForecast } from './hooks/useForecast';
-import { useLatest } from './hooks/useLatest';
+import { type Selection, useAllWeather } from './hooks/useForecast';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
-import { TimelineDrawer } from './components/TimelineDrawer';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
@@ -34,16 +32,11 @@ export const App: React.FC = () => {
   const units = useUnitPreferences();
   const { locations, load: loadLocations, add: addLocation, remove: removeLocation } = useLocations();
 
-  // What the drawer shows: one saved location or one map point (never both).
+  // Selected saved location or clicked map point (never both): it drives the marker highlight
+  // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
   const [selection, setSelection] = useState<Selection | null>(null);
-  // Bumped to reload the drawer when the same location is selected again.
-  const [refreshToken, setRefreshToken] = useState(0);
 
   const allWeather = useAllWeather(selectedModel, timezone);
-  const drawer = useDrawerForecast(selection, selectedModel, timezone, {
-    refreshToken,
-    onSavedForecast: allWeather.put, // keep the map marker in step with the drawer
-  });
 
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
@@ -56,17 +49,9 @@ export const App: React.FC = () => {
     [selection],
   );
 
-  const selectionRef = useLatest(selection);
-  const selectSaved = useCallback(
-    (location: SavedLocation) => {
-      const current = selectionRef.current;
-      if (current?.kind === 'saved' && current.location.id === location.id) {
-        setRefreshToken((n) => n + 1); // same location: reload instead of a no-op
-      }
-      setSelection({ kind: 'saved', location });
-    },
-    [selectionRef],
-  );
+  const selectSaved = useCallback((location: SavedLocation) => {
+    setSelection({ kind: 'saved', location });
+  }, []);
 
   // Startup: config, models, saved locations, then the user's position.
   const { applyServerConfig } = mapSettings;
@@ -173,14 +158,6 @@ export const App: React.FC = () => {
           windColorOverlayVisible={mapSettings.windColorOverlayVisible}
           selectedGridPoint={selectedGridPoint}
           onGridPointSelect={handleGridPointSelect}
-          unitSystem={units.unitSystem}
-          speedUnit={units.speedUnit}
-        />
-
-        <TimelineDrawer
-          selectedLocation={selectedLocation}
-          weatherData={drawer.forecast}
-          isLoading={drawer.isLoading}
           unitSystem={units.unitSystem}
           speedUnit={units.speedUnit}
           dirDisplay={units.dirDisplay}
