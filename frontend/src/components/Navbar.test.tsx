@@ -19,6 +19,8 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onOpenPreferences: vi.fn(),
     onOpenModelGuide: vi.fn(),
     hasCartoKey: false,
+    onSaveMapAsImage: vi.fn(),
+    savingMap: false,
     ...overrides,
   };
   const { container } = render(<Navbar {...props} />);

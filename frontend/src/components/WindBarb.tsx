@@ -1,4 +1,5 @@
 import React from 'react';
+import { barbFeatures } from '../utils/windBarb';
 
 /**
  * Returns temperature color code based on Fahrenheit temperature.
@@ -37,10 +38,10 @@ export function generateWindBarbSvg(options: WindBarbOptions): string {
   } = options;
 
   const color = colorOverride ?? getTemperatureColor(tempF);
-  const roundedSpeed = Math.round(speedKnots);
+  const { calm, pennants, fullBarbs, halfBarbs } = barbFeatures(speedKnots);
 
   // Calm conditions (< 2 knots)
-  if (roundedSpeed < 2) {
+  if (calm) {
     return `
       <svg width="${size}" height="${size}" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
         <circle cx="25" cy="25" r="9" stroke="${color}" stroke-width="2.5" fill="none"/>
@@ -55,14 +56,6 @@ export function generateWindBarbSvg(options: WindBarbOptions): string {
       </svg>
     `;
   }
-
-  // Calculate feathers: 50kt pennants, 10kt full barbs, 5kt half barbs
-  let remaining = roundedSpeed;
-  const pennants = Math.floor(remaining / 50);
-  remaining %= 50;
-  const fullBarbs = Math.floor(remaining / 10);
-  remaining %= 10;
-  const halfBarbs = remaining >= 3 ? 1 : 0;
 
   // Build feather SVG paths along staff
   // Staff runs from (25, 25) base to (25, 6) top in local coordinates

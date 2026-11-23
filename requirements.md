@@ -46,6 +46,14 @@ clicking on location should show;
 
 Wind Barb Markers: SVG wind barbs with speed feathers (knots) and temperature color-coding on the map.
 
+Map image export (SCRUM-116): the top bar's **Save** button (a plain button with a PNG/JPEG menu until the full dialog arrives as SCRUM-117) downloads the current map view as a single image.
++ Capture is client-side: `modern-screenshot` 4.7.0 is imported lazily (its own chunk) and renders the map container at 2x into a canvas. Leaflet controls and pop-ups are filtered out, so no UI chrome reaches the image; tiles use `crossOrigin: true`.
++ The header, legend and footer are drawn on the canvas, not captured from the DOM: header = the hour the image shows (`Sun 22 Nov 20:00 PST`) plus reference lines with the UTC time, the model, its run and the capture time; legend = the barb glyphs for calm/5/10/50 kt in the selected speed unit and the barb temperature colour classes in the selected temperature unit; footer = units, the base-map attribution (OSM, plus CARTO) and `Wind Map v<version>`.
++ The image is named after the shown hour, e.g. `wind-map_2026-11-18_1400PST.png` (`buildExportFileName`).
++ `utils/mapExport.ts` builds all the text and the legend contents as pure functions; `utils/captureMap.ts` composes and downloads; `utils/windBarb.ts` holds the feather maths shared with the on-screen barbs.
++ The header uses the current hour when the map shows live values, and the selected forecast hour when the selector has moved (SCRUM-127).
++ Not in this task: PDF, time ranges, progress and cancel, and the export dialog (SCRUM-117).
+
 Wind Grid Overlay (SCRUM-86, SCRUM-89): A continuous grid of wind barbs covering the entire visible map viewport, not just saved locations.
 + Grid density: approximately one barb per 80px at the current zoom level; grid dimensions (cols × rows) are computed from the map bounds and pixel size on each pan/zoom.
 + Data source: `GET /api/weather/grid` backend endpoint, which accepts a bounding box, grid dimensions and optionally a forecast hour, fetches the wind from Open-Meteo in a single batched request, and caches each grid point per hour for 30 minutes (same TTL as location weather). No additional CARTO tile API calls are incurred — barbs are DOM elements, not tiles.

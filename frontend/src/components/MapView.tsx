@@ -42,6 +42,8 @@ interface MapViewProps {
   validTime?: string | null;
   /** Human-readable selected hour for the pop-ups (SCRUM-127), e.g. "Mon 23 Nov 12:00 PST". */
   validTimeLabel?: string | null;
+  /** The map container, so the image export can capture it (SCRUM-116). */
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 interface LocationMarker {
@@ -122,6 +124,7 @@ export const MapView: React.FC<MapViewProps> = ({
   dirDisplay = 'barb',
   validTime = null,
   validTimeLabel = null,
+  containerRef,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -245,10 +248,16 @@ export const MapView: React.FC<MapViewProps> = ({
     markersRef.current.get(selectedLocation.id)?.marker.openPopup();
   }, [selectedLocation]);
 
+  // Hand the node to both the internal ref (used to create the map) and the export's ref.
+  const setContainer = (node: HTMLDivElement | null) => {
+    mapContainerRef.current = node;
+    if (containerRef) containerRef.current = node;
+  };
+
   return (
     <div className="w-full h-full relative isolate">
       <div
-        ref={mapContainerRef}
+        ref={setContainer}
         data-testid="map-canvas"
         className="w-full h-full"
       />
