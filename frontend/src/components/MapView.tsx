@@ -3,6 +3,8 @@ import L from 'leaflet';
 import { SavedLocation, WeatherForecastResponse, MapTileLayer, UnitSystem, WindSpeedUnit } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay } from './WindOverlay';
+import { WindColorOverlay } from './WindColorOverlay';
+import { WindColorLegend } from './WindColorLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
@@ -20,6 +22,8 @@ interface MapViewProps {
   cartoApiKey: string;
   selectedModel: string;
   windOverlayVisible: boolean;
+  /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
+  windColorOverlayVisible: boolean;
   selectedGridPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
@@ -95,6 +99,7 @@ export const MapView: React.FC<MapViewProps> = ({
   cartoApiKey,
   selectedModel,
   windOverlayVisible,
+  windColorOverlayVisible,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -112,8 +117,13 @@ export const MapView: React.FC<MapViewProps> = ({
   // re-renders WindOverlay once the map is ready.
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
 
-  // One grid fetch per view change, shared by every layer that draws it (SCRUM-122).
-  const gridPoints = useWindGrid(mapInstance, selectedModel, windOverlayVisible);
+  // One grid fetch per view change, shared by every layer that draws it (SCRUM-122);
+  // either layer keeps it alive (SCRUM-124).
+  const gridPoints = useWindGrid(
+    mapInstance,
+    selectedModel,
+    windOverlayVisible || windColorOverlayVisible,
+  );
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -228,7 +238,14 @@ export const MapView: React.FC<MapViewProps> = ({
         points={gridPoints}
         selectedPoint={selectedGridPoint}
         onGridPointSelect={onGridPointSelect}
+        halo={windColorOverlayVisible}
       />
+      {windColorOverlayVisible && (
+        <>
+          <WindColorOverlay map={mapInstance} points={gridPoints} visible />
+          <WindColorLegend speedUnit={speedUnit} />
+        </>
+      )}
     </div>
   );
 };

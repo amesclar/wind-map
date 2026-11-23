@@ -90,6 +90,7 @@ describe('timeline drawer forecast', () => {
         cartoApiKey=""
         selectedModel="best_match"
         windOverlayVisible={false}
+        windColorOverlayVisible={false}
         selectedGridPoint={null}
         onGridPointSelect={() => {}}
       />

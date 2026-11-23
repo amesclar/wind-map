@@ -18,6 +18,19 @@ export function formatSpeed(pt: SpeedPoint, kind: 'speed' | 'gust', unit: WindSp
   return `${pt[`wind_${kind}_${unit}`]} ${SPEED_UNIT_LABEL[unit]}`;
 }
 
+/** Knots per one unit of each display unit (1 kt = 1.852 km/h = 1.15078 mph = 0.514444 m/s). */
+const KNOTS_PER_UNIT: Record<WindSpeedUnit, number> = { knots: 1, kmh: 1.852, mph: 1.15078, ms: 0.514444 };
+
+/** A speed in knots converted to the display unit (SCRUM-124). */
+export function knotsToUnit(knots: number, unit: WindSpeedUnit): number {
+  return knots * KNOTS_PER_UNIT[unit];
+}
+
+/** Knots converted and rounded, matching the whole-number legend ticks (SCRUM-124). */
+export function roundKnotsInUnit(knots: number, unit: WindSpeedUnit): number {
+  return Math.round(knotsToUnit(knots, unit));
+}
+
 /** Temperature rounded to a whole degree, e.g. "54°F" or "12°C". */
 export function formatTemperature(
   pt: Pick<WeatherForecastPoint, 'temperature_f' | 'temperature_c'>,

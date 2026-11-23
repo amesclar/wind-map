@@ -10,6 +10,7 @@ const parseTileLayer = (stored: string | null): MapTileLayer =>
 const parseApiKey = (stored: string | null) => stored ?? '';
 const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
+const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
 
 /** Tile layer, CARTO API key and wind overlay visibility, persisted to localStorage. */
 export function useMapSettings() {
@@ -32,6 +33,10 @@ export function useMapSettings() {
   const [windOverlayVisible, setWindOverlayVisible] = useLocalStorageState(
     STORAGE_KEYS.windOverlayVisible,
     parseOverlay,
+  );
+  const [windColorOverlayVisible, setWindColorOverlayVisible] = useLocalStorageState(
+    STORAGE_KEYS.windColorOverlayVisible,
+    parseColorOverlay,
   );
 
   /** Saving a key switches to the CARTO layer; clearing it keeps the current layer. */
@@ -62,6 +67,8 @@ export function useMapSettings() {
     saveCartoApiKey,
     windOverlayVisible,
     setWindOverlayVisible,
+    windColorOverlayVisible,
+    setWindColorOverlayVisible,
     applyServerConfig,
   };
 }
