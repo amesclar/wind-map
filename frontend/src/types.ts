@@ -47,11 +47,25 @@ export interface WeatherForecastResponse {
   cached_at: number;
   current: WeatherForecastPoint;
   forecast: WeatherForecastPoint[];
+  /** Hour `current` describes when one was requested (SCRUM-115); absent means live values. */
+  valid_time?: string | null;
 }
 
 export interface WeatherModel {
   id: string;
   name: string;
+}
+
+/** GET /api/weather/models entry (SCRUM-115): cadence, horizon and run times. */
+export interface WeatherModelInfo extends WeatherModel {
+  /** Hours between model runs, and the UTC cycle hours those runs happen at. */
+  update_hours: number;
+  update_cycles_utc: number[];
+  /** Forecast hours the model covers; the grid's `time` stays inside it. */
+  horizon_hours: number;
+  /** Most recent and next cycle boundary, ISO 8601 UTC. */
+  last_run_utc: string;
+  next_run_utc: string;
 }
 
 export type UnitSystem = 'imperial' | 'metric';
@@ -74,8 +88,10 @@ export interface GridWindPoint {
   longitude: number;
   wind_speed_knots: number;
   wind_direction_deg: number;
-  /** Current temperature in °F; colors the map barb like the drawer (SCRUM-89). */
+  /** Temperature in °F; colors the map barb (SCRUM-89). */
   temperature_f?: number | null;
+  /** Forecast hour these values describe (SCRUM-115); null or absent means current. */
+  time?: string | null;
 }
 
 /** The grid point whose barb is selected (highlighted) on the map. */

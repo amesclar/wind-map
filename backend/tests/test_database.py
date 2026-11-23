@@ -76,7 +76,9 @@ def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
         )
         for lat, expires_in in ((1, -1), (2, 600)):
             conn.execute(
-                "INSERT INTO point_weather_cache VALUES (?, ?, 'm', 'UTC', ?, ?, '{}');",
+                "INSERT INTO point_weather_cache "
+                "(lat_key, lon_key, model, timezone, hour, cached_at, expires_at, payload_json) "
+                "VALUES (?, ?, 'm', 'UTC', 'current', ?, ?, '{}');",
                 (lat, lat, now, now + expires_in),
             )
     insert_grid_row(1, 1, "m", expires_in=-1)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cadenceFromFrequency, parseModelGuide } from './modelGuide';
+import { cadenceFromFrequency, horizonHoursFromText, parseModelGuide } from './modelGuide';
 import guideMarkdown from '../assets/weather-models.md?raw';
 
 describe('cadenceFromFrequency', () => {
@@ -21,6 +21,19 @@ describe('cadenceFromFrequency', () => {
   });
 });
 
+describe('horizonHoursFromText (SCRUM-115)', () => {
+  it.each([
+    ['7.5 days', 180],
+    ['16 days', 384],
+    ['18 h (48 h on 00/06/12/18 UTC)', 18],
+    ['2.5-day horizon', 60],
+    ['—', null],
+    ['', null],
+  ])('turns %s into %s hours', (text, expected) => {
+    expect(horizonHoursFromText(text)).toBe(expected);
+  });
+});
+
 describe('parseModelGuide', () => {
   const guide = parseModelGuide(guideMarkdown);
 
@@ -31,6 +44,7 @@ describe('parseModelGuide', () => {
       'Region',
       'Update Frequency',
       'Cycle Times (UTC) / Notes',
+      'Time Horizon',
     ]);
   });
 
@@ -41,6 +55,18 @@ describe('parseModelGuide', () => {
     expect(cadences.filter((c) => c === '3h')).toHaveLength(3);
     expect(cadences.filter((c) => c === '6h')).toHaveLength(6);
     expect(cadences).not.toContain(null);
+  });
+
+  it('reads the time horizon of the selectable families (SCRUM-115)', () => {
+    const hours = (model: string) => guide.rows.find((row) => row.model === model)?.horizonHours;
+    expect(hours('NOAA GFS')).toBe(384);
+    expect(hours('ECMWF IFS (HRES 9 km)')).toBe(360);
+    expect(hours('DWD ICON Global')).toBe(180);
+    expect(hours('NOAA HRRR')).toBe(18);
+    // Rows whose horizon the table does not state stay empty.
+    const marine = guide.rows.find((row) => row.model === 'Open-Meteo Marine (Waves)');
+    expect(marine?.horizon).toBe('—');
+    expect(marine?.horizonHours).toBeNull();
   });
 
   it('keeps the row text of the corrected document', () => {
@@ -59,7 +85,7 @@ describe('parseModelGuide', () => {
       ),
     );
     expect(parsed.rows).toEqual([
-      { model: 'Only Model', region: '', frequency: '', cadence: null, notes: '' },
+      { model: 'Only Model', region: '', frequency: '', cadence: null, notes: '', horizon: '', horizonHours: null },
     ]);
   });
 

@@ -34,18 +34,19 @@ def _fresh(row, now: float) -> CachedForecast | None:
 
 @dataclass(frozen=True)
 class SavedLocationCache:
-    """weather_cache, keyed by (location_id, model, timezone)."""
+    """weather_cache, keyed by (location_id, model, timezone, hour)."""
 
     location_id: int
     model: str
     timezone: str
+    hour: str = "current"
 
     def get(self, now: float) -> CachedForecast | None:
         with db_connection() as conn:
             row = conn.execute(
                 "SELECT payload_json, cached_at, expires_at FROM weather_cache "
-                "WHERE location_id = ? AND model = ? AND timezone = ?;",
-                (self.location_id, self.model, self.timezone),
+                "WHERE location_id = ? AND model = ? AND timezone = ? AND hour = ?;",
+                (self.location_id, self.model, self.timezone, self.hour),
             ).fetchone()
         return _fresh(row, now)
 
@@ -53,35 +54,45 @@ class SavedLocationCache:
         with db_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO weather_cache (location_id, model, timezone, cached_at, expires_at, payload_json)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(location_id, model, timezone) DO UPDATE SET
+                INSERT INTO weather_cache
+                    (location_id, model, timezone, hour, cached_at, expires_at, payload_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(location_id, model, timezone, hour) DO UPDATE SET
                     cached_at=excluded.cached_at,
                     expires_at=excluded.expires_at,
                     payload_json=excluded.payload_json;
                 """,
-                (self.location_id, self.model, self.timezone, now, now + CACHE_TTL_SECONDS, json.dumps(payload)),
+                (
+                    self.location_id,
+                    self.model,
+                    self.timezone,
+                    self.hour,
+                    now,
+                    now + CACHE_TTL_SECONDS,
+                    json.dumps(payload),
+                ),
             )
 
 
 @dataclass(frozen=True)
 class PointCache:
-    """point_weather_cache, keyed by (rounded lat, rounded lon, model, timezone)."""
+    """point_weather_cache, keyed by (rounded lat, rounded lon, model, timezone, hour)."""
 
     latitude: float
     longitude: float
     model: str
     timezone: str
+    hour: str = "current"
 
     @property
     def key(self) -> tuple:
-        return (*coord_key(self.latitude, self.longitude), self.model, self.timezone)
+        return (*coord_key(self.latitude, self.longitude), self.model, self.timezone, self.hour)
 
     def get(self, now: float) -> CachedForecast | None:
         with db_connection() as conn:
             row = conn.execute(
                 "SELECT payload_json, cached_at, expires_at FROM point_weather_cache "
-                "WHERE lat_key = ? AND lon_key = ? AND model = ? AND timezone = ?;",
+                "WHERE lat_key = ? AND lon_key = ? AND model = ? AND timezone = ? AND hour = ?;",
                 self.key,
             ).fetchone()
         return _fresh(row, now)
@@ -90,9 +101,10 @@ class PointCache:
         with db_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO point_weather_cache (lat_key, lon_key, model, timezone, cached_at, expires_at, payload_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(lat_key, lon_key, model, timezone) DO UPDATE SET
+                INSERT INTO point_weather_cache
+                    (lat_key, lon_key, model, timezone, hour, cached_at, expires_at, payload_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(lat_key, lon_key, model, timezone, hour) DO UPDATE SET
                     cached_at=excluded.cached_at,
                     expires_at=excluded.expires_at,
                     payload_json=excluded.payload_json;

@@ -1,6 +1,12 @@
-"""Grid weather service: current wind for a lat/lon grid using Open-Meteo batch requests."""
+"""Grid weather service: wind for a lat/lon grid at the current hour or a forecast hour.
+
+Current values come from Open-Meteo's `current` block; a requested hour comes from the hourly
+series for that UTC day (SCRUM-115). Rows are cached per (rounded lat, lon, model, hour), so a
+scrub or a play-through reuses the same hour it has already fetched.
+"""
 
 import time
+from datetime import UTC, datetime
 
 import httpx
 
@@ -13,33 +19,42 @@ from backend.app.config import (
 from backend.app.database import db_connection
 from backend.app.models import GridWindPoint
 from backend.app.services import open_meteo
+from backend.app.services.time_window import hour_key
 from backend.app.units import as_float, c_to_f, coord_key
+
+GRID_VARIABLES = ("wind_speed_10m", "wind_direction_10m", "temperature_2m")
 
 
 async def get_grid_wind(
     points: list[tuple[float, float]],
     model: str = DEFAULT_MODEL,
+    at: datetime | None = None,
 ) -> list[GridWindPoint]:
-    """
-    Return current wind speed (knots), direction (degrees) and temperature (°F) for each (lat, lon) point.
-    Hits the cache first; fetches any misses in a single batched Open-Meteo request.
+    """Wind speed (knots), direction (degrees) and temperature (°F) for each (lat, lon) point.
+
+    `at` is an aware UTC hour (already validated) or None for current conditions. Cache misses
+    are fetched in one batched Open-Meteo request.
     """
     if not points:
         return []
 
+    hour = hour_key(at)
     now = time.time()
-    results, missing = _read_cached_points(points, model, now)
+    results, missing = _read_cached_points(points, model, hour, now)
     if not missing:
         return results
 
     # No DB connection is held during the HTTP call.
-    fetched = await _fetch_from_open_meteo(missing, model)
-    _store_points(fetched, model, now)
+    fetched = await _fetch_from_open_meteo(missing, model, at)
+    _store_points(fetched, model, hour, now)
     return results + fetched
 
 
 def _read_cached_points(
-    points: list[tuple[float, float]], model: str, now: float
+    points: list[tuple[float, float]],
+    model: str,
+    hour: str,
+    now: float,
 ) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
     """Split points into cached results and coordinates that still need fetching."""
     results: list[GridWindPoint] = []
@@ -49,8 +64,9 @@ def _read_cached_points(
             lk, lnk = coord_key(lat, lon)
             row = conn.execute(
                 "SELECT wind_speed_knots, wind_direction_deg, temperature_f FROM grid_weather_cache "
-                "WHERE lat_key=? AND lon_key=? AND model=? AND expires_at>? AND temperature_f IS NOT NULL",
-                (lk, lnk, model, now),
+                "WHERE lat_key=? AND lon_key=? AND model=? AND hour=? AND expires_at>? "
+                "AND temperature_f IS NOT NULL",
+                (lk, lnk, model, hour, now),
             ).fetchone()
             if row:
                 results.append(
@@ -60,6 +76,7 @@ def _read_cached_points(
                         wind_speed_knots=row["wind_speed_knots"],
                         wind_direction_deg=row["wind_direction_deg"],
                         temperature_f=row["temperature_f"],
+                        time=None if hour == "current" else hour,
                     )
                 )
             else:
@@ -67,15 +84,16 @@ def _read_cached_points(
     return results, missing
 
 
-def _store_points(fetched: list[GridWindPoint], model: str, now: float) -> None:
+def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: float) -> None:
     expires_at = now + CACHE_TTL_SECONDS
     with db_connection() as conn:
         conn.executemany(
             """
             INSERT INTO grid_weather_cache
-                (lat_key, lon_key, model, cached_at, expires_at, wind_speed_knots, wind_direction_deg, temperature_f)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(lat_key, lon_key, model) DO UPDATE SET
+                (lat_key, lon_key, model, hour, cached_at, expires_at,
+                 wind_speed_knots, wind_direction_deg, temperature_f)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(lat_key, lon_key, model, hour) DO UPDATE SET
                 cached_at=excluded.cached_at,
                 expires_at=excluded.expires_at,
                 wind_speed_knots=excluded.wind_speed_knots,
@@ -86,6 +104,7 @@ def _store_points(fetched: list[GridWindPoint], model: str, now: float) -> None:
                 (
                     *coord_key(p.latitude, p.longitude),
                     model,
+                    hour,
                     now,
                     expires_at,
                     p.wind_speed_knots,
@@ -97,41 +116,96 @@ def _store_points(fetched: list[GridWindPoint], model: str, now: float) -> None:
         )
 
 
-async def _fetch_from_open_meteo(
-    points: list[tuple[float, float]],
-    model: str,
-) -> list[GridWindPoint]:
-    """
-    Open-Meteo supports comma-separated lat/lon arrays for batch current-weather fetches.
-    One HTTP request returns current conditions for all points.
-    """
-    params = {
+def _batch_params(points: list[tuple[float, float]], model: str) -> dict:
+    """Open-Meteo accepts comma-separated lat/lon arrays, so one request covers every point."""
+    return {
         **open_meteo.forecast_params(model),
         "latitude": ",".join(str(lat) for lat, _ in points),
         "longitude": ",".join(str(lon) for _, lon in points),
-        "current": "wind_speed_10m,wind_direction_10m,temperature_2m",
-        "forecast_days": 1,
     }
-    data = await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params, timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS)
 
-    # When multiple points are requested, Open-Meteo returns a JSON array.
-    # When only one point is requested, it returns a single object.
-    if isinstance(data, dict):
-        data = [data]
-    if len(data) != len(points):
+
+def _as_list(data: object, expected: int) -> list[dict]:
+    """Open-Meteo returns an object for one point and an array for several."""
+    items = [data] if isinstance(data, dict) else list(data)  # type: ignore[arg-type]
+    if len(items) != expected:
         # Treated as an upstream failure (502), not silently truncated.
-        raise httpx.HTTPError(f"Open-Meteo returned {len(data)} grid points for {len(points)} requested")
+        raise httpx.HTTPError(f"Open-Meteo returned {len(items)} grid points for {expected} requested")
+    return items  # type: ignore[return-value]
+
+
+def _point_from_current(lat: float, lon: float, item: dict, hour: str | None) -> GridWindPoint:
+    current = item.get("current") or {}
+    return GridWindPoint(
+        latitude=lat,
+        longitude=lon,
+        wind_speed_knots=as_float(current.get("wind_speed_10m")),
+        wind_direction_deg=as_float(current.get("wind_direction_10m")),
+        temperature_f=c_to_f(current.get("temperature_2m")),
+        time=hour,
+    )
+
+
+def _point_from_hourly(lat: float, lon: float, item: dict, index: int, hour: str) -> GridWindPoint:
+    hourly = item.get("hourly") or {}
+    series = {name: hourly.get(name) or [] for name in GRID_VARIABLES}
+    values = {name: series[name][index] if index < len(series[name]) else None for name in GRID_VARIABLES}
+    return GridWindPoint(
+        latitude=lat,
+        longitude=lon,
+        wind_speed_knots=as_float(values["wind_speed_10m"]),
+        wind_direction_deg=as_float(values["wind_direction_10m"]),
+        temperature_f=c_to_f(values["temperature_2m"]),
+        time=hour,
+    )
+
+
+async def _fetch_from_open_meteo(
+    points: list[tuple[float, float]],
+    model: str,
+    at: datetime | None = None,
+) -> list[GridWindPoint]:
+    """One batched request for every point, either `current` or the requested UTC hour."""
+    if at is None:
+        data = await open_meteo.get_json(
+            OPEN_METEO_FORECAST_URL,
+            {
+                **_batch_params(points, model),
+                "current": ",".join(GRID_VARIABLES),
+                "forecast_days": 1,
+            },
+            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+        )
+        items = _as_list(data, len(points))
+        return [_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(points, items, strict=True)]
+
+    hour = hour_key(at)
+    day = at.astimezone(UTC).strftime("%Y-%m-%d")
+    data = await open_meteo.get_json(
+        OPEN_METEO_FORECAST_URL,
+        {
+            **_batch_params(points, model),
+            "hourly": ",".join(GRID_VARIABLES),
+            "start_date": day,
+            "end_date": day,
+            "timezone": "UTC",
+        },
+        timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+    )
+    items = _as_list(data, len(points))
+    index = _hour_index(items, hour)
 
     output: list[GridWindPoint] = []
-    for (lat, lon), item in zip(points, data, strict=True):
-        current = item.get("current", {})
-        output.append(
-            GridWindPoint(
-                latitude=lat,
-                longitude=lon,
-                wind_speed_knots=as_float(current.get("wind_speed_10m")),
-                wind_direction_deg=as_float(current.get("wind_direction_10m")),
-                temperature_f=c_to_f(current.get("temperature_2m")),
-            )
-        )
+    for (lat, lon), item in zip(points, items, strict=True):
+        output.append(_point_from_hourly(lat, lon, item, index, hour))
     return output
+
+
+def _hour_index(items: list[dict], hour: str) -> int:
+    """Position of `hour` in the hourly series; every point shares the same time axis."""
+    times = (items[0].get("hourly") or {}).get("time") or []
+    stamp = hour.replace(":00", "")  # "2026-11-25T12:00" and "2026-11-25T12" both occur
+    for index, value in enumerate(times):
+        if value.startswith(stamp) or value.startswith(hour):
+            return index
+    raise httpx.HTTPError(f"Open-Meteo response did not include the requested hour {hour}")

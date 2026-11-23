@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModel } from './types';
+import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModelInfo } from './types';
 import { fetchAppConfig, fetchModels } from './api/client';
 import { DEFAULT_MODEL } from './constants';
 import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
-import { type Selection, useAllWeather, useDrawerForecast } from './hooks/useForecast';
-import { useLatest } from './hooks/useLatest';
+import { type Selection, useAllWeather } from './hooks/useForecast';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
-import { TimelineDrawer } from './components/TimelineDrawer';
+import { ForecastTimeSelector } from './components/ForecastTimeSelector';
+import { formatStepLabel } from './utils/forecastWindow';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
@@ -27,23 +27,23 @@ function getCurrentPosition(): Promise<GeolocationPosition | null> {
 }
 
 export const App: React.FC = () => {
-  const [models, setModels] = useState<WeatherModel[]>([]);
+  const [models, setModels] = useState<WeatherModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   const { timezone, setTimezone } = useTimezone();
   const mapSettings = useMapSettings();
   const units = useUnitPreferences();
   const { locations, load: loadLocations, add: addLocation, remove: removeLocation } = useLocations();
 
-  // What the drawer shows: one saved location or one map point (never both).
+  // Selected saved location or clicked map point (never both): it drives the marker highlight
+  // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
   const [selection, setSelection] = useState<Selection | null>(null);
-  // Bumped to reload the drawer when the same location is selected again.
-  const [refreshToken, setRefreshToken] = useState(0);
 
-  const allWeather = useAllWeather(selectedModel, timezone);
-  const drawer = useDrawerForecast(selection, selectedModel, timezone, {
-    refreshToken,
-    onSavedForecast: allWeather.put, // keep the map marker in step with the drawer
-  });
+  // Selected forecast hour (null = now). Memory only: the app opens at "now" (SCRUM-127).
+  const [forecastTime, setForecastTime] = useState<string | null>(null);
+
+  const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
+  const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
+  const validTimeLabel = forecastTime ? formatStepLabel(forecastTime, timezone) : null;
 
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
@@ -56,17 +56,9 @@ export const App: React.FC = () => {
     [selection],
   );
 
-  const selectionRef = useLatest(selection);
-  const selectSaved = useCallback(
-    (location: SavedLocation) => {
-      const current = selectionRef.current;
-      if (current?.kind === 'saved' && current.location.id === location.id) {
-        setRefreshToken((n) => n + 1); // same location: reload instead of a no-op
-      }
-      setSelection({ kind: 'saved', location });
-    },
-    [selectionRef],
-  );
+  const selectSaved = useCallback((location: SavedLocation) => {
+    setSelection({ kind: 'saved', location });
+  }, []);
 
   // Startup: config, models, saved locations, then the user's position.
   const { applyServerConfig } = mapSettings;
@@ -160,30 +152,33 @@ export const App: React.FC = () => {
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
       />
 
-      <main className="flex-1 relative w-full h-[calc(100vh-56px)]">
-        <MapView
-          locations={locations}
-          selectedLocation={selectedLocation}
-          onSelectLocation={selectSaved}
-          weatherMap={allWeather.weatherMap}
-          tileLayerType={mapSettings.tileLayer}
-          cartoApiKey={mapSettings.cartoApiKey}
-          selectedModel={selectedModel}
-          windOverlayVisible={mapSettings.windOverlayVisible}
-          windColorOverlayVisible={mapSettings.windColorOverlayVisible}
-          selectedGridPoint={selectedGridPoint}
-          onGridPointSelect={handleGridPointSelect}
-          unitSystem={units.unitSystem}
-          speedUnit={units.speedUnit}
-        />
-
-        <TimelineDrawer
-          selectedLocation={selectedLocation}
-          weatherData={drawer.forecast}
-          isLoading={drawer.isLoading}
-          unitSystem={units.unitSystem}
-          speedUnit={units.speedUnit}
-          dirDisplay={units.dirDisplay}
+      <main className="flex-1 flex flex-col min-h-0 w-full">
+        <div className="relative flex-1 min-h-0">
+          <MapView
+            locations={locations}
+            selectedLocation={selectedLocation}
+            onSelectLocation={selectSaved}
+            weatherMap={allWeather.weatherMap}
+            tileLayerType={mapSettings.tileLayer}
+            cartoApiKey={mapSettings.cartoApiKey}
+            selectedModel={selectedModel}
+            windOverlayVisible={mapSettings.windOverlayVisible}
+            windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+            selectedGridPoint={selectedGridPoint}
+            onGridPointSelect={handleGridPointSelect}
+            unitSystem={units.unitSystem}
+            speedUnit={units.speedUnit}
+            dirDisplay={units.dirDisplay}
+            validTime={forecastTime}
+            validTimeLabel={validTimeLabel}
+          />
+        </div>
+        <ForecastTimeSelector
+          model={selectedModelInfo}
+          forecastTime={forecastTime}
+          onChange={setForecastTime}
+          timezone={timezone}
+          loading={allWeather.loading}
         />
       </main>
 

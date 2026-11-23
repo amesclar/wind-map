@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
-import { createdMarkers, currentMap, resetLeafletMock } from '../test/leafletMock';
+import { createdMarkers, currentMap, markerAt, resetLeafletMock } from '../test/leafletMock';
 import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
@@ -122,6 +122,34 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
     await waitFor(() => expect(createdMarkers).toHaveLength(1));
     const html = (createdMarkers[0].icon as { html: string }).html;
     expect(html).toContain('wind-barb-halo');
+  });
+});
+
+describe('MapView barb pop-ups (SCRUM-126)', () => {
+  it('binds the point values to its barb and still selects the point on click', async () => {
+    const onGridPointSelect = vi.fn();
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48.75, longitude: -122.5, wind_speed_knots: 14, wind_direction_deg: 220, temperature_f: 53.6 },
+    ]);
+    render(
+      <MapView
+        {...baseProps}
+        locations={[]}
+        windOverlayVisible
+        onGridPointSelect={onGridPointSelect}
+        speedUnit="mph"
+      />,
+    );
+
+    await waitFor(() => expect(markerAt(48.75, -122.5)).toBeDefined());
+    const marker = markerAt(48.75, -122.5)!;
+    // No second request: the pop-up reads the grid response the overlay already has.
+    expect(marker.popupHtml).toContain('16.1 mph');
+    expect(marker.popupHtml).toContain('54°F');
+
+    marker.fire('click');
+    expect(onGridPointSelect).toHaveBeenCalledWith(expect.objectContaining({ latitude: 48.75 }));
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(1);
   });
 });
 
