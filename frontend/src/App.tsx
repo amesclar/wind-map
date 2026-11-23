@@ -8,17 +8,30 @@ import { type Selection, useAllWeather } from './hooks/useForecast';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
-import { formatStepLabel } from './utils/forecastWindow';
+import { buildSteps, floorToHour, formatStepLabel } from './utils/forecastWindow';
 import {
   barbLegendEntries,
   buildExportBaseName,
+  buildExportFileName,
   buildExportFooter,
   buildExportHeader,
   temperatureBands,
 } from './utils/mapExport';
-import { saveMapImage } from './utils/captureMap';
+import {
+  captureMapCanvas,
+  downloadCanvas,
+  saveMapImage,
+  waitForTiles,
+  type MapImageFormat,
+} from './utils/captureMap';
 import { saveMapPdf } from './utils/pdfExport';
-import { MapExportDialog, type MapExportOptions } from './components/MapExportDialog';
+import {
+  MapExportDialog,
+  type MapExportError,
+  type MapExportOptions,
+  type MapExportRangeOptions,
+} from './components/MapExportDialog';
+import { captureRange, RangeCaptureError, type RangeFrame, type RangeProgress } from './utils/rangeCapture';
 import { attributionText } from './components/mapTiles';
 import { SPEED_UNIT_LABEL } from './utils/units';
 import { APP_VERSION } from './version';
@@ -28,6 +41,9 @@ import { PreferencesModal } from './components/PreferencesModal';
 import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
+/** How long one hour of a range may take to show its grid before the export fails (SCRUM-155). */
+const RANGE_FRAME_TIMEOUT_MS = 15_000;
+const RANGE_POLL_MS = 100;
 
 /** Resolve with the user's position, or null if unavailable/denied/timed out. */
 function getCurrentPosition(): Promise<GeolocationPosition | null> {
@@ -59,6 +75,18 @@ export const App: React.FC = () => {
   const [savingMap, setSavingMap] = useState(false);
 
   const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
+
+  // Range export state (SCRUM-155): progress, a failure with the frames captured so far, the
+  // frames themselves and the cancellation handle.
+  const [rangeProgress, setRangeProgress] = useState<RangeProgress | null>(null);
+  const [rangeError, setRangeError] = useState<MapExportError | null>(null);
+  const [rangeFrames, setRangeFrames] = useState<RangeFrame[]>([]);
+  const rangeAbortRef = useRef<AbortController | null>(null);
+  const rangeOptionsRef = useRef<{ format: MapImageFormat; quality: number } | null>(null);
+  // Latest accepted grid response per hour, the range loop's readiness signal.
+  const gridFrameRef = useRef<{ validTime: string | null; points: GridWindPoint[] } | null>(null);
+  const weatherLoadingRef = useRef(true);
+  weatherLoadingRef.current = allWeather.loading;
   const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
   const validTimeLabel = forecastTime ? formatStepLabel(forecastTime, timezone) : null;
 
@@ -67,6 +95,15 @@ export const App: React.FC = () => {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  // Range window: model horizon from the hour the dialog opened (SCRUM-155).
+  const [rangeWindowStart, setRangeWindowStart] = useState(() => floorToHour(new Date()).toISOString());
+  useEffect(() => {
+    if (isExportDialogOpen) setRangeWindowStart(floorToHour(new Date()).toISOString());
+  }, [isExportDialogOpen]);
+  const rangeHours = useMemo(
+    () => buildSteps(rangeWindowStart, selectedModelInfo?.horizon_hours ?? 48),
+    [rangeWindowStart, selectedModelInfo?.horizon_hours],
+  );
 
   const selectedLocation = selection?.kind === 'saved' ? selection.location : null;
   const selectedGridPoint = useMemo<SelectedGridPoint | null>(
@@ -155,35 +192,127 @@ export const App: React.FC = () => {
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
   }, []);
 
-  /** Capture the current view with its header, legend and footer, and export it (SCRUM-116, SCRUM-117). */
+  /** The header, footer and legend every export carries; the hour decides the header. */
+  const buildContent = useCallback(
+    (validTime: string | null, fileName: string, capturedAt: Date) => ({
+      fileName,
+      header: buildExportHeader({
+        validTime,
+        timezone,
+        modelName: selectedModelInfo?.name ?? '',
+        runTimeUtc: selectedModelInfo?.last_run_utc,
+        capturedAt,
+      }),
+      footer: buildExportFooter({
+        unitSystem: units.unitSystem,
+        speedUnit: units.speedUnit,
+        attribution: attributionText(mapSettings.tileLayer),
+        version: APP_VERSION,
+      }),
+      barbs: barbLegendEntries(units.speedUnit),
+      temperatures: temperatureBands(units.unitSystem),
+      speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
+      temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
+    }),
+    [timezone, selectedModelInfo, units.unitSystem, units.speedUnit, mapSettings.tileLayer],
+  );
+
+  /** Resolve once the map shows `hour` with that hour's grid data (when drawn) and its tiles. */
+  const waitForHour = useCallback(
+    async (element: HTMLElement, hour: string, signal: AbortSignal) => {
+      const needsGrid = mapSettings.windOverlayVisible || mapSettings.windColorOverlayVisible;
+      const deadline = Date.now() + RANGE_FRAME_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const frame = gridFrameRef.current;
+        const shownHour = frame?.validTime ?? frame?.points[0]?.time ?? null;
+        const gridReady =
+          !needsGrid ||
+          (shownHour !== null &&
+            Date.parse(shownHour) === Date.parse(hour) &&
+            !weatherLoadingRef.current);
+        if (gridReady) {
+          await waitForTiles(element, 5000);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, RANGE_POLL_MS));
+      }
+      throw new Error('its grid data did not arrive in time');
+    },
+    [mapSettings.windOverlayVisible, mapSettings.windColorOverlayVisible],
+  );
+
+  /** One frame per hour, then one download per frame; the original hour is restored either way. */
+  const runRangeExport = useCallback(
+    async (options: MapExportRangeOptions, element: HTMLElement, capturedAt: Date) => {
+      const controller = new AbortController();
+      rangeAbortRef.current = controller;
+      rangeOptionsRef.current = { format: options.format, quality: options.jpegQuality };
+      setSavingMap(true);
+      setRangeError(null);
+      setRangeProgress(null);
+      setRangeFrames([]);
+      const original = forecastTime;
+      try {
+        const result = await captureRange(options.hours, {
+          setHour: setForecastTime,
+          waitForFrame: (hour, signal) => waitForHour(element, hour, signal),
+          capture: (hour) =>
+            captureMapCanvas(
+              element,
+              buildContent(
+                hour,
+                buildExportFileName({ validTime: hour, timezone, extension: options.format }),
+                capturedAt,
+              ),
+              { tileTimeoutMs: 0 },
+            ),
+          labelHour: (hour) => formatStepLabel(hour, timezone),
+          signal: controller.signal,
+          onProgress: setRangeProgress,
+        });
+        setRangeFrames(result.frames);
+        // Cancelling downloads nothing; a completed range saves one file per hour, by its hour.
+        if (result.status === 'cancelled') return;
+        for (const frame of result.frames) {
+          await downloadCanvas(
+            frame.canvas,
+            buildExportFileName({ validTime: frame.time, timezone, extension: options.format }),
+            { format: options.format, quality: options.jpegQuality },
+          );
+        }
+        setIsExportDialogOpen(false);
+      } catch (err) {
+        const frames = err instanceof RangeCaptureError ? err.frames : [];
+        setRangeFrames(frames);
+        setRangeError({
+          message: err instanceof Error ? err.message : 'The range export failed.',
+          frames: frames.length,
+        });
+      } finally {
+        rangeAbortRef.current = null;
+        setRangeProgress(null);
+        setSavingMap(false);
+        setForecastTime(original);
+      }
+    },
+    [forecastTime, timezone, buildContent, waitForHour],
+  );
+
+  /** Capture the current view with its header, legend and footer, or run a range (SCRUM-116, SCRUM-117, SCRUM-155). */
   const handleExport = useCallback(
     async (options: MapExportOptions) => {
       const element = mapContainerRef.current;
       if (!element || !selectedModelInfo) return;
+      const capturedAt = new Date();
+      if (options.mode === 'range') {
+        await runRangeExport(options, element, capturedAt);
+        return;
+      }
       setSavingMap(true);
       try {
-        const capturedAt = new Date();
-        const content = {
-          // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
-          fileName: options.fileName,
-          header: buildExportHeader({
-            validTime: forecastTime,
-            timezone,
-            modelName: selectedModelInfo.name,
-            runTimeUtc: selectedModelInfo.last_run_utc,
-            capturedAt,
-          }),
-          footer: buildExportFooter({
-            unitSystem: units.unitSystem,
-            speedUnit: units.speedUnit,
-            attribution: attributionText(mapSettings.tileLayer),
-            version: APP_VERSION,
-          }),
-          barbs: barbLegendEntries(units.speedUnit),
-          temperatures: temperatureBands(units.unitSystem),
-          speedUnitLabel: SPEED_UNIT_LABEL[units.speedUnit],
-          temperatureUnitLabel: units.unitSystem === 'imperial' ? '°F' : '°C',
-        };
+        // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
+        const content = buildContent(forecastTime, options.fileName, capturedAt);
         if (options.format === 'pdf') {
           await saveMapPdf(element, content, {
             fileName: content.fileName,
@@ -200,8 +329,35 @@ export const App: React.FC = () => {
         setSavingMap(false);
       }
     },
-    [forecastTime, timezone, selectedModelInfo, units.unitSystem, units.speedUnit, mapSettings.tileLayer],
+    [forecastTime, selectedModelInfo, buildContent, runRangeExport],
   );
+
+  /** Every accepted grid response doubles as the range loop's readiness signal (SCRUM-155). */
+  const handleGridLoaded = useCallback(
+    (frame: { validTime: string | null; points: GridWindPoint[] }) => {
+      gridFrameRef.current = frame;
+    },
+    [],
+  );
+
+  const handleCancelRange = useCallback(() => rangeAbortRef.current?.abort(), []);
+
+  const handleSaveCaptured = useCallback(async () => {
+    const saveOptions = rangeOptionsRef.current;
+    if (!saveOptions || rangeFrames.length === 0) return;
+    setSavingMap(true);
+    try {
+      for (const frame of rangeFrames) {
+        await downloadCanvas(
+          frame.canvas,
+          buildExportFileName({ validTime: frame.time, timezone, extension: saveOptions.format }),
+          saveOptions,
+        );
+      }
+    } finally {
+      setSavingMap(false);
+    }
+  }, [rangeFrames, timezone]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-dark-900 text-gray-100 overflow-hidden font-sans">
@@ -240,6 +396,7 @@ export const App: React.FC = () => {
             validTime={forecastTime}
             validTimeLabel={validTimeLabel}
             containerRef={mapContainerRef}
+            onGridLoaded={handleGridLoaded}
           />
         </div>
         <ForecastTimeSelector
@@ -297,6 +454,12 @@ export const App: React.FC = () => {
         onExport={handleExport}
         fileBaseName={buildExportBaseName({ validTime: forecastTime, timezone })}
         busy={savingMap}
+        timezone={timezone}
+        rangeHours={rangeHours}
+        progress={rangeProgress}
+        error={rangeError}
+        onCancelRange={handleCancelRange}
+        onSaveCaptured={handleSaveCaptured}
       />
     </div>
   );

@@ -37,6 +37,8 @@ export function useWindGrid(
   model: string,
   enabled: boolean,
   validTime: string | null = null,
+  /** Readiness report for the range export (SCRUM-155): the hour and points just accepted. */
+  onLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void,
 ): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
 
@@ -71,7 +73,10 @@ export function useWindGrid(
           { ...box, cols, rows, model, time: validTime }, 
           { signal: current.signal },
         );
-        if (!current.signal.aborted) setPoints(next);
+        if (!current.signal.aborted) {
+          setPoints(next);
+          onLoaded?.({ validTime, points: next });
+        }
       } catch (err) {
         if (current.signal.aborted) return; // superseded or unmounted
         console.error('Failed to load wind grid:', err);
@@ -87,7 +92,7 @@ export function useWindGrid(
       map.off('zoomend', refresh);
       controller?.abort();
     };
-  }, [map, model, enabled, validTime]);
+  }, [map, model, enabled, validTime, onLoaded]);
 
   return points;
 }
