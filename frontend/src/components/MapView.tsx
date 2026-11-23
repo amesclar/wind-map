@@ -40,6 +40,8 @@ interface MapViewProps {
   dirDisplay?: WindDirDisplay;
   /** Selected forecast hour, ISO 8601 (SCRUM-115); null or absent means current conditions. */
   validTime?: string | null;
+  /** Human-readable selected hour for the pop-ups (SCRUM-127), e.g. "Mon 23 Nov 12:00 PST". */
+  validTimeLabel?: string | null;
 }
 
 interface LocationMarker {
@@ -78,6 +80,7 @@ export function buildLocationPopup(
   weather: WeatherForecastResponse | undefined,
   unitSystem: UnitSystem,
   speedUnit: WindSpeedUnit,
+  validTimeLabel: string | null = null,
 ): string {
   const current = weather?.current;
   const temp = current ? formatTemperature(current, unitSystem) : '--';
@@ -97,6 +100,7 @@ export function buildLocationPopup(
         <span style="color: #4ade80;">🌡️ ${temp}</span>
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">🧭 ${escapeHtml(direction)}</div>
+      ${validTimeLabel ? `<div style="margin-top: 2px; color: #9ca3af; font-size: 11px;">🕒 ${escapeHtml(validTimeLabel)}</div>` : ''}
     </div>
   `;
 }
@@ -117,6 +121,7 @@ export const MapView: React.FC<MapViewProps> = ({
   speedUnit = 'knots',
   dirDisplay = 'barb',
   validTime = null,
+  validTimeLabel = null,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -198,7 +203,7 @@ export const MapView: React.FC<MapViewProps> = ({
     locations.forEach((loc) => {
       const weather = weatherMap[loc.id];
       const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id);
-      const popup = buildLocationPopup(loc, weather, unitSystem, speedUnit);
+      const popup = buildLocationPopup(loc, weather, unitSystem, speedUnit, validTimeLabel);
       const existing = markers.get(loc.id);
       if (existing) {
         existing.location = loc;
@@ -216,7 +221,7 @@ export const MapView: React.FC<MapViewProps> = ({
       entry.marker.on('click', () => onSelectLocationRef.current(entry.location));
       markers.set(loc.id, entry);
     });
-  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit, onSelectLocationRef]);
+  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit, validTimeLabel, onSelectLocationRef]);
 
   // Remove all saved-location markers when the map goes away
   useEffect(() => {
@@ -256,6 +261,7 @@ export const MapView: React.FC<MapViewProps> = ({
         unitSystem={unitSystem}
         speedUnit={speedUnit}
         dirDisplay={dirDisplay}
+        timeLabel={validTimeLabel}
       />
       {windColorOverlayVisible && (
         <>

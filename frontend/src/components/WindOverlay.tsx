@@ -4,6 +4,7 @@ import type { GridWindPoint, SelectedGridPoint, UnitSystem, WindDirDisplay, Wind
 import { generateWindBarbSvg } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
+import { escapeHtml } from '../utils/html';
 
 interface WindOverlayProps {
   map: L.Map | null;
@@ -17,6 +18,8 @@ interface WindOverlayProps {
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
   dirDisplay?: WindDirDisplay;
+  /** Selected forecast hour for the pop-up (SCRUM-127), e.g. "Mon 23 Nov 12:00 PST". */
+  timeLabel?: string | null;
 }
 
 function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boolean {
@@ -74,6 +77,7 @@ export function buildGridPointPopup(
   unitSystem: UnitSystem = 'imperial',
   speedUnit: WindSpeedUnit = 'knots',
   dirDisplay: WindDirDisplay = 'barb',
+  timeLabel: string | null = null,
 ): string {
   const speed = formatKnotsInUnit(pt.wind_speed_knots, speedUnit);
   const temperature =
@@ -93,6 +97,7 @@ export function buildGridPointPopup(
         <span style="color: #4ade80;">🌡️ ${temperature}</span>
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px; display: flex; align-items: center; gap: 4px;">🧭 ${direction}</div>
+      ${timeLabel ? `<div style="margin-top: 2px; color: #9ca3af; font-size: 11px;">🕒 ${escapeHtml(timeLabel)}</div>` : ''}
     </div>
   `;
 }
@@ -107,6 +112,7 @@ export function WindOverlay({
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
+  timeLabel = null,
 }: WindOverlayProps) {
   // Each point is stored with its marker, so icon updates can't get out of step.
   const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
@@ -127,7 +133,7 @@ export function WindOverlay({
         interactive: true,
       }).addTo(map);
       // Leaflet opens a bound pop-up on click, so a click shows the point's values and selects it.
-      marker.bindPopup(buildGridPointPopup(point, unitSystem, speedUnit, dirDisplay));
+      marker.bindPopup(buildGridPointPopup(point, unitSystem, speedUnit, dirDisplay, timeLabel));
       marker.on('click', () => onSelectRef.current(point));
       return { point, marker };
     });
@@ -136,7 +142,7 @@ export function WindOverlay({
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, haloRef, onSelectRef, unitSystem, speedUnit, dirDisplay]);
+  }, [map, points, selectedRef, haloRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {
