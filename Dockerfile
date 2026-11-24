@@ -56,7 +56,32 @@ COPY . .
 CMD ["pytest", "--cov"]
 
 # ==========================================
-# Stage 4: Python Backend Runtime (Alpine, no bash, build tools or test deps)
+# Stage 4: Litestream binary (SCRUM-134)
+# ==========================================
+# Built from the pinned upstream release commit rather than the published tarball: that binary
+# embeds golang.org/x/net v0.60.0 and go-jose v4.1.4, which the image scan reports as fixable HIGH
+# advisories (CVE-2026-78661, CVE-2026-116587). Those two modules are raised to their fixed versions
+# here; the release's own code is untouched, and the checkout is checked against the pinned commit.
+FROM golang:1.26-alpine AS litestream-builder
+
+ARG LITESTREAM_VERSION="0.5.18"
+ARG LITESTREAM_COMMIT="057d39564c75ebd67ba042410a7ffa05ad4c242d"
+ARG TARGETARCH="amd64"
+
+RUN apk add --no-cache git
+
+RUN git clone -q --depth 1 --branch "v${LITESTREAM_VERSION}" \
+        https://github.com/benbjohnson/litestream.git /src \
+    && test "$(git -C /src rev-parse HEAD)" = "${LITESTREAM_COMMIT}"
+
+WORKDIR /src
+RUN go get golang.org/x/net@v0.62.0 github.com/go-jose/go-jose/v4@v4.1.6 \
+    && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
+       go build -mod=mod -trimpath -ldflags "-s -w -X main.Version=${LITESTREAM_VERSION}" \
+       -o /out/litestream ./cmd/litestream
+
+# ==========================================
+# Stage 5: Python Backend Runtime (Alpine, no bash, build tools or test deps)
 # ==========================================
 FROM python:3.14-alpine AS runtime
 WORKDIR /app
@@ -65,11 +90,6 @@ WORKDIR /app
 # `/api/health` and the navbar report the same `X.Y.Z-<hash>` version.
 ARG GIT_SHA=""
 ENV GIT_SHA=${GIT_SHA}
-
-# Litestream (SCRUM-134): the pinned static binary that replicates SQLite to a GCS bucket.
-# BUILDARCH is the target architecture, so an arm64 host and the amd64 CI runner both work.
-ARG LITESTREAM_VERSION="0.5.18"
-ARG TARGETARCH="amd64"
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -87,20 +107,9 @@ RUN mkdir -p /app/data /app/static \
     && apk add --no-cache ca-certificates \
     && pip uninstall -y pip setuptools wheel
 
-# Litestream (SCRUM-134). The release tarball is verified against the published SHA-256 before the
-# binary is installed, so a tampered or truncated download fails the build.
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-        amd64) LITESTREAM_ARCH=x86_64; LITESTREAM_SHA256=d3687b9fd0f2e9426bbd3da828429ff3f1dfc5c9b74d54fdf028e4ee510e7dea ;; \
-        arm64) LITESTREAM_ARCH=arm64; LITESTREAM_SHA256=922a09e6a7ac67f2095571894dc6382e94e1dd4cdd9674883ddf1a8e74ab982d ;; \
-        *) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    wget -qO /tmp/litestream.tar.gz \
-        "https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-${LITESTREAM_ARCH}.tar.gz"; \
-    echo "${LITESTREAM_SHA256}  /tmp/litestream.tar.gz" | sha256sum -c -; \
-    tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream; \
-    chmod +x /usr/local/bin/litestream; \
-    rm -f /tmp/litestream.tar.gz
+# Litestream (SCRUM-134): the static binary that replicates SQLite to a GCS bucket, built in the
+# stage above for the target architecture.
+COPY --from=litestream-builder /out/litestream /usr/local/bin/litestream
 
 # Copy only the installed packages (pip, wheel caches and build tooling stay behind)
 COPY --from=python-deps /install /usr/local

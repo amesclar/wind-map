@@ -12,7 +12,7 @@
 - [x] 4. `litestream.yml` and `scripts/docker-entrypoint.sh` (restore + `replicate -exec`, direct Uvicorn when unset).
   _Requirements: 2.7, 2.8_
   _Files: `litestream.yml`, `scripts/docker-entrypoint.sh`_
-- [x] 5. Dockerfile: pinned, checksum-verified Litestream binary for `TARGETARCH`, config and entrypoint, `ENTRYPOINT` replacing `CMD`.
+- [x] 5. Dockerfile: Litestream built from the pinned release commit with its two flagged Go modules updated, config and entrypoint, `ENTRYPOINT` replacing `CMD`.
   _Requirements: 2.9_
   _Files: `Dockerfile`_
 - [x] 6. Docs: `requirements.md` (access control, database replication) and `README.md` (the two variables).
