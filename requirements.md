@@ -200,6 +200,14 @@ Litestream keeps SQLite as the only store and continuously replicates `/app/data
 + The entrypoint runs Uvicorn directly when `LITESTREAM_BUCKET` is unset, so a local container behaves as before; when it is set it restores with `litestream restore -if-db-not-exists -if-replica-exists` and then runs the app under `litestream replicate -exec`, so a shutdown flushes a final frame.
 + Bucket credentials come from the runtime service account's Application Default Credentials (Cloud Run); no key file is stored in the image or the repository. Replication requires a single writer, hence one instance (`--max-instances=1`) and CPU always allocated (`--no-cpu-throttling`).
 
+# cloud infrastructure (SCRUM-135)
+stage 2 created the Google Cloud resources the deployment needs in project `wind-app-515017` (region `us-west1`), reproducibly from `scripts/gcp-provision.sh`
++ The Litestream replica is the private bucket `gs://wind-map-litestream-wind-app-515017`: uniform bucket-level access, public access prevention enforced, and a lifecycle rule that aborts unfinished uploads after 7 days.
++ Secret Manager holds `APP_PASSWORD` (the shared web password, generated once and never printed by the script) and, only when a value is supplied, `CARTO_API_KEY`.
++ The runtime identity is `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with `roles/storage.objectAdmin` on that bucket and `roles/secretmanager.secretAccessor` on the secrets; no service account key is created.
++ The script is idempotent: it leaves existing resources and the stored password alone, and verifies the service account by impersonation (write, read and delete a probe object, then read `APP_PASSWORD`). For that check only, it grants the operator's account `roles/iam.serviceAccountTokenCreator` on the runner, which the deployed container does not use.
++ Cloud Run receives `--service-account=wind-map-runner@...`, `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017` and `APP_PASSWORD` from Secret Manager (SCRUM-136).
+
 # versioning (SCRUM-91)
 the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔ release/tag v0.2.0)
 + Single source of truth: `VERSION` file in the project root (plain `MAJOR.MINOR.PATCH`, no "v").

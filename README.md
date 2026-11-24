@@ -170,6 +170,34 @@ docker run -d -p 5005:5005 -e APP_PASSWORD="$APP_PASSWORD" -v wind_data:/app/dat
 Google Cloud authentication for the bucket comes from Application Default Credentials of the
 runtime service account; no key file is baked into the image.
 
+### Google Cloud Infrastructure
+
+`scripts/gcp-provision.sh` creates the stage-2 resources in project `wind-app-515017` (SCRUM-135).
+It is idempotent, so running it again changes nothing and never rotates the stored password.
+
+```bash
+scripts/gcp-provision.sh                      # generates the shared password
+APP_PASSWORD='...' scripts/gcp-provision.sh   # or uses a password you choose
+CARTO_API_KEY='...' scripts/gcp-provision.sh  # optional, stores the CARTO key too
+```
+
+It provisions:
+
+- the private bucket `gs://wind-map-litestream-wind-app-515017` in `us-west1`, with uniform
+  bucket-level access, public access prevention and a 7-day abort of unfinished uploads;
+- the Secret Manager secret `APP_PASSWORD` (and `CARTO_API_KEY` when a value is supplied);
+- the service account `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with
+  `roles/storage.objectAdmin` on the bucket and `roles/secretmanager.secretAccessor` on the secrets.
+
+It finishes by impersonating that service account to write, read and delete a probe object in the
+bucket and to read `APP_PASSWORD`, which is the access the deployed container gets. For that check
+the script grants your own account `roles/iam.serviceAccountTokenCreator` on the runner; the deployed
+container does not use it. The password is never printed; read it with:
+
+```bash
+gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
+```
+
 ---
 
 ## Local Development Setup
