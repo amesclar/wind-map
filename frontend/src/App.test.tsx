@@ -14,6 +14,10 @@ vi.mock('./utils/captureMap', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./utils/captureMap')>()),
   saveMapImage: vi.fn().mockResolvedValue(undefined),
   captureMapCanvas: vi.fn().mockResolvedValue({ width: 10, height: 10 }),
+}));
+// jsdom has no map tiles; the range loop's tile wait is the wiring under test, not tile timing.
+vi.mock('./utils/captureDom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/captureDom')>()),
   waitForTiles: vi.fn().mockResolvedValue(undefined),
 }));
 import { captureMapCanvas, saveMapImage } from './utils/captureMap';

@@ -5,8 +5,7 @@
  * `fflate` (jsPDF's own dependency) and `jspdf` are imported lazily, so neither reaches the main
  * bundle and an image-only range never downloads the PDF code.
  */
-import type { MapImageFormat } from './captureMap';
-import { downloadBlob } from './captureMap';
+import { downloadBlob, type MapImageFormat } from './download';
 import { buildExportFileName, buildRangeArchiveName } from './mapExport';
 import { fitToPage, pageBox, type PdfOrientation, type PdfPageSize } from './pdfExport';
 import type { RangeFrame } from './rangeCapture';
