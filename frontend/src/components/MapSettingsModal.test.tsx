@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MapSettingsModal } from './MapSettingsModal';
 
@@ -106,5 +106,31 @@ describe('MapSettingsModal water currents toggle (SCRUM-100)', () => {
     expect(onToggle).toHaveBeenCalledWith(true);
     expect(BASE_PROPS.onToggleWindOverlay).not.toHaveBeenCalled();
     expect(BASE_PROPS.onToggleWindColorOverlay).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapSettingsModal layout (SCRUM-183)', () => {
+  it('puts the map options and key in one column and the layers in the other', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const options = within(screen.getByTestId('map-settings-column-options'));
+    const layers = within(screen.getByTestId('map-settings-column-layers'));
+
+    expect(options.getByRole('radio', { name: /OpenStreetMap Dark/ })).toBeTruthy();
+    expect(options.getByRole('button', { name: 'Save Key' })).toBeTruthy();
+    expect(layers.getByTestId('wind-overlay-toggle')).toBeTruthy();
+    expect(layers.getByTestId('wind-color-overlay-toggle')).toBeTruthy();
+    expect(layers.getByTestId('water-currents-toggle')).toBeTruthy();
+  });
+
+  it('keeps Done in the footer, outside the scrolling body', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const body = screen.getByTestId('map-settings-body');
+    const footer = screen.getByTestId('map-settings-footer');
+
+    expect(body.className).toContain('overflow-y-auto');
+    expect(footer.contains(screen.getByRole('button', { name: 'Done' }))).toBe(true);
+    expect(body.contains(footer)).toBe(false);
   });
 });
