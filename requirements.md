@@ -217,6 +217,14 @@ the app runs publicly on Google Cloud Run (project `wind-app-515017`, region `us
 + The single-instance cap and always-allocated CPU keep Litestream the only writer; replacing the instance with a new revision therefore restores the saved locations from the replica, which is the persistence check.
 + Rollback is a traffic switch to the previous revision (`gcloud run services update-traffic --to-revisions=...`) or a redeploy of the previous image tag; `--to-latest` returns to the newest revision.
 
+# automatic deployment (SCRUM-189)
+merging into `develop` deploys the app, so a normal change needs no manual Cloud Build or `gcloud run`
++ `.github/workflows/deploy-cloud-run.yml` builds the image for `linux/amd64` with the merge commit, pushes `VERSION-<merge-sha>` and `latest` to Artifact Registry, runs `gcloud run deploy` with the settings above and fails the run when `/api/health` does not report `status: ok`.
++ Authentication is keyless: GitHub's OIDC token is exchanged through the Workload Identity pool `github`, whose provider accepts only repository `amesclar/wind-map`; no service account key is stored in GitHub or the repository.
++ The deploy identity is `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com`, with `roles/artifactregistry.writer` on the `wind-map` repository, `roles/run.admin` on the project and `roles/iam.serviceAccountUser` on `wind-map-runner`; it cannot read `APP_PASSWORD` or write the replica bucket, so the runtime identity stays separate.
++ It runs on every push to `develop`, can be started on demand (`workflow_dispatch`), and runs one deployment at a time.
++ `cloudbuild.yaml` and the manual commands remain documented as the emergency fallback.
+
 # versioning (SCRUM-91)
 the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔ release/tag v0.2.0)
 + Single source of truth: `VERSION` file in the project root (plain `MAJOR.MINOR.PATCH`, no "v").
