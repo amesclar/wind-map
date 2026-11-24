@@ -94,5 +94,22 @@ export interface GridWindPoint {
   time?: string | null;
 }
 
+/** One point of GET /api/currents/grid (SCRUM-96). */
+export interface CurrentPoint {
+  latitude: number;
+  longitude: number;
+  /** Speed in knots, and the direction the water flows **towards** in degrees. */
+  velocity_knots: number;
+  direction_deg: number;
+  /** Forecast hour these values describe; null or absent means current conditions. */
+  time?: string | null;
+}
+
+/** GET /api/currents/grid payload; land nodes are absent rather than zero. */
+export interface CurrentGridResponse {
+  points: CurrentPoint[];
+  time: string | null;
+}
+
 /** The grid point whose barb is selected (highlighted) on the map. */
 export type SelectedGridPoint = Pick<GridWindPoint, 'latitude' | 'longitude'>;

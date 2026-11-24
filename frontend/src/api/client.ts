@@ -1,5 +1,6 @@
 import {
   AppConfig,
+  CurrentGridResponse,
   GeocodeResult,
   GridWindPoint,
   NewLocation,
@@ -166,6 +167,26 @@ export function fetchWindGrid(
   const query: Params = { ...box, model: params.model ?? DEFAULT_MODEL };
   if (time) query.time = time;
   return request('/weather/grid', 'Failed to fetch wind grid', { params: query, signal });
+}
+
+/** Ocean-current grid for a viewport at the selected hour (SCRUM-96/99). */
+export function fetchCurrentGrid(
+  params: {
+    min_lat: number;
+    max_lat: number;
+    min_lon: number;
+    max_lon: number;
+    cols: number;
+    rows: number;
+    /** ISO 8601 hour inside the 240-hour current horizon; omitted means live values. */
+    time?: string | null;
+  },
+  { signal }: RequestOptions = {},
+): Promise<CurrentGridResponse> {
+  const { time, ...box } = params;
+  const query: Params = { ...box };
+  if (time) query.time = time;
+  return request('/currents/grid', 'Failed to fetch ocean current grid', { params: query, signal });
 }
 
 export function fetchPointWeather(

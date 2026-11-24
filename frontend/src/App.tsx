@@ -200,6 +200,7 @@ export const App: React.FC = () => {
             selectedModel={selectedModel}
             windOverlayVisible={mapSettings.windOverlayVisible}
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+            waterCurrentsVisible={mapSettings.waterCurrentsVisible}
             selectedGridPoint={selectedGridPoint}
             onGridPointSelect={handleGridPointSelect}
             unitSystem={units.unitSystem}
