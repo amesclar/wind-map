@@ -58,6 +58,11 @@ def parse_cors_origins(value: str | None) -> list[str]:
 # e.g. CORS_ORIGINS=http://localhost:5173
 CORS_ORIGINS = parse_cors_origins(os.getenv("CORS_ORIGINS"))
 
+# Access control (SCRUM-134): the public Cloud Run deployment is protected by one shared password.
+# Unset or empty disables authentication, which keeps local development, `docker run` and the
+# test suite open. The value comes from Secret Manager on Cloud Run, never from the image.
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+
 # Default seeded location
 DEFAULT_LOCATION = {
     "name": "Oak Harbor, WA",

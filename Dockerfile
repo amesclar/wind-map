@@ -56,7 +56,32 @@ COPY . .
 CMD ["pytest", "--cov"]
 
 # ==========================================
-# Stage 4: Python Backend Runtime (Alpine, no bash, build tools or test deps)
+# Stage 4: Litestream binary (SCRUM-134)
+# ==========================================
+# Built from the pinned upstream release commit rather than the published tarball: that binary
+# embeds golang.org/x/net v0.60.0 and go-jose v4.1.4, which the image scan reports as fixable HIGH
+# advisories (CVE-2026-78661, CVE-2026-116587). Those two modules are raised to their fixed versions
+# here; the release's own code is untouched, and the checkout is checked against the pinned commit.
+FROM golang:1.26-alpine AS litestream-builder
+
+ARG LITESTREAM_VERSION="0.5.18"
+ARG LITESTREAM_COMMIT="057d39564c75ebd67ba042410a7ffa05ad4c242d"
+ARG TARGETARCH="amd64"
+
+RUN apk add --no-cache git
+
+RUN git clone -q --depth 1 --branch "v${LITESTREAM_VERSION}" \
+        https://github.com/benbjohnson/litestream.git /src \
+    && test "$(git -C /src rev-parse HEAD)" = "${LITESTREAM_COMMIT}"
+
+WORKDIR /src
+RUN go get golang.org/x/net@v0.62.0 github.com/go-jose/go-jose/v4@v4.1.6 \
+    && CGO_ENABLED=0 GOOS=linux GOARCH="${TARGETARCH}" \
+       go build -mod=mod -trimpath -ldflags "-s -w -X main.Version=${LITESTREAM_VERSION}" \
+       -o /out/litestream ./cmd/litestream
+
+# ==========================================
+# Stage 5: Python Backend Runtime (Alpine, no bash, build tools or test deps)
 # ==========================================
 FROM python:3.14-alpine AS runtime
 WORKDIR /app
@@ -79,7 +104,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # and which the image scan flagged (vulnerable bundled copies).
 RUN mkdir -p /app/data /app/static \
     && apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates \
     && pip uninstall -y pip setuptools wheel
+
+# Litestream (SCRUM-134): the static binary that replicates SQLite to a GCS bucket, built in the
+# stage above for the target architecture.
+COPY --from=litestream-builder /out/litestream /usr/local/bin/litestream
 
 # Copy only the installed packages (pip, wheel caches and build tooling stay behind)
 COPY --from=python-deps /install /usr/local
@@ -97,5 +127,11 @@ EXPOSE 5005
 # Declare persistent data volume
 VOLUME ["/app/data"]
 
-# Run FastAPI app with Uvicorn
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "5005"]
+# Litestream configuration and the entrypoint that restores the database and runs the app under
+# replication when LITESTREAM_BUCKET is set (SCRUM-134).
+COPY litestream.yml /etc/litestream.yml
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Starts Uvicorn, through Litestream when LITESTREAM_BUCKET is set; see the script for the two paths.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

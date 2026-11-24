@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import config
+from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
 from backend.app.routers import currents, feedback, geocode, grid, locations, weather
@@ -47,6 +48,10 @@ if CORS_ORIGINS:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
+
+# Shared-password protection for the public deployment (SCRUM-134). It is a no-op while
+# APP_PASSWORD is unset, and it wraps CORS because it is added last.
+app.add_middleware(BasicAuthMiddleware)
 
 # Register API routers
 app.include_router(locations.router)
