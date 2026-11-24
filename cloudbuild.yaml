@@ -1,0 +1,27 @@
+# Cloud Build pipeline for the Cloud Run image (SCRUM-136).
+# Builds natively for linux/amd64 (local Docker is arm64) and pushes the release tag and latest:
+#
+#   gcloud builds submit --project=wind-app-515017 --config=cloudbuild.yaml \
+#     --substitutions=_TAG=$(cat VERSION)-$(git rev-parse --short HEAD),_GIT_SHA=$(git rev-parse --short HEAD)
+substitutions:
+  _TAG: latest
+  _GIT_SHA: ""
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - GIT_SHA=${_GIT_SHA}
+      - -t
+      - us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:${_TAG}
+      - -t
+      - us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:latest
+      - .
+
+images:
+  - us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:${_TAG}
+  - us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:latest
+
+options:
+  machineType: E2_HIGHCPU_8

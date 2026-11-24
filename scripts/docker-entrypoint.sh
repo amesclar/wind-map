@@ -17,4 +17,10 @@ fi
 # Both flags keep a first deployment clean: no local database and no replica yet is not an error.
 litestream restore -if-db-not-exists -if-replica-exists "$DATABASE_FILE"
 
+# First start with no replica: create the schema before Litestream watches the file, so it starts
+# from a valid database instead of waiting for the app to create one under its own supervision.
+if [ ! -f "$DATABASE_FILE" ]; then
+    python -c "from backend.app.database import init_db; init_db()"
+fi
+
 exec litestream replicate -exec "$APP_COMMAND"

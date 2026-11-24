@@ -197,7 +197,7 @@ authentication is off when `APP_PASSWORD` is unset or empty, so local developmen
 # database replication (SCRUM-134)
 Litestream keeps SQLite as the only store and continuously replicates `/app/data/wind_map.db` to a private GCS bucket, restoring the database when a new Cloud Run instance starts without one
 + The runtime image ships the pinned Litestream binary (`0.5.18`, built in the image from its release commit with `golang.org/x/net` and `go-jose` raised to their fixed versions so the image scan stays clean), `litestream.yml` (one `gs` replica whose bucket comes from `LITESTREAM_BUCKET`), and `scripts/docker-entrypoint.sh` as its entrypoint.
-+ The entrypoint runs Uvicorn directly when `LITESTREAM_BUCKET` is unset, so a local container behaves as before; when it is set it restores with `litestream restore -if-db-not-exists -if-replica-exists` and then runs the app under `litestream replicate -exec`, so a shutdown flushes a final frame.
++ The entrypoint runs Uvicorn directly when `LITESTREAM_BUCKET` is unset, so a local container behaves as before; when it is set it restores with `litestream restore -if-db-not-exists -if-replica-exists`, creates the schema when no replica existed yet (SCRUM-136), and then runs the app under `litestream replicate -exec`, so a shutdown flushes a final frame.
 + Bucket credentials come from the runtime service account's Application Default Credentials (Cloud Run); no key file is stored in the image or the repository. Replication requires a single writer, hence one instance (`--max-instances=1`) and CPU always allocated (`--no-cpu-throttling`).
 
 # cloud infrastructure (SCRUM-135)
@@ -207,6 +207,15 @@ stage 2 created the Google Cloud resources the deployment needs in project `wind
 + The runtime identity is `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with `roles/storage.objectAdmin` on that bucket and `roles/secretmanager.secretAccessor` on the secrets; no service account key is created.
 + The script is idempotent: it leaves existing resources and the stored password alone, and verifies the service account by impersonation (write, read and delete a probe object, then read `APP_PASSWORD`). For that check only, it grants the operator's account `roles/iam.serviceAccountTokenCreator` on the runner, which the deployed container does not use.
 + Cloud Run receives `--service-account=wind-map-runner@...`, `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017` and `APP_PASSWORD` from Secret Manager (SCRUM-136).
+
+# deployment (SCRUM-136)
+the app runs publicly on Google Cloud Run (project `wind-app-515017`, region `us-west1`, service `wind-map`) as one instance behind the shared password
++ The image is built for `linux/amd64` by Cloud Build (`cloudbuild.yaml`; local Docker is arm64) and pushed to `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map`, tagged with `VERSION-<hash>` and `latest`. The service is live at https://wind-map-qhtz2eay6a-uw.a.run.app.
++ Cloud Run serves port 5005 with 512 MiB, `--max-instances=1`, `--min-instances=0`, `--no-cpu-throttling` and `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM.
++ The service runs as the `wind-map-runner` service account with `LITESTREAM_BUCKET` and `APP_PASSWORD` from Secret Manager; `CARTO_API_KEY` is added the same way when a key exists, and the map otherwise uses the OpenStreetMap tiles.
++ On a fresh instance the entrypoint restores the database from GCS; when no replica exists yet it creates the schema before Litestream starts, so the first deployment replicates from a valid database instead of waiting for one.
++ The single-instance cap and always-allocated CPU keep Litestream the only writer; replacing the instance with a new revision therefore restores the saved locations from the replica, which is the persistence check.
++ Rollback is a traffic switch to the previous revision (`gcloud run services update-traffic --to-revisions=...`) or a redeploy of the previous image tag; `--to-latest` returns to the newest revision.
 
 # versioning (SCRUM-91)
 the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔ release/tag v0.2.0)
