@@ -198,6 +198,67 @@ container does not use it. The password is never printed; read it with:
 gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
 ```
 
+### Google Cloud Run Deployment
+
+The public deployment runs the same image on Cloud Run behind HTTP Basic Auth, with SQLite
+replicated to the bucket above (SCRUM-136). It is live at
+<https://wind-map-qhtz2eay6a-uw.a.run.app> (username ignored, password from Secret Manager).
+
+```bash
+# Build for Cloud Run's architecture in Cloud Build and push the release tag and latest.
+gcloud builds submit --project=wind-app-515017 --config=cloudbuild.yaml \
+  --substitutions=_TAG=$(cat VERSION)-$(git rev-parse --short HEAD),_GIT_SHA=$(git rev-parse --short HEAD)
+
+# Deploy: one instance with CPU always allocated so Litestream keeps replicating.
+gcloud run deploy wind-map --project=wind-app-515017 --region=us-west1 \
+  --image="$IMAGE:latest" --port=5005 \
+  --service-account=wind-map-runner@wind-app-515017.iam.gserviceaccount.com \
+  --memory=512Mi --max-instances=1 --min-instances=0 --no-cpu-throttling \
+  --allow-unauthenticated \
+  --set-env-vars=LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017 \
+  --set-secrets=APP_PASSWORD=APP_PASSWORD:latest
+```
+
+Cloud Build runs natively on amd64; locally, `docker buildx build --platform linux/amd64` with the
+same `--build-arg GIT_SHA` produces the same image, but pushing 50 MB of layers from a slow uplink
+tends to time out, so Cloud Build is the supported path.
+
+Cloud Run must allow unauthenticated requests so the app can answer with its own Basic Auth
+challenge; IAM is not the gate. Without `APP_PASSWORD` the same command would publish an open site,
+so the secret is part of the deployment, not an option.
+
+**Single writer.** Litestream replicates one database and assumes one writer, so the service is
+capped at one instance (`--max-instances=1`) with CPU always allocated (`--no-cpu-throttling`).
+Scaling to zero is safe: the next instance restores the database from the bucket before serving,
+and the entrypoint creates the schema when neither a local database nor a replica exists yet.
+
+**Verify the deployment.**
+
+```bash
+URL=$(gcloud run services describe wind-map --region=us-west1 --format='value(status.url)')
+curl -s -o /dev/null -w '%{http_code}\n' "$URL/api/health"   # 200, no credentials
+curl -s -o /dev/null -w '%{http_code}\n' "$URL/"             # 401
+curl -s -u "wind-map:$(gcloud secrets versions access latest --secret=APP_PASSWORD)" \
+  -o /dev/null -w '%{http_code}\n' "$URL/"                   # 200
+```
+
+To prove persistence, create a location and then replace the instance (a revision-level change such
+as `--update-env-vars`), and check that `GET /api/locations` still returns it; the new instance has
+an empty disk and must restore the database from GCS.
+
+**Rollback.** Every deployment creates a revision; move traffic back, or redeploy the previous tag.
+
+```bash
+gcloud run revisions list --service=wind-map --region=us-west1
+gcloud run services update-traffic wind-map --region=us-west1 \
+  --to-revisions=wind-map-00001-abc=100        # the revision to go back to
+gcloud run services update-traffic wind-map --region=us-west1 --to-latest   # back to the newest
+```
+
+A CARTO key is optional. To add it later, create the secret (`CARTO_API_KEY`), grant the runner
+`roles/secretmanager.secretAccessor` on it, and add `CARTO_API_KEY=CARTO_API_KEY:latest` to
+`--set-secrets`; without it the map uses the OpenStreetMap tiles.
+
 ---
 
 ## Local Development Setup
