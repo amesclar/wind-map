@@ -146,3 +146,31 @@ CURRENT_HORIZON_HOURS = 240
 
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
+
+# In-app feedback (SCRUM-179): POST /api/feedback files a Jira issue through one service account.
+# The feature is on only when the base URL, email and API token are all set; the credentials come
+# from the environment or a secret store and are never returned by the API or logged.
+JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "").strip().rstrip("/")
+JIRA_EMAIL = os.getenv("JIRA_EMAIL", "").strip()
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "").strip()
+JIRA_FEEDBACK_PROJECT = os.getenv("JIRA_FEEDBACK_PROJECT", "").strip() or "SCRUM"
+JIRA_TIMEOUT_SECONDS = 10.0
+FEEDBACK_LABEL = "in-app-feedback"
+FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+FEEDBACK_MAX_PER_HOUR = _positive_int("FEEDBACK_MAX_PER_HOUR", 5)  # per client IP
+FEEDBACK_GLOBAL_MAX_PER_HOUR = FEEDBACK_MAX_PER_HOUR * 4  # all clients together
+
+
+def feedback_enabled() -> bool:
+    """True when every Jira setting needed to file a ticket is present."""
+    return bool(JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN)

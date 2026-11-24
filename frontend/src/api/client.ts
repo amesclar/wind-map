@@ -1,6 +1,8 @@
 import {
   AppConfig,
   CurrentGridResponse,
+  FeedbackPayload,
+  FeedbackResult,
   GeocodeResult,
   GridWindPoint,
   NewLocation,
@@ -147,6 +149,13 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   } catch {
     return {};
   }
+}
+
+/** File feedback as a Jira issue (SCRUM-179). Never retried automatically: a retry could duplicate the ticket. */
+export function submitFeedback(payload: FeedbackPayload): Promise<FeedbackResult> {
+  return request('/feedback', 'Failed to send feedback', {
+    init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  });
 }
 
 export function fetchWindGrid(

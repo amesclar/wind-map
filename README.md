@@ -59,12 +59,12 @@ wind-map/
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode, feedback)
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
 │   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
-│   │                            # geocode_service.py, model_info.py (run times,
+│   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
@@ -74,7 +74,7 @@ wind-map/
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
-    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, mapTiles.ts
+    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
     │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
     │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
@@ -120,6 +120,17 @@ docker run -d -p 5005:5005 -v wind_data:/app/data --name wind-map wind-map
 ```bash
 docker run -d -p 5005:5005 -e CARTO_API_KEY="$CARTO_API_KEY" -v wind_data:/app/data --name wind-map wind-map
 ```
+
+*(Optional: Enable the in-app feedback button, which files Jira issues through one service account)*:
+```bash
+docker run -d -p 5005:5005 \
+  -e JIRA_BASE_URL="https://nehes.atlassian.net" \
+  -e JIRA_EMAIL="$JIRA_EMAIL" \
+  -e JIRA_API_TOKEN="$JIRA_API_TOKEN" \
+  -e JIRA_FEEDBACK_PROJECT="SCRUM" \
+  -v wind_data:/app/data --name wind-map wind-map
+```
+Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP.
 
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
@@ -197,7 +208,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | Method   | Endpoint              | Description                                          |
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Health check endpoint                                |
-| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set) |
+| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set, and `feedback_enabled`) |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
 | `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
@@ -209,6 +220,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
+| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.

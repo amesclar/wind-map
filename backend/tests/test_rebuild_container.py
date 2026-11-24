@@ -25,6 +25,10 @@ esac
 """
 
 
+_FEEDBACK_VARS = ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "JIRA_FEEDBACK_PROJECT", "FEEDBACK_MAX_PER_HOUR")
+_CLEARED = ("WIND_MAP_SKIP_REBUILD", "CARTO_API_KEY", "GIT_SHA", *_FEEDBACK_VARS)
+
+
 @pytest.fixture
 def fake_env(tmp_path):
     bin_dir = tmp_path / "bin"
@@ -33,7 +37,7 @@ def fake_env(tmp_path):
         path = bin_dir / name
         path.write_text(body, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
-    env = {k: v for k, v in os.environ.items() if k not in ("WIND_MAP_SKIP_REBUILD", "CARTO_API_KEY", "GIT_SHA")}
+    env = {k: v for k, v in os.environ.items() if k not in _CLEARED}
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     env["FAKE_LOG"] = str(tmp_path / "docker.log")
     return env
@@ -81,6 +85,17 @@ def test_success_replaces_the_container_with_the_data_volume(fake_env):
         "run -d --name wind-map -p 5005:5005 -e CARTO_API_KEY -v wind_data:/app/data wind-map",
     ]
     assert "running on http://localhost:5005" in result.stderr
+
+
+def test_jira_settings_are_forwarded_by_name_without_their_values(fake_env):
+    secrets = {"JIRA_BASE_URL": "https://x.atlassian.net", "JIRA_EMAIL": "bot@x.com", "JIRA_API_TOKEN": "tok-123"}
+    result, calls = _run(fake_env, GIT_SHA="db9f569", **secrets)
+    assert result.returncode == 0
+    assert calls[-1] == (
+        "run -d --name wind-map -p 5005:5005 -e JIRA_BASE_URL -e JIRA_EMAIL -e JIRA_API_TOKEN"
+        " -v wind_data:/app/data wind-map"
+    )
+    assert "tok-123" not in "\n".join(calls)
 
 
 def _hook_commands(path: Path) -> list[str]:
