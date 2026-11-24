@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend.app import config
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
-from backend.app.routers import currents, geocode, grid, locations, weather
+from backend.app.routers import currents, feedback, geocode, grid, locations, weather
 from backend.app.services import open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -53,6 +54,7 @@ app.include_router(weather.router)
 app.include_router(grid.router)
 app.include_router(currents.router)
 app.include_router(geocode.router)
+app.include_router(feedback.router)
 
 
 @app.get("/api/health")
@@ -64,6 +66,8 @@ def health_check():
 def get_config():
     return {
         "carto_api_key": CARTO_API_KEY,
+        # Only the on/off flag: the Jira credentials never leave the server (SCRUM-179).
+        "feedback_enabled": config.feedback_enabled(),
     }
 
 

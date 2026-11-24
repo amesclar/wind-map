@@ -6,6 +6,7 @@ import {
   MapPin,
   Map,
   Settings,
+  MessageSquareText,
 } from 'lucide-react';
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
@@ -27,6 +28,9 @@ interface NavbarProps {
   onOpenExportDialog: () => void;
   /** True while an export is being captured. */
   savingMap: boolean;
+  /** The server can file feedback in Jira, so the feedback button is shown (SCRUM-179). */
+  feedbackEnabled: boolean;
+  onOpenFeedback: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +46,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   hasCartoKey,
   onOpenExportDialog,
   savingMap,
+  feedbackEnabled,
+  onOpenFeedback,
 }) => {
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -124,6 +130,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
         </button>
 
+        {/* Feedback (SCRUM-179): left of export so export stays immediately left of the gear */}
+        {feedbackEnabled && (
+          <button
+            onClick={onOpenFeedback}
+            title="Send feedback"
+            aria-label="Send feedback"
+            aria-haspopup="dialog"
+            className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 transition"
+          >
+            <MessageSquareText className="w-4 h-4 text-sky-400" />
+          </button>
+        )}
         {/* Export trigger: download icon beside Preferences (SCRUM-157) */}
         <MapExportControl onOpen={onOpenExportDialog} busy={savingMap} />
 
