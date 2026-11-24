@@ -13,6 +13,8 @@ const BASE_PROPS = {
   onToggleWindOverlay: vi.fn(),
   windColorOverlayVisible: false,
   onToggleWindColorOverlay: vi.fn(),
+  waterCurrentsVisible: false,
+  onToggleWaterCurrents: vi.fn(),
 };
 
 describe('MapSettingsModal wind overlay toggle', () => {
@@ -76,5 +78,33 @@ describe('MapSettingsModal wind color gradient toggle (SCRUM-124)', () => {
     fireEvent.click(screen.getByTestId('wind-color-overlay-toggle'));
     expect(onToggle).toHaveBeenCalledWith(true);
     expect(BASE_PROPS.onToggleWindOverlay).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapSettingsModal water currents toggle (SCRUM-100)', () => {
+  it('is off by default and reflects the current state', () => {
+    const { rerender } = render(<MapSettingsModal {...BASE_PROPS} />);
+    expect(screen.getByTestId('water-currents-toggle').getAttribute('aria-pressed')).toBe('false');
+
+    rerender(<MapSettingsModal {...BASE_PROPS} waterCurrentsVisible />);
+    expect(screen.getByTestId('water-currents-toggle').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('toggles independently of both wind layers', () => {
+    const onToggle = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        windOverlayVisible
+        windColorOverlayVisible
+        onToggleWaterCurrents={onToggle}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('water-currents-toggle'));
+
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(BASE_PROPS.onToggleWindOverlay).not.toHaveBeenCalled();
+    expect(BASE_PROPS.onToggleWindColorOverlay).not.toHaveBeenCalled();
   });
 });

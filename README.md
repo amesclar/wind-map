@@ -4,28 +4,35 @@ A standalone, minimalist dark-mode application that displays live weather foreca
 
 Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
 
+![Wind Map showing wind barbs and the wind colour gradient over Puget Sound](docs/screenshot.png)
+
+*Wind grid barbs, temperature-coloured barbs, the wind colour gradient and the forecast time selector, at 06:00 PST.*
+
 ---
 
 ## Features
 
 - **Interactive Map:** Powered by Leaflet.js with CartoDB Dark Matter tiles.
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
-- **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
-- **Wind Color Gradient *(SCRUM-121, SCRUM-122, SCRUM-123, SCRUM-124)*:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
-- **Clickable Barbs *(SCRUM-88, SCRUM-89, SCRUM-126)*:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
-- **Forecast Time Selector *(SCRUM-127)*:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
-- **Map export *(SCRUM-116, SCRUM-117, SCRUM-155, SCRUM-156, SCRUM-157, SCRUM-165)*:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. Since SCRUM-155 it also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. Since SCRUM-156 a range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
-- **Forecast-time data *(SCRUM-115)*:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
+- **Wind Grid Overlay:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
+- **Wind Color Gradient:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
+- **Water Currents:** A grid of chevrons over the water, pointing where the surface current flows and coloured by speed — light (under 0.5 kt), moderate (0.5–1.5 kt), strong (1.5–3 kt) and extreme (3 kt and above). A chevron is drawn only where the point is at sea, so the land stays clear; clicking one opens a pop-up with its speed, compass direction and where it flows toward, in your units, naming the source and the selected forecast hour. The field comes from Open-Meteo Marine (Copernicus Marine, ~8 km), is independent of the selected weather model, follows the same forecast-time selector on its own 240-hour horizon, and retries and the quota 503 behave exactly as on the wind grid. Toggled in Map Settings (default: off); with it on, a compact key at the map's top-left lists the four tiers with their ranges in your speed unit.
+- **Clickable Barbs:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
+- **Forecast Time Selector:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
+- **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
+- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS 0.4°*
   - *NOAA GFS Seamless*
   - *DWD ICON Seamless*
+- **Weather Model Guide:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
-- **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
+- **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
+- **Quota Warning:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
 ---
@@ -36,35 +43,59 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 wind-map/
 ├── Dockerfile                   # Multi-stage build (Node build -> Python deps -> Alpine runtime)
 ├── docker-compose.yml           # Optional compose configuration
-├── requirements.txt             # Python backend dependencies (FastAPI, httpx, etc.)
+├── requirements.in / .txt       # Pinned runtime dependencies (pip-compile)
+├── requirements-dev.in / .txt   # Pinned test tools
+├── VERSION                      # Release version, shown in the navbar and /api/health
+├── docs/screenshot.png          # Screenshot shown above
+├── release-notes/               # One notes file per release (x-x-x.md)
+├── scripts/                     # rebuild-container.sh, sync-ai-rules.py
+├── .kiro/steering/              # AI coding rules (source of truth)
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI application & static asset server
-│   │   ├── config.py            # Settings & named constants (defaults, forecast shape, limits, timeouts)
+│   │   ├── main.py              # FastAPI application, /api/health, /api/config & static asset server
+│   │   ├── config.py            # Settings & named constants (models, horizons, forecast shape, limits, timeouts)
 │   │   ├── database.py          # All table definitions, versioned migrations (PRAGMA user_version) & seed
 │   │   ├── locations_repo.py    # Data access for saved locations
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, geocode)
-│   │   └── services/            # open_meteo.py (shared HTTP client); weather_service.py (cache → fetch → parse → store),
-│   │                            # forecast_parser.py (pure parsing), forecast_cache.py (saved-location & point caches);
-│   │                            # grid & geocoding services
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode)
+│   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
+│   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
+│   │                            # forecast_cache.py (saved-location, point & grid-day caches),
+│   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+│   │                            # geocode_service.py, model_info.py (run times,
+│   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
-    │   ├── components/          # MapView, WindOverlay, WindBarb, ForecastTimeSelector, Navbar, modals,
-    │   │                        # MapExportControl, mapTiles.ts
-    │   ├── hooks/               # useMapSettings, useUnitPreferences, useTimezone, useLocations, useAllWeather,
-    │   │                        # useWindGrid, useLocalStorageState, useLatest
-    │   ├── api/                 # Typed API client (one request() helper, ApiError)
+    │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
+    │   │                        # CurrentOverlay, CurrentLegend, WaterCurrentChevron,
+    │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
+    │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
+    │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
+    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, mapTiles.ts
+    │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
+    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
+    │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
+    │   │                        # useLocalStorageState.ts, useLatest.ts
+    │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
-    │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (canvas capture),
+    │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (composition),
+    │   │                        # captureDom.ts (tiles & capture filter), captureChrome.ts (header/legend/footer),
+    │   │                        # download.ts (encode & save), pdfExport.ts (PDF page fitting),
+    │   │                        # exportRange.ts (range planning),
+    │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
+    │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
+    │   │                        # currentTiers.ts (tier table behind chevrons and legend),
     │   │                        # modelGuide.ts (model table), html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
+    │   ├── assets/              # weather-models.md, icon artwork
     │   ├── constants.ts         # Defaults, timezone list, storage keys
     │   ├── types.ts             # TypeScript interfaces
+    │   ├── version.ts           # Injected __APP_VERSION__
     │   └── App.tsx              # Wires the hooks to the components
+    ├── appVersion.ts            # Reads VERSION and GIT_SHA for the build
     ├── package.json             # React, Leaflet, TailwindCSS, Vite
     └── vite.config.ts           # Dev proxy configuration
 ```
@@ -96,7 +127,8 @@ Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
 ### Map Layers & CARTO API Key
 
-- **OpenStreetMap Dark (Default):** Clean, high-contrast dark theme that requires **no API key** and has no watermarks.
+- **OpenStreetMap Dark (Default):** the same OpenStreetMap tiles, darkened in CSS, so it needs **no API key** and has no watermarks.
+- **OpenStreetMap Standard:** the plain OSM style, for when the dark base map hides a feature.
 - **CARTO Dark Matter:** CARTO requires a free API key to remove their *"API KEY REQUIRED"* watermark.
   1. Visit **[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)** to get an instant free key (up to 5 million requests/month).
   2. Click the **Map** button in the app's top bar to paste and save your key directly in the UI, or pass it via `CARTO_API_KEY` environment variable.
@@ -165,6 +197,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | Method   | Endpoint              | Description                                          |
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Health check endpoint                                |
+| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set) |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
 | `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
@@ -173,18 +206,24 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/weather/all`    | Get current conditions (or one forecast hour) for all saved locations |
 | `GET`    | `/api/weather/point`  | Get 48h forecast for an arbitrary lat/lon point (no saved location needed) |
 | `GET`    | `/api/weather/grid`   | Get wind for a lat/lon bounding box grid, now or at a forecast hour (powers the barb overlay) |
+| `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
+| `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.
 
-`/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time` *(SCRUM-115)*: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
+The exception is exhausted quota. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
+
+`/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time`: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
+
+`/api/currents/grid` and `/api/currents/point` take the same bounding box or coordinates and the same optional `time`, but no `model`: currents come from a single field (Open-Meteo Marine, Copernicus Marine) whose 240-hour horizon does not depend on the selected weather model, and a `time` beyond it is a 422 naming that limit. Land points are left out of a grid response — an inland box answers `{"points": []}` — and are cached along with the water ones, so panning back inland does not repeat the upstream call.
 
 ---
 
 ## Versioning
 
-The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.7.1`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
+The app version follows the release version. The `VERSION` file in the project root (e.g. `0.8.2`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
 
 ```bash
 echo "X.Y.Z" > VERSION
@@ -193,13 +232,15 @@ echo "X.Y.Z" > VERSION
 
 Tests fail if the two files disagree.
 
-The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0.7.1-db9f569` in the navbar and `"version": "0.7.1-db9f569"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.7.0` -> `0.7.1`): that is not a release, so it needs no release notes or tag.
+The displayed version also carries the short commit hash, e.g. `v0.8.2-2af202f` in the navbar and `"version": "0.8.2-2af202f"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.8.2` -> `0.8.3`): that is not a release, so it needs no release notes or tag.
+
+Every release also ships release notes in `release-notes/x-x-x.md` (dots replaced by hyphens, e.g. `0-8-2.md`), committed with the version bump and used for the GitHub release.
 
 ---
 
 ## AI coding rules
 
-`.kiro/steering/*.md` is the single source of truth for the project rules. `python scripts/sync-ai-rules.py` renders them for every agent, and the generated files must not be edited by hand: a pytest test fails when one is stale or over budget. The rules are tiered *(SCRUM-160)* because Devin Desktop auto-injects only the first 16 KiB of `AGENTS.md`:
+`.kiro/steering/*.md` is the single source of truth for the project rules. `python scripts/sync-ai-rules.py` renders them for every agent, and the generated files must not be edited by hand: a pytest test fails when one is stale or over budget. The rules are tiered because Devin Desktop auto-injects only the first 16 KiB of `AGENTS.md`:
 
 - **Always on — `AGENTS.md`** (Devin and Freebuff): the hard guardrails only, held to **14,000 bytes** so a new rule has headroom instead of landing on the truncation edge. It ends with pointers to the situational files.
 - **Situational — `.devin/rules/*.md`** (Devin): one generated file per situational steering file, with `trigger: glob` front matter and a 12,000-character cap each, so Devin loads the testing or release rules only when a matching file is in play. To add one, list the steering file in `SITUATIONAL` in the sync script.
@@ -219,20 +260,26 @@ Backend test suite coverage includes:
 - 30-minute SQLite caching verification (<0.5s response time on cache hit)
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
 - Point weather endpoint — arbitrary lat/lon forecast with correct N/S/E/W name formatting and coordinate validation
-- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation
+- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
+- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
+- Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
+- Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:
 - Wind barb SVG generation (feather counts, pennants, calm circles, direction encoding, temperature color, label rendering)
-- Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring) *(SCRUM-89)*
-- Barb pop-up values in the chosen units, and the barb highlight clearing when a saved location is picked *(SCRUM-126)*
-- Forecast window maths (steps, snapping, day marks, labels) and the selector's arrows, keyboard, Now and play behaviour with the model metadata *(SCRUM-127)*
-- Both pop-ups naming the selected forecast hour, and the whole map moving when it changes *(SCRUM-127)*
-- Image header, footer and file name (local and UTC time, model, units, attribution, version), the legend in each speed unit, and the captured composition *(SCRUM-116)*
+- Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring)
+- Barb pop-up values in the chosen units, and the barb highlight clearing when a saved location is picked
+- Forecast window maths (steps, snapping, day marks, labels) and the selector's arrows, keyboard, Now and play behaviour with the model metadata
+- Both pop-ups naming the selected forecast hour, and the whole map moving when it changes
+- Image header, footer and file name (local and UTC time, model, units, attribution, version), the legend in each speed unit, and the captured composition
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
-- `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
+- `PreferencesModal` controls, close buttons, and saved preferences restored on reload
 - Map stacking context isolation, selected-marker highlight and pop-ups in the chosen units
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
+- Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window
+- Wind colour legend stacking above the Leaflet panes
+- Current chevrons (tier by speed, rotation, land filtering), the currents overlay and its pop-up, the shared tier range formatter, the top-left currents key, and the Water Currents toggle's aria state and independence from both wind layers
 
 
 Run tests locally via:
@@ -250,14 +297,14 @@ cd frontend && npm run lint
 # Frontend type check, including test files
 cd frontend && npm run typecheck
 
-# Backend suite inside the Docker test stage (SCRUM-152), which adds the bash that the
+# Backend suite inside the Docker test stage, which adds the bash that the
 # shipped image omits; a plain `docker build .` still produces the runtime image
 docker build --target test -t wind-map:test . && docker run --rm wind-map:test pytest --cov
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.
 
-## Quality and Security Checks (SCRUM-108)
+## Quality and Security Checks
 
 GitHub Actions runs these on every pull request to `develop` or `master` and on pushes to those branches (`.github/workflows/`):
 
@@ -273,6 +320,6 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 | CodeQL | Static analysis for Python and JavaScript/TypeScript (also weekly) | runs on GitHub |
 | Dependabot | Weekly update PRs for pip, npm, Docker and GitHub Actions (target `develop`) | runs on GitHub |
 
-Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
+Coverage floors are 97% for the backend (`.coveragerc`) and 90% statements / 82% branches / 86% functions / 91% lines for the frontend (`frontend/vitest.config.ts`). They were set a little below the baseline when added, so CI fails on a real drop but not on noise. Raise them as coverage improves.
 
-Ruff enforces lint and formatting (SCRUM-109): `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
+Ruff enforces lint and formatting: `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).

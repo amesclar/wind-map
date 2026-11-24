@@ -5,7 +5,8 @@
  * aspect ratio kept, so a wide map is never stretched to a portrait sheet. `jspdf` is imported
  * lazily: the library is only downloaded when the user picks PDF.
  */
-import { captureMapCanvas, type CaptureContent, type CaptureDeps } from './captureMap';
+import { captureMapCanvas, type CaptureDeps } from './captureMap';
+import type { CaptureContent } from './captureChrome';
 
 export type PdfPageSize = 'letter' | 'a4';
 export type PdfOrientation = 'portrait' | 'landscape';

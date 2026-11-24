@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
-from backend.app.services.grid_weather_service import _fetch_from_open_meteo, get_grid_wind
+from backend.app.services.grid_weather_service import get_grid_wind
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import coord_key as _cache_key
 from factories import grid_hourly_item, grid_item, grid_payload, insert_grid_row, upstream_error
@@ -39,7 +39,7 @@ def test_cache_key_same_for_nearby_points():
 
 
 # ---------------------------------------------------------------------------
-# Unit: _fetch_from_open_meteo
+# Unit: get_grid_wind (current conditions, empty cache)
 # ---------------------------------------------------------------------------
 
 
@@ -49,7 +49,7 @@ async def test_fetch_single_point_dict_response(open_meteo):
     pts = [(48.29, -122.60)]
     open_meteo.respond(grid_payload(grid_item(15.0, 220.0)))
 
-    result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await get_grid_wind(pts, "best_match")
 
     assert len(result) == 1
     assert result[0].latitude == 48.29
@@ -64,7 +64,7 @@ async def test_fetch_multiple_points_array_response(open_meteo):
     pts = [(48.0, -122.0), (47.0, -121.0), (46.0, -120.0)]
     open_meteo.respond(grid_payload(grid_item(5.0, 90.0), grid_item(20.0, 180.0), grid_item(35.0, 270.0)))
 
-    result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await get_grid_wind(pts, "best_match")
 
     assert len(result) == 3
     assert result[0].wind_speed_knots == 5.0
@@ -82,7 +82,7 @@ async def test_fetch_handles_null_wind_values(open_meteo):
     item = {"current": {"wind_speed_10m": None, "wind_direction_10m": None}}
     open_meteo.respond(grid_payload(item))
 
-    result = await _fetch_from_open_meteo(pts, "best_match")
+    result = await get_grid_wind(pts, "best_match")
 
     assert result[0].wind_speed_knots == 0.0
     assert result[0].wind_direction_deg == 0.0
@@ -93,7 +93,7 @@ async def test_fetch_non_best_match_model_adds_models_param(open_meteo):
     """A non-default model should be forwarded in the Open-Meteo request params."""
     open_meteo.respond(grid_payload(grid_item()))
 
-    await _fetch_from_open_meteo([(48.0, -122.0)], "ecmwf_ifs04")
+    await get_grid_wind([(48.0, -122.0)], "ecmwf_ifs04")
 
     assert open_meteo.last_params.get("models") == "ecmwf_ifs04"
 
@@ -103,7 +103,7 @@ async def test_fetch_best_match_omits_models_param(open_meteo):
     """best_match should NOT add a 'models' key to the request."""
     open_meteo.respond(grid_payload(grid_item()))
 
-    await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
+    await get_grid_wind([(48.0, -122.0)], "best_match")
 
     assert "models" not in open_meteo.last_params
 
@@ -334,7 +334,7 @@ async def test_fetch_returns_temperature_f_and_requests_temperature(open_meteo):
     """Grid points carry current temperature in °F, converted like the drawer (1 decimal)."""
     open_meteo.respond(grid_payload(grid_item(12.0, 200.0, temp_c=12.3)))
 
-    result = await _fetch_from_open_meteo([(48.0, -122.0)], "best_match")
+    result = await get_grid_wind([(48.0, -122.0)], "best_match")
 
     assert "temperature_2m" in open_meteo.last_params["current"]
     assert result[0].temperature_f == round(12.3 * 9 / 5 + 32, 1)  # 54.1
@@ -430,3 +430,60 @@ def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, o
     assert resp.status_code == 502
     assert resp.json()["detail"] == "Failed to fetch grid wind data from Open-Meteo"
     assert "secret-host" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-174: the cache read is one statement, not one per point
+# ---------------------------------------------------------------------------
+
+
+def test_read_cached_points_issues_one_query_for_a_full_view(monkeypatch):
+    """A whole 30 x 30 view costs one SELECT and still returns the points in request order."""
+    import time
+    from contextlib import contextmanager
+
+    from backend.app.database import db_connection
+    from backend.app.services import grid_weather_service as service
+
+    points = [(47.0 + r * 0.01, -122.0 + c * 0.01) for r in range(30) for c in range(30)]
+    now = time.time()
+    with db_connection() as conn:
+        conn.executemany(
+            "INSERT INTO grid_weather_cache "
+            "(lat_key, lon_key, model, hour, cached_at, expires_at, wind_speed_knots, "
+            "wind_direction_deg, temperature_f) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            [
+                (*_cache_key(lat, lon), "best_match", "current", now, now + 1800, 10.0, 180.0, 50.0)
+                for lat, lon in points
+            ],
+        )
+
+    class CountingConnection:
+        def __init__(self, conn):
+            self._conn = conn
+            self.queries = 0
+
+        def execute(self, *args, **kwargs):
+            self.queries += 1
+            return self._conn.execute(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    seen: dict[str, CountingConnection] = {}
+    real_connection = service.db_connection
+
+    @contextmanager
+    def counting_connection():
+        with real_connection() as conn:
+            proxy = CountingConnection(conn)
+            seen["proxy"] = proxy
+            yield proxy
+
+    monkeypatch.setattr(service, "db_connection", counting_connection)
+
+    results, missing = service._read_cached_points(points, "best_match", "current", now)
+
+    assert seen["proxy"].queries == 1
+    assert missing == []
+    assert [(p.latitude, p.longitude) for p in results] == points

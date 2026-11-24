@@ -66,31 +66,44 @@ def _read_cached_points(
     hour: str,
     now: float,
 ) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
-    """Split points into cached results and coordinates that still need fetching."""
+    """Split points into cached results and coordinates that still need fetching.
+
+    One statement per request (SCRUM-174) instead of one per point: a full 30 x 30 view used to
+    run up to 900 SELECTs, which measured 5-6 ms per lookup. The rounded latitudes bound the
+    scan, and the dict lookup keeps the caller's point order (and drops rows outside the box).
+    """
+    if not points:
+        return [], []
+    keys = {coord_key(lat, lon) for lat, lon in points}
+    lat_keys = sorted({lat_key for lat_key, _ in keys})
+    placeholders = ",".join("?" for _ in lat_keys)
+    with db_connection() as conn:
+        rows = conn.execute(
+            "SELECT lat_key, lon_key, wind_speed_knots, wind_direction_deg, temperature_f "  # noqa: S608
+            "FROM grid_weather_cache "
+            "WHERE model=? AND hour=? AND expires_at>? AND temperature_f IS NOT NULL "
+            f"AND lat_key IN ({placeholders})",  # only generated placeholders, every value is bound
+            (model, hour, now, *lat_keys),
+        ).fetchall()
+    cached = {(row["lat_key"], row["lon_key"]): row for row in rows}
+
     results: list[GridWindPoint] = []
     missing: list[tuple[float, float]] = []  # original coords for missing cache entries
-    with db_connection() as conn:
-        for lat, lon in points:
-            lk, lnk = coord_key(lat, lon)
-            row = conn.execute(
-                "SELECT wind_speed_knots, wind_direction_deg, temperature_f FROM grid_weather_cache "
-                "WHERE lat_key=? AND lon_key=? AND model=? AND hour=? AND expires_at>? "
-                "AND temperature_f IS NOT NULL",
-                (lk, lnk, model, hour, now),
-            ).fetchone()
-            if row:
-                results.append(
-                    GridWindPoint(
-                        latitude=lat,
-                        longitude=lon,
-                        wind_speed_knots=row["wind_speed_knots"],
-                        wind_direction_deg=row["wind_direction_deg"],
-                        temperature_f=row["temperature_f"],
-                        time=None if hour == "current" else hour,
-                    )
-                )
-            else:
-                missing.append((lat, lon))
+    for lat, lon in points:
+        row = cached.get(coord_key(lat, lon))
+        if row is None:
+            missing.append((lat, lon))
+            continue
+        results.append(
+            GridWindPoint(
+                latitude=lat,
+                longitude=lon,
+                wind_speed_knots=row["wind_speed_knots"],
+                wind_direction_deg=row["wind_direction_deg"],
+                temperature_f=row["temperature_f"],
+                time=None if hour == "current" else hour,
+            )
+        )
     return results, missing
 
 
@@ -222,17 +235,6 @@ async def _fetch_hourly_day(
     if requested not in series:
         raise httpx.HTTPError(f"Open-Meteo response did not include the requested hour {requested}")
     return series
-
-
-async def _fetch_from_open_meteo(
-    points: list[tuple[float, float]],
-    model: str,
-    at: datetime | None = None,
-) -> list[GridWindPoint]:
-    """One batched request for every point, either `current` or the requested UTC hour."""
-    if at is None:
-        return await _fetch_current(points, model)
-    return (await _fetch_hourly_day(points, model, at))[hour_key(at)]
 
 
 def _series_times(items: list[dict]) -> list[str]:

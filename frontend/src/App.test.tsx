@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import App, { RANGE_FRAME_TIMEOUT_MS } from './App';
+import App from './App';
+import { RANGE_FRAME_TIMEOUT_MS } from './hooks/useMapExport';
 import type { GridWindPoint } from './api/client';
 import { STORAGE_KEYS } from './constants';
 import { makeForecast, makeLocation } from './test/fixtures';
@@ -13,6 +14,10 @@ vi.mock('./utils/captureMap', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./utils/captureMap')>()),
   saveMapImage: vi.fn().mockResolvedValue(undefined),
   captureMapCanvas: vi.fn().mockResolvedValue({ width: 10, height: 10 }),
+}));
+// jsdom has no map tiles; the range loop's tile wait is the wiring under test, not tile timing.
+vi.mock('./utils/captureDom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/captureDom')>()),
   waitForTiles: vi.fn().mockResolvedValue(undefined),
 }));
 import { captureMapCanvas, saveMapImage } from './utils/captureMap';

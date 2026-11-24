@@ -12,11 +12,14 @@ import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay } from './WindOverlay';
 import { WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
+import { CurrentOverlay } from './CurrentOverlay';
+import { CurrentLegend } from './CurrentLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
+import { useCurrentGrid } from '../hooks/useCurrentGrid';
 import { tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
@@ -31,6 +34,8 @@ interface MapViewProps {
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
+  /** Ocean-current chevrons (SCRUM-99); off unless turned on. */
+  waterCurrentsVisible?: boolean;
   selectedGridPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
@@ -121,6 +126,7 @@ export const MapView: React.FC<MapViewProps> = ({
   selectedModel,
   windOverlayVisible,
   windColorOverlayVisible,
+  waterCurrentsVisible = false,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -154,6 +160,9 @@ export const MapView: React.FC<MapViewProps> = ({
     onGridLoaded,
     onGridQuotaExhausted,
   );
+  // Currents have their own fetch and horizon: the layer follows the same selected hour
+  // (SCRUM-99) but not the weather model or the wind layers.
+  const currentPoints = useCurrentGrid(mapInstance, waterCurrentsVisible, validTime);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -280,6 +289,13 @@ export const MapView: React.FC<MapViewProps> = ({
         dirDisplay={dirDisplay}
         timeLabel={validTimeLabel}
       />
+      <CurrentOverlay
+        map={mapInstance}
+        points={currentPoints}
+        speedUnit={speedUnit}
+        timeLabel={validTimeLabel}
+      />
+      {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (
         <>
           <WindColorOverlay map={mapInstance} points={gridPoints} visible />

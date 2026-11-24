@@ -81,9 +81,16 @@ def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
                 "VALUES (?, ?, 'm', 'UTC', 'current', ?, ?, '{}');",
                 (lat, lat, now, now + expires_in),
             )
+        for lat, expires_in in ((1, -1), (2, 600)):
+            conn.execute(
+                "INSERT INTO grid_currents_cache "
+                "(lat_key, lon_key, hour, cached_at, expires_at, velocity_knots, direction_deg) "
+                "VALUES (?, ?, 'current', ?, ?, 1.5, 90.0);",
+                (lat, lat, now, now + expires_in),
+            )
     insert_grid_row(1, 1, "m", expires_in=-1)
     insert_grid_row(2, 2, "m", expires_in=600)
-    assert clean_expired_cache(now) == 3
+    assert clean_expired_cache(now) == 4
 
     with db_connection() as conn:
         for table in CACHE_TABLES:
