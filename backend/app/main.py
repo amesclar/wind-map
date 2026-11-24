@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
 from backend.app.routers import geocode, grid, locations, weather
+from backend.app.services import open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -20,7 +22,11 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
     clean_expired_cache()
-    yield
+    try:
+        yield
+    finally:
+        # Release the pooled Open-Meteo client (SCRUM-174).
+        await open_meteo.close_client()
 
 
 app = FastAPI(
@@ -60,14 +66,26 @@ def get_config():
     }
 
 
+def resolve_static_file(full_path: str, static_dir: Path = STATIC_DIR) -> Path | None:
+    """The built file for `full_path`, or None when it does not exist inside `static_dir`.
+
+    The containment check (SCRUM-174) means a path like `../VERSION` cannot read files next to
+    the frontend build; those requests fall back to `index.html` like any client-side route.
+    """
+    if not full_path:
+        return None
+    root = static_dir.resolve()
+    candidate = (root / full_path).resolve()
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        return None
+    return candidate
+
+
 # Serve static frontend if available
 if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # If specific file exists in static dir, serve it
-        target_file = STATIC_DIR / full_path
-        if full_path and target_file.is_file():
-            return FileResponse(target_file)
-        return FileResponse(STATIC_DIR / "index.html")
+        # An existing file inside the build is served as-is; everything else is the SPA shell.
+        return FileResponse(resolve_static_file(full_path) or STATIC_DIR / "index.html")

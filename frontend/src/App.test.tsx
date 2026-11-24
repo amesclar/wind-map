@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import App, { RANGE_FRAME_TIMEOUT_MS } from './App';
+import App from './App';
+import { RANGE_FRAME_TIMEOUT_MS } from './hooks/useMapExport';
 import type { GridWindPoint } from './api/client';
 import { STORAGE_KEYS } from './constants';
 import { makeForecast, makeLocation } from './test/fixtures';

@@ -152,3 +152,29 @@ async def test_get_json_reports_invalid_json_as_http_error(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     with pytest.raises(httpx.HTTPError):
         await client.get_json(FORECAST_URL, {})
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-174: one pooled client per loop, one retry policy
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_json_reuses_the_same_client(open_meteo):
+    """Repeated calls keep one AsyncClient, so the connection pool and TLS session are reused."""
+    open_meteo.respond({"ok": True})
+
+    await client.get_json(FORECAST_URL, {})
+    shared = client._client()
+    await client.get_json(FORECAST_URL, {})
+
+    assert client._client() is shared
+
+
+@pytest.mark.asyncio
+async def test_close_client_releases_the_shared_client():
+    shared = client._client()
+
+    await client.close_client()
+
+    assert client._client() is not shared

@@ -72,7 +72,8 @@ wind-map/
     │   │                        # PreferencesModal, SavedLocationsModal, WeatherModelGuideModal,
     │   │                        # QuotaWarningDialog, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
-    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useLocalStorageState.ts, useLatest.ts
+    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useMapExport.ts (capture & ranges),
+    │   │                        # useLocalStorageState.ts, useLatest.ts
     │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
     │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (canvas capture),
