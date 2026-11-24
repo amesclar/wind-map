@@ -16,6 +16,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
 - **Wind Grid Overlay:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
 - **Wind Color Gradient:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
+- **Water Currents:** A grid of chevrons over the water, pointing where the surface current flows and coloured by speed — light (under 0.5 kt), moderate (0.5–1.5 kt), strong (1.5–3 kt) and extreme (3 kt and above). A chevron is drawn only where the point is at sea, so the land stays clear; clicking one opens a pop-up with its speed, compass direction and where it flows toward, in your units, naming the source and the selected forecast hour. The field comes from Open-Meteo Marine (Copernicus Marine, ~8 km), is independent of the selected weather model, follows the same forecast-time selector on its own 240-hour horizon, and retries and the quota 503 behave exactly as on the wind grid. Toggled in Map Settings (default: off); with it on, a compact key at the map's top-left lists the four tiers with their ranges in your speed unit.
 - **Clickable Barbs:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
 - **Forecast Time Selector:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
 - **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
@@ -58,22 +59,25 @@ wind-map/
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, geocode)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode)
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
-│   │                            # grid_weather_service.py, geocode_service.py, model_info.py (run times,
+│   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+│   │                            # geocode_service.py, model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
     │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
+    │   │                        # CurrentOverlay, CurrentLegend, WaterCurrentChevron,
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
     │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
-    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useMapExport.ts (capture & ranges),
+    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
+    │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
     │   │                        # useLocalStorageState.ts, useLatest.ts
     │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
@@ -83,6 +87,7 @@ wind-map/
     │   │                        # exportRange.ts (range planning),
     │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
     │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
+    │   │                        # currentTiers.ts (tier table behind chevrons and legend),
     │   │                        # modelGuide.ts (model table), html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
     │   ├── assets/              # weather-models.md, icon artwork
@@ -201,6 +206,8 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/weather/all`    | Get current conditions (or one forecast hour) for all saved locations |
 | `GET`    | `/api/weather/point`  | Get 48h forecast for an arbitrary lat/lon point (no saved location needed) |
 | `GET`    | `/api/weather/grid`   | Get wind for a lat/lon bounding box grid, now or at a forecast hour (powers the barb overlay) |
+| `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
+| `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
@@ -209,6 +216,8 @@ The weather endpoints accept `model` (one of the ids from `/api/weather/models`;
 The exception is exhausted quota. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
 
 `/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time`: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
+
+`/api/currents/grid` and `/api/currents/point` take the same bounding box or coordinates and the same optional `time`, but no `model`: currents come from a single field (Open-Meteo Marine, Copernicus Marine) whose 240-hour horizon does not depend on the selected weather model, and a `time` beyond it is a 422 naming that limit. Land points are left out of a grid response — an inland box answers `{"points": []}` — and are cached along with the water ones, so panning back inland does not repeat the upstream call.
 
 ---
 
@@ -252,6 +261,8 @@ Backend test suite coverage includes:
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
 - Point weather endpoint — arbitrary lat/lon forecast with correct N/S/E/W name formatting and coordinate validation
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
+- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
+- Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
 - Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:
@@ -268,6 +279,7 @@ Frontend test suite coverage includes:
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
 - Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window
 - Wind colour legend stacking above the Leaflet panes
+- Current chevrons (tier by speed, rotation, land filtering), the currents overlay and its pop-up, the shared tier range formatter, the top-left currents key, and the Water Currents toggle's aria state and independence from both wind layers
 
 
 Run tests locally via:
