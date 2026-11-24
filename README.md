@@ -204,24 +204,42 @@ The public deployment runs the same image on Cloud Run behind HTTP Basic Auth, w
 replicated to the bucket above (SCRUM-136). It is live at
 <https://wind-map-qhtz2eay6a-uw.a.run.app> (username ignored, password from Secret Manager).
 
-```bash
-# Build for Cloud Run's architecture in Cloud Build and push the release tag and latest.
-gcloud builds submit --project=wind-app-515017 --config=cloudbuild.yaml \
-  --substitutions=_TAG=$(cat VERSION)-$(git rev-parse --short HEAD),_GIT_SHA=$(git rev-parse --short HEAD)
+**Merging into `develop` deploys it** (SCRUM-189). `.github/workflows/deploy-cloud-run.yml` builds
+the image for `linux/amd64` with the merge commit, pushes it to Artifact Registry as
+`VERSION-<merge-sha>` and `latest`, rolls the service and fails unless `/api/health` reports
+`status: ok`. It can also be started from the Actions tab. Authentication is keyless: the workflow
+exchanges GitHub's OIDC token for short-lived credentials through the Workload Identity pool
+`github`, which only accepts repository `amesclar/wind-map`, so no service account key is stored in
+GitHub. The deploy identity `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com` may push the
+image, deploy the service and act as the runner; it cannot read the password or write the bucket.
 
-# Deploy: one instance with CPU always allocated so Litestream keeps replicating.
+The workflow applies these settings:
+
+| Setting | Value |
+| :--- | :--- |
+| Image | `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:VERSION-<sha>` |
+| Service account | `wind-map-runner@wind-app-515017.iam.gserviceaccount.com` |
+| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `APP_PASSWORD` from Secret Manager |
+| Scaling | `--max-instances=1 --min-instances=0 --no-cpu-throttling` (one writer, CPU always allocated) |
+| Access | `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM |
+
+**Manual deploy (emergency fallback).** If Actions is unavailable, build and deploy by hand; Cloud
+Build builds natively for amd64 and pushes both tags.
+
+```bash
+IMAGE=us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map
+TAG=$(cat VERSION)-$(git rev-parse --short HEAD)
+gcloud builds submit --project=wind-app-515017 --config=cloudbuild.yaml \
+  --substitutions=_TAG=$TAG,_GIT_SHA=$(git rev-parse --short HEAD)
+
 gcloud run deploy wind-map --project=wind-app-515017 --region=us-west1 \
-  --image="$IMAGE:latest" --port=5005 \
+  --image="$IMAGE:$TAG" --port=5005 \
   --service-account=wind-map-runner@wind-app-515017.iam.gserviceaccount.com \
   --memory=512Mi --max-instances=1 --min-instances=0 --no-cpu-throttling \
   --allow-unauthenticated \
   --set-env-vars=LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017 \
   --set-secrets=APP_PASSWORD=APP_PASSWORD:latest
 ```
-
-Cloud Build runs natively on amd64; locally, `docker buildx build --platform linux/amd64` with the
-same `--build-arg GIT_SHA` produces the same image, but pushing 50 MB of layers from a slow uplink
-tends to time out, so Cloud Build is the supported path.
 
 Cloud Run must allow unauthenticated requests so the app can answer with its own Basic Auth
 challenge; IAM is not the gate. Without `APP_PASSWORD` the same command would publish an open site,
