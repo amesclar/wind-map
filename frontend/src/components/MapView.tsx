@@ -278,17 +278,21 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
-      <WindOverlay
-        map={mapInstance}
-        points={gridPoints}
-        selectedPoint={selectedGridPoint}
-        onGridPointSelect={onGridPointSelect}
-        halo={windColorOverlayVisible}
-        unitSystem={unitSystem}
-        speedUnit={speedUnit}
-        dirDisplay={dirDisplay}
-        timeLabel={validTimeLabel}
-      />
+      {/* The grid is shared with the gradient, so the barbs must hide on their own toggle
+          (SCRUM-185): only the gradient keeping the fetch alive does not mean barbs are on. */}
+      {windOverlayVisible && (
+        <WindOverlay
+          map={mapInstance}
+          points={gridPoints}
+          selectedPoint={selectedGridPoint}
+          onGridPointSelect={onGridPointSelect}
+          halo={windColorOverlayVisible}
+          unitSystem={unitSystem}
+          speedUnit={speedUnit}
+          dirDisplay={dirDisplay}
+          timeLabel={validTimeLabel}
+        />
+      )}
       <CurrentOverlay
         map={mapInstance}
         points={currentPoints}
