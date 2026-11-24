@@ -178,3 +178,35 @@ async def test_close_client_releases_the_shared_client():
     await client.close_client()
 
     assert client._client() is not shared
+
+
+@pytest.mark.asyncio
+async def test_get_json_retries_a_transient_connection_error(monkeypatch):
+    """SCRUM-176: the retry budget also covers transport failures, retried immediately."""
+    calls: list[int] = []
+
+    async def fake_get(self, url, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectError("connection reset", request=httpx.Request("GET", url))
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    assert await client.get_json(FORECAST_URL, {}, retries=1) == {"ok": True}
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_json_gives_up_after_the_connection_retries(monkeypatch):
+    calls: list[int] = []
+
+    async def fake_get(self, url, **kwargs):
+        calls.append(1)
+        raise httpx.ConnectTimeout("no route", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    with pytest.raises(httpx.ConnectTimeout):
+        await client.get_json(FORECAST_URL, {}, retries=1)
+    assert len(calls) == 2

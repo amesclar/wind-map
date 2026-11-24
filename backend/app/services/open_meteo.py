@@ -102,11 +102,17 @@ async def get_json(
 
     One retry policy only (SCRUM-174): the loop below honours `Retry-After`, so the client
     keeps its default transport retries off rather than stacking a second, invisible policy
-    that could multiply upstream attempts.
+    that could multiply upstream attempts. Connection-level failures keep the same budget
+    (SCRUM-176) and are retried immediately, which is what the transport used to do.
     """
     client = _client()
     for attempt in range(retries + 1):
-        resp = await client.get(url, params=params, timeout=timeout)
+        try:
+            resp = await client.get(url, params=params, timeout=timeout)
+        except httpx.TransportError:
+            if attempt == retries:
+                raise
+            continue
         if resp.status_code in RETRYABLE_STATUS and attempt < retries:
             await asyncio.sleep(retry_delay(resp, attempt))
             continue
