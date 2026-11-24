@@ -68,16 +68,19 @@ wind-map/
 └── frontend/
     ├── src/
     │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
-    │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog, MapSettingsModal,
-    │   │                        # PreferencesModal, SavedLocationsModal, WeatherModelGuideModal,
-    │   │                        # QuotaWarningDialog, mapTiles.ts
+    │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
+    │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
+    │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
+    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
     │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useMapExport.ts (capture & ranges),
     │   │                        # useLocalStorageState.ts, useLatest.ts
     │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
-    │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (canvas capture),
-    │   │                        # pdfExport.ts (PDF page fitting), exportRange.ts (range planning),
+    │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (composition),
+    │   │                        # captureDom.ts (tiles & capture filter), captureChrome.ts (header/legend/footer),
+    │   │                        # download.ts (encode & save), pdfExport.ts (PDF page fitting),
+    │   │                        # exportRange.ts (range planning),
     │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
     │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
     │   │                        # modelGuide.ts (model table), html.ts (escaping)

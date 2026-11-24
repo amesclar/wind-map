@@ -16,12 +16,12 @@ const { zipSync, jsPdfDoc, JsPdfMock } = vi.hoisted(() => {
 
 vi.mock('fflate', () => ({ zipSync }));
 vi.mock('jspdf', () => ({ jsPDF: JsPdfMock }));
-vi.mock('./captureMap', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./captureMap')>()),
+vi.mock('./download', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./download')>()),
   downloadBlob: vi.fn(),
 }));
 
-import { downloadBlob } from './captureMap';
+import { downloadBlob } from './download';
 import { saveRangeImages, saveRangePdf } from './rangeOutput';
 
 const HOURS = [

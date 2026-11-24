@@ -1,22 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildWindColorScale, COLOR_STOPS } from './windColorScale';
+import { captureMapCanvas, saveMapImage } from './captureMap';
+import { collectTiles, DARK_TILE_FILTER, drawTiles, includeInCapture, pendingTiles, waitForTiles } from './captureDom';
 import {
-  captureMapCanvas,
-  collectTiles,
-  DARK_TILE_FILTER,
-  DEFAULT_JPEG_QUALITY,
   drawBarb,
   drawFittedText,
-  drawTiles,
   FOOTER_PX,
   HEADER_PX,
-  includeInCapture,
   LEGEND_PX,
-  pendingTiles,
-  saveMapImage,
-  waitForTiles,
   type CaptureContent,
-} from './captureMap';
+} from './captureChrome';
+import { DEFAULT_JPEG_QUALITY } from './download';
 
 function fakeContext() {
   return {

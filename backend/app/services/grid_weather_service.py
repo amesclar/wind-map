@@ -237,17 +237,6 @@ async def _fetch_hourly_day(
     return series
 
 
-async def _fetch_from_open_meteo(
-    points: list[tuple[float, float]],
-    model: str,
-    at: datetime | None = None,
-) -> list[GridWindPoint]:
-    """One batched request for every point, either `current` or the requested UTC hour."""
-    if at is None:
-        return await _fetch_current(points, model)
-    return (await _fetch_hourly_day(points, model, at))[hour_key(at)]
-
-
 def _series_times(items: list[dict]) -> list[str]:
     """The shared hourly time axis; every point in one response uses the same one."""
     times = (items[0].get("hourly") or {}).get("time") or []

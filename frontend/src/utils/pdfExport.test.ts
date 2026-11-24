@@ -17,7 +17,7 @@ import {
   PDF_PAGE_BOX,
   saveMapPdf,
 } from './pdfExport';
-import type { CaptureContent } from './captureMap';
+import type { CaptureContent } from './captureChrome';
 
 function fakeContext() {
   return {

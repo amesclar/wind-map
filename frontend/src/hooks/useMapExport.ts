@@ -7,8 +7,9 @@ import type {
   MapExportFormat,
   MapExportOptions,
   MapExportRangeOptions,
-} from '../components/MapExportDialog';
-import { captureMapCanvas, saveMapImage, waitForTiles } from '../utils/captureMap';
+} from '../components/mapExportOptions';
+import { captureMapCanvas, saveMapImage } from '../utils/captureMap';
+import { waitForTiles } from '../utils/captureDom';
 import { buildSteps, floorToHour, formatStepLabel } from '../utils/forecastWindow';
 import {
   barbLegendEntries,
