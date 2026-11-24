@@ -145,6 +145,10 @@ COORD_CACHE_PRECISION = 2
 # Wind grid limits (per axis) to prevent runaway requests.
 GRID_MAX_DIM = 30
 
+# Open-Meteo answers 414 Request-URI Too Large to the ~16 KB URL a 30 x 30 view builds (SCRUM-192),
+# so a view is fetched in chunks of at most this many points (~3.3 KB per request).
+GRID_REQUEST_MAX_POINTS = 150
+
 # Ocean currents (SCRUM-96): MeteoFrance SMOC via Open-Meteo Marine covers 10 days hourly,
 # which is the layer's horizon regardless of the selected weather model.
 CURRENT_HORIZON_HOURS = 240
