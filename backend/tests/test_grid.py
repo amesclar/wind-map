@@ -430,3 +430,60 @@ def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, o
     assert resp.status_code == 502
     assert resp.json()["detail"] == "Failed to fetch grid wind data from Open-Meteo"
     assert "secret-host" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-174: the cache read is one statement, not one per point
+# ---------------------------------------------------------------------------
+
+
+def test_read_cached_points_issues_one_query_for_a_full_view(monkeypatch):
+    """A whole 30 x 30 view costs one SELECT and still returns the points in request order."""
+    import time
+    from contextlib import contextmanager
+
+    from backend.app.database import db_connection
+    from backend.app.services import grid_weather_service as service
+
+    points = [(47.0 + r * 0.01, -122.0 + c * 0.01) for r in range(30) for c in range(30)]
+    now = time.time()
+    with db_connection() as conn:
+        conn.executemany(
+            "INSERT INTO grid_weather_cache "
+            "(lat_key, lon_key, model, hour, cached_at, expires_at, wind_speed_knots, "
+            "wind_direction_deg, temperature_f) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            [
+                (*_cache_key(lat, lon), "best_match", "current", now, now + 1800, 10.0, 180.0, 50.0)
+                for lat, lon in points
+            ],
+        )
+
+    class CountingConnection:
+        def __init__(self, conn):
+            self._conn = conn
+            self.queries = 0
+
+        def execute(self, *args, **kwargs):
+            self.queries += 1
+            return self._conn.execute(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    seen: dict[str, CountingConnection] = {}
+    real_connection = service.db_connection
+
+    @contextmanager
+    def counting_connection():
+        with real_connection() as conn:
+            proxy = CountingConnection(conn)
+            seen["proxy"] = proxy
+            yield proxy
+
+    monkeypatch.setattr(service, "db_connection", counting_connection)
+
+    results, missing = service._read_cached_points(points, "best_match", "current", now)
+
+    assert seen["proxy"].queries == 1
+    assert missing == []
+    assert [(p.latitude, p.longitude) for p in results] == points

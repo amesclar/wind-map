@@ -5,6 +5,7 @@ and the model rule live in one place. Callers handle `httpx.HTTPError`.
 """
 
 import asyncio
+import weakref
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -16,6 +17,28 @@ from backend.app.config import DEFAULT_MODEL, OPEN_METEO_RETRIES, OPEN_METEO_TIM
 # briefly (SCRUM-166) keeps a range export from turning a momentary limit into a failed hour.
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 MAX_RETRY_WAIT_SECONDS = 5.0
+
+# One pooled client per event loop (SCRUM-174). Creating a client per request threw away the
+# connection pool, so every grid pan paid a new TCP + TLS handshake; with the process-wide
+# loop in the container a single client is reused for every upstream call.
+_CLIENTS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = weakref.WeakKeyDictionary()
+
+
+def _client() -> httpx.AsyncClient:
+    """The shared client for the running loop, created on first use."""
+    loop = asyncio.get_running_loop()
+    client = _CLIENTS.get(loop)
+    if client is None:
+        client = httpx.AsyncClient()
+        _CLIENTS[loop] = client
+    return client
+
+
+async def close_client() -> None:
+    """Close the shared client for the running loop (app shutdown). Safe to call twice."""
+    client = _CLIENTS.pop(asyncio.get_running_loop(), None)
+    if client is not None:
+        await client.aclose()
 
 
 class QuotaExceededError(httpx.HTTPError):
@@ -75,23 +98,27 @@ async def get_json(
     retries: int = OPEN_METEO_RETRIES,
 ) -> Any:
     """GET `url` and return the decoded JSON body. Raises httpx.HTTPError on network
-    errors and non-2xx responses."""
-    transport = httpx.AsyncHTTPTransport(retries=retries)
-    async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
-        for attempt in range(retries + 1):
-            resp = await client.get(url, params=params)
-            if resp.status_code in RETRYABLE_STATUS and attempt < retries:
-                await asyncio.sleep(retry_delay(resp, attempt))
-                continue
-            if resp.status_code == 429:
-                raise QuotaExceededError(
-                    "Open-Meteo request limit reached",
-                    reset_at=quota_reset_at(resp),
-                    request=resp.request,
-                )
-            resp.raise_for_status()
-            try:
-                return resp.json()
-            except ValueError as exc:  # malformed body is an upstream failure, not a bug here
-                raise httpx.DecodingError("Open-Meteo returned invalid JSON", request=resp.request) from exc
+    errors and non-2xx responses.
+
+    One retry policy only (SCRUM-174): the loop below honours `Retry-After`, so the client
+    keeps its default transport retries off rather than stacking a second, invisible policy
+    that could multiply upstream attempts.
+    """
+    client = _client()
+    for attempt in range(retries + 1):
+        resp = await client.get(url, params=params, timeout=timeout)
+        if resp.status_code in RETRYABLE_STATUS and attempt < retries:
+            await asyncio.sleep(retry_delay(resp, attempt))
+            continue
+        if resp.status_code == 429:
+            raise QuotaExceededError(
+                "Open-Meteo request limit reached",
+                reset_at=quota_reset_at(resp),
+                request=resp.request,
+            )
+        resp.raise_for_status()
+        try:
+            return resp.json()
+        except ValueError as exc:  # malformed body is an upstream failure, not a bug here
+            raise httpx.DecodingError("Open-Meteo returned invalid JSON", request=resp.request) from exc
     raise AssertionError("unreachable: the retry loop always returns or raises")
