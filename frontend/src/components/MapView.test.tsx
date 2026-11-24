@@ -99,6 +99,24 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
   });
 
+  it('hides the barbs when only the gradient is on, and shows them again when toggled back (SCRUM-185)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+    ]);
+    const { rerender } = render(
+      <MapView {...baseProps} locations={[]} windColorOverlayVisible />,
+    );
+
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+    // The gradient keeps the shared grid alive, but the barbs have their own toggle.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(createdMarkers).toHaveLength(0);
+    expect(screen.getByTestId('wind-color-legend')).toBeTruthy();
+
+    rerender(<MapView {...baseProps} locations={[]} windColorOverlayVisible windOverlayVisible />);
+    await waitFor(() => expect(createdMarkers).toHaveLength(1));
+  });
+
   it('keeps the legend hidden and fetches nothing when both layers are off', async () => {
     render(<MapView {...baseProps} locations={[]} />);
 
