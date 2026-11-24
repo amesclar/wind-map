@@ -21,6 +21,8 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     hasCartoKey: false,
     onOpenExportDialog: vi.fn(),
     savingMap: false,
+    feedbackEnabled: true,
+    onOpenFeedback: vi.fn(),
     ...overrides,
   };
   const { container } = render(<Navbar {...props} />);
@@ -89,5 +91,24 @@ describe('Navbar (SCRUM-92)', () => {
     expect(container.querySelectorAll('select')).toHaveLength(1); // the model selector only
     expect(screen.queryByTitle(/Toggle units/)).toBeNull();
     expect(screen.queryByText('°F')).toBeNull();
+  });
+
+  it('shows the feedback button between the guide and export, keeping export left of the gear (SCRUM-179)', () => {
+    const { props, container } = renderNavbar();
+    const buttons = Array.from(container.querySelectorAll('header button'));
+    const titles = buttons.map((b) => b.getAttribute('title'));
+    const feedback = titles.indexOf('Send feedback');
+    expect(titles.indexOf('Model Update Cycles & Frequency')).toBeLessThan(feedback);
+    expect(feedback).toBeLessThan(titles.indexOf('Export map image'));
+    expect(titles.indexOf('Export map image')).toBe(titles.indexOf('Preferences') - 1);
+    const button = screen.getByRole('button', { name: 'Send feedback' });
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    fireEvent.click(button);
+    expect(props.onOpenFeedback).toHaveBeenCalled();
+  });
+
+  it('hides the feedback button when the server has no Jira configuration (SCRUM-179)', () => {
+    renderNavbar({ feedbackEnabled: false });
+    expect(screen.queryByRole('button', { name: 'Send feedback' })).toBeNull();
   });
 });

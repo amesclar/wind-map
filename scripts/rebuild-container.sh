@@ -24,11 +24,15 @@ fi
 
 docker stop wind-map >/dev/null 2>&1
 docker rm wind-map >/dev/null 2>&1
-carto_env=()
-if [ -n "${CARTO_API_KEY:-}" ]; then
-  carto_env=(-e CARTO_API_KEY)
-fi
-docker run -d --name wind-map -p 5005:5005 "${carto_env[@]}" -v wind_data:/app/data wind-map >/dev/null || exit 0
+# Optional settings are forwarded by name (`-e NAME`), so their values never appear in the
+# command line. The Jira variables enable in-app feedback (SCRUM-179).
+app_env=()
+for name in CARTO_API_KEY JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_FEEDBACK_PROJECT FEEDBACK_MAX_PER_HOUR; do
+  if [ -n "${!name:-}" ]; then
+    app_env+=(-e "$name")
+  fi
+done
+docker run -d --name wind-map -p 5005:5005 "${app_env[@]}" -v wind_data:/app/data wind-map >/dev/null || exit 0
 
 for _ in $(seq 1 20); do
   if curl -fsS http://localhost:5005/api/health >/dev/null 2>&1; then

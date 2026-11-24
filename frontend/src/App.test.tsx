@@ -50,6 +50,7 @@ vi.mock('./api/client', () => ({
   searchGeocode: vi.fn(),
   fetchWindGrid: vi.fn(),
   parseQuotaExhausted: vi.fn(),
+  submitFeedback: vi.fn(),
 }));
 
 import * as api from './api/client';
@@ -155,6 +156,21 @@ describe('App map integration (SCRUM-126)', () => {
 
     const mapWrapper = screen.getByTestId('map-canvas').parentElement as HTMLElement;
     expect(mapWrapper.className.split(/\s+/)).toContain('isolate');
+  });
+
+  it('shows the feedback button only when the server enables it, and opens the form (SCRUM-179)', async () => {
+    (api.fetchAppConfig as any).mockResolvedValue({ feedback_enabled: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Send feedback' }));
+    expect(screen.getByRole('dialog', { name: 'Send feedback' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Send feedback' })).toBeNull();
+  });
+
+  it('hides the feedback button when the server has no Jira configuration (SCRUM-179)', async () => {
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+    expect(screen.queryByRole('button', { name: 'Send feedback' })).toBeNull();
   });
 
   it('warns once when the grid quota is exhausted, naming the reset time (SCRUM-170)', async () => {
