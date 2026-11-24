@@ -14,24 +14,24 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 
 - **Interactive Map:** Powered by Leaflet.js with CartoDB Dark Matter tiles.
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
-- **Wind Grid Overlay *(SCRUM-86, SCRUM-89)*:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
-- **Wind Color Gradient *(SCRUM-121, SCRUM-122, SCRUM-123, SCRUM-124)*:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
-- **Clickable Barbs *(SCRUM-88, SCRUM-89, SCRUM-126)*:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
-- **Forecast Time Selector *(SCRUM-127)*:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
-- **Map export *(SCRUM-116, SCRUM-117, SCRUM-155, SCRUM-156, SCRUM-157, SCRUM-165)*:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. Since SCRUM-155 it also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. Since SCRUM-156 a range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
-- **Forecast-time data *(SCRUM-115)*:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
+- **Wind Grid Overlay:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
+- **Wind Color Gradient:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
+- **Clickable Barbs:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
+- **Forecast Time Selector:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
+- **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
+- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS 0.4°*
   - *NOAA GFS Seamless*
   - *DWD ICON Seamless*
-- **Weather Model Guide *(SCRUM-110)*:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
+- **Weather Model Guide:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
-- **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
+- **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
-- **Quota Warning *(SCRUM-170)*:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
+- **Quota Warning:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
 ---
@@ -206,15 +206,15 @@ Cross-origin API access is off by default. If you call the API from another orig
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.
 
-The exception is exhausted quota *(SCRUM-170)*. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
+The exception is exhausted quota. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
 
-`/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time` *(SCRUM-115)*: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
+`/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time`: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
 
 ---
 
 ## Versioning
 
-The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.8.2`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
+The app version follows the release version. The `VERSION` file in the project root (e.g. `0.8.2`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
 
 ```bash
 echo "X.Y.Z" > VERSION
@@ -223,7 +223,7 @@ echo "X.Y.Z" > VERSION
 
 Tests fail if the two files disagree.
 
-The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0.8.2-2af202f` in the navbar and `"version": "0.8.2-2af202f"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.8.2` -> `0.8.3`): that is not a release, so it needs no release notes or tag.
+The displayed version also carries the short commit hash, e.g. `v0.8.2-2af202f` in the navbar and `"version": "0.8.2-2af202f"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.8.2` -> `0.8.3`): that is not a release, so it needs no release notes or tag.
 
 Every release also ships release notes in `release-notes/x-x-x.md` (dots replaced by hyphens, e.g. `0-8-2.md`), committed with the version bump and used for the GitHub release.
 
@@ -231,7 +231,7 @@ Every release also ships release notes in `release-notes/x-x-x.md` (dots replace
 
 ## AI coding rules
 
-`.kiro/steering/*.md` is the single source of truth for the project rules. `python scripts/sync-ai-rules.py` renders them for every agent, and the generated files must not be edited by hand: a pytest test fails when one is stale or over budget. The rules are tiered *(SCRUM-160)* because Devin Desktop auto-injects only the first 16 KiB of `AGENTS.md`:
+`.kiro/steering/*.md` is the single source of truth for the project rules. `python scripts/sync-ai-rules.py` renders them for every agent, and the generated files must not be edited by hand: a pytest test fails when one is stale or over budget. The rules are tiered because Devin Desktop auto-injects only the first 16 KiB of `AGENTS.md`:
 
 - **Always on — `AGENTS.md`** (Devin and Freebuff): the hard guardrails only, held to **14,000 bytes** so a new rule has headroom instead of landing on the truncation edge. It ends with pointers to the situational files.
 - **Situational — `.devin/rules/*.md`** (Devin): one generated file per situational steering file, with `trigger: glob` front matter and a 12,000-character cap each, so Devin loads the testing or release rules only when a matching file is in play. To add one, list the steering file in `SITUATIONAL` in the sync script.
@@ -251,23 +251,23 @@ Backend test suite coverage includes:
 - 30-minute SQLite caching verification (<0.5s response time on cache hit)
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
 - Point weather endpoint — arbitrary lat/lon forecast with correct N/S/E/W name formatting and coordinate validation
-- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range *(SCRUM-166)*
-- Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time *(SCRUM-166, SCRUM-170)*
+- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
+- Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:
 - Wind barb SVG generation (feather counts, pennants, calm circles, direction encoding, temperature color, label rendering)
-- Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring) *(SCRUM-89)*
-- Barb pop-up values in the chosen units, and the barb highlight clearing when a saved location is picked *(SCRUM-126)*
-- Forecast window maths (steps, snapping, day marks, labels) and the selector's arrows, keyboard, Now and play behaviour with the model metadata *(SCRUM-127)*
-- Both pop-ups naming the selected forecast hour, and the whole map moving when it changes *(SCRUM-127)*
-- Image header, footer and file name (local and UTC time, model, units, attribution, version), the legend in each speed unit, and the captured composition *(SCRUM-116)*
+- Grid wind barb SVG and marker icons (temperature color with green fallback, barb counts by speed, calm circle, rotation, selected highlight ring)
+- Barb pop-up values in the chosen units, and the barb highlight clearing when a saved location is picked
+- Forecast window maths (steps, snapping, day marks, labels) and the selector's arrows, keyboard, Now and play behaviour with the model metadata
+- Both pop-ups naming the selected forecast hour, and the whole map moving when it changes
+- Image header, footer and file name (local and UTC time, model, units, attribution, version), the legend in each speed unit, and the captured composition
 - `fetchWindGrid` and `fetchPointWeather` API client functions (endpoint URLs, query params, error handling)
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
-- `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
+- `PreferencesModal` controls, close buttons, and saved preferences restored on reload
 - Map stacking context isolation, selected-marker highlight and pop-ups in the chosen units
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
-- Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window *(SCRUM-170)*
-- Wind colour legend stacking above the Leaflet panes *(SCRUM-168)*
+- Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window
+- Wind colour legend stacking above the Leaflet panes
 
 
 Run tests locally via:
@@ -285,14 +285,14 @@ cd frontend && npm run lint
 # Frontend type check, including test files
 cd frontend && npm run typecheck
 
-# Backend suite inside the Docker test stage (SCRUM-152), which adds the bash that the
+# Backend suite inside the Docker test stage, which adds the bash that the
 # shipped image omits; a plain `docker build .` still produces the runtime image
 docker build --target test -t wind-map:test . && docker run --rm wind-map:test pytest --cov
 ```
 
 Backend tests use a temporary database per test and block real Open-Meteo calls (`backend/tests/conftest.py`); use the `open_meteo` fixture to stub responses. Frontend tests share a Leaflet mock and data builders in `frontend/src/test/`.
 
-## Quality and Security Checks (SCRUM-108)
+## Quality and Security Checks
 
 GitHub Actions runs these on every pull request to `develop` or `master` and on pushes to those branches (`.github/workflows/`):
 
@@ -310,4 +310,4 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 
 Coverage floors are 97% for the backend (`.coveragerc`) and 90% statements / 82% branches / 86% functions / 91% lines for the frontend (`frontend/vitest.config.ts`). They were set a little below the baseline when added, so CI fails on a real drop but not on noise. Raise them as coverage improves.
 
-Ruff enforces lint and formatting (SCRUM-109): `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
+Ruff enforces lint and formatting: `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
