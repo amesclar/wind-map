@@ -242,6 +242,8 @@ export const App: React.FC = () => {
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
         windColorOverlayVisible={mapSettings.windColorOverlayVisible}
         onToggleWindColorOverlay={mapSettings.setWindColorOverlayVisible}
+        waterCurrentsVisible={mapSettings.waterCurrentsVisible}
+        onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
       />
 
       <WeatherModelGuideModal

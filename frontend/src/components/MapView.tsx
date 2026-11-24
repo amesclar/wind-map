@@ -13,6 +13,7 @@ import { WindOverlay } from './WindOverlay';
 import { WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
+import { CurrentLegend } from './CurrentLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
@@ -294,6 +295,7 @@ export const MapView: React.FC<MapViewProps> = ({
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
       />
+      {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (
         <>
           <WindColorOverlay map={mapInstance} points={gridPoints} visible />

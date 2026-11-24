@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURRENT_TIERS, currentTier } from './currentTiers';
+import { CURRENT_TIERS, currentTier, tierRangeLabel } from './currentTiers';
 
 describe('currentTier (SCRUM-99)', () => {
   it('uses the documented thresholds', () => {
@@ -29,5 +29,16 @@ describe('currentTier (SCRUM-99)', () => {
 
   it('has one colour per tier', () => {
     expect(CURRENT_TIERS.map((tier) => tier.color)).toEqual(['#38bdf8', '#06b6d4', '#0284c7', '#f59e0b']);
+  });
+
+  it('gives the legend a range per tier, converted to the speed unit', () => {
+    expect(CURRENT_TIERS.map((tier) => tierRangeLabel(tier, 'knots'))).toEqual([
+      '0–0.5',
+      '0.5–1.5',
+      '1.5–3',
+      '3+',
+    ]);
+    expect(tierRangeLabel(CURRENT_TIERS[0], 'kmh')).toBe('0–0.9');
+    expect(tierRangeLabel(CURRENT_TIERS[3], 'kmh')).toBe('5.6+');
   });
 });
