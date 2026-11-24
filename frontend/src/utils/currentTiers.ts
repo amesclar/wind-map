@@ -6,6 +6,9 @@
  * value directly. Wind barbs show where the wind comes *from*, which is why they need the
  * opposite convention.
  */
+import type { WindSpeedUnit } from '../types';
+import { knotsToUnit } from './units';
+
 export type CurrentTierId = 'light' | 'moderate' | 'strong' | 'extreme';
 
 export interface CurrentTier {
@@ -35,6 +38,16 @@ export function currentTier(velocityKnots: number): CurrentTier {
     if (velocityKnots >= candidate.minKnots) tier = candidate;
   }
   return tier;
+}
+
+/**
+ * The tier's knot range for the legend, converted to the user's speed unit (SCRUM-100).
+ * The last tier is open-ended, e.g. "3+".
+ */
+export function tierRangeLabel(tier: CurrentTier, unit: WindSpeedUnit): string {
+  const next = CURRENT_TIERS.find((candidate) => candidate.minKnots > tier.minKnots);
+  const inUnit = (knots: number) => Number(knotsToUnit(knots, unit).toFixed(1));
+  return next ? `${inUnit(tier.minKnots)}–${inUnit(next.minKnots)}` : `${inUnit(tier.minKnots)}+`;
 }
 
 /** Where the numbers come from, shown in the chevron pop-up (SCRUM-99). */

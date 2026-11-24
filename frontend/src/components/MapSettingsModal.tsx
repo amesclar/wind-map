@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves } from 'lucide-react';
 import { MapTileLayer } from '../types';
 
 interface MapSettingsModalProps {
@@ -13,6 +13,9 @@ interface MapSettingsModalProps {
   onToggleWindOverlay: (visible: boolean) => void;
   windColorOverlayVisible: boolean;
   onToggleWindColorOverlay: (visible: boolean) => void;
+  /** Ocean-current chevrons (SCRUM-100), independent of the wind layers. */
+  waterCurrentsVisible: boolean;
+  onToggleWaterCurrents: (visible: boolean) => void;
 }
 
 export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
@@ -26,6 +29,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onToggleWindOverlay,
   windColorOverlayVisible,
   onToggleWindColorOverlay,
+  waterCurrentsVisible,
+  onToggleWaterCurrents,
 }) => {
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
@@ -186,6 +191,37 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
                     windColorOverlayVisible ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Water Currents Toggle (SCRUM-100) */}
+          <div className="pt-2 border-t border-dark-600/70">
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Waves className="w-3.5 h-3.5 text-sky-400" />
+              Water Currents
+            </label>
+            <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
+              <div>
+                <div className="text-xs font-medium text-gray-100">Show ocean currents</div>
+                <div className="text-[11px] text-gray-400 mt-0.5">
+                  Chevrons point where the water flows, coloured by speed, and follow the selected forecast hour.
+                </div>
+              </div>
+              <button
+                data-testid="water-currents-toggle"
+                type="button"
+                onClick={() => onToggleWaterCurrents(!waterCurrentsVisible)}
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
+                  waterCurrentsVisible ? 'bg-sky-500' : 'bg-dark-600'
+                }`}
+                aria-pressed={waterCurrentsVisible}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    waterCurrentsVisible ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
               </button>
