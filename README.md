@@ -138,6 +138,27 @@ To stop the container:
 docker stop wind-map && docker rm wind-map
 ```
 
+### Password Protection and Litestream Replication
+
+The container is ready for the public Google Cloud Run deployment (`SCRUM-133`). Two environment
+variables control that mode; neither is needed for local use.
+
+- **`APP_PASSWORD`** turns on HTTP Basic authentication for every route except `GET /api/health`.
+  The username is ignored and one password is shared. Unset (the default) means open access, so
+  `docker run`, `npm run dev` and the test suite behave exactly as before. The container never logs
+  the password or the `Authorization` header.
+- **`LITESTREAM_BUCKET`** turns on Litestream, which replicates `/app/data/wind_map.db` to that GCS
+  bucket (`litestream.yml`) and restores it when a new instance starts with no database
+  (`scripts/docker-entrypoint.sh`). Unset, the entrypoint runs Uvicorn directly.
+
+```bash
+# Local container with a password, no replication
+docker run -d -p 5005:5005 -e APP_PASSWORD="$APP_PASSWORD" -v wind_data:/app/data --name wind-map wind-map
+```
+
+Google Cloud authentication for the bucket comes from Application Default Credentials of the
+runtime service account; no key file is baked into the image.
+
 ---
 
 ## Local Development Setup
