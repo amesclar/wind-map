@@ -4,6 +4,10 @@ A standalone, minimalist dark-mode application that displays live weather foreca
 
 Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet + TailwindCSS** on the frontend, packaged in a self-contained multi-stage Docker container.
 
+![Wind Map showing wind barbs and the wind colour gradient over Puget Sound](docs/screenshot.png)
+
+*Wind grid barbs, temperature-coloured barbs, the wind colour gradient and the forecast time selector, at 06:00 PST.*
+
 ---
 
 ## Features
@@ -21,11 +25,13 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
   - *ECMWF IFS 0.4°*
   - *NOAA GFS Seamless*
   - *DWD ICON Seamless*
+- **Weather Model Guide *(SCRUM-110)*:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
 - **Preferences Pop-up *(SCRUM-107)*:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
+- **Quota Warning *(SCRUM-170)*:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
 - **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
 
 ---
@@ -36,35 +42,51 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 wind-map/
 ├── Dockerfile                   # Multi-stage build (Node build -> Python deps -> Alpine runtime)
 ├── docker-compose.yml           # Optional compose configuration
-├── requirements.txt             # Python backend dependencies (FastAPI, httpx, etc.)
+├── requirements.in / .txt       # Pinned runtime dependencies (pip-compile)
+├── requirements-dev.in / .txt   # Pinned test tools
+├── VERSION                      # Release version, shown in the navbar and /api/health
+├── docs/screenshot.png          # Screenshot shown above
+├── release-notes/               # One notes file per release (x-x-x.md)
+├── scripts/                     # rebuild-container.sh, sync-ai-rules.py
+├── .kiro/steering/              # AI coding rules (source of truth)
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI application & static asset server
-│   │   ├── config.py            # Settings & named constants (defaults, forecast shape, limits, timeouts)
+│   │   ├── main.py              # FastAPI application, /api/health, /api/config & static asset server
+│   │   ├── config.py            # Settings & named constants (models, horizons, forecast shape, limits, timeouts)
 │   │   ├── database.py          # All table definitions, versioned migrations (PRAGMA user_version) & seed
 │   │   ├── locations_repo.py    # Data access for saved locations
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
 │   │   ├── routers/             # API endpoints (locations, weather, grid, geocode)
-│   │   └── services/            # open_meteo.py (shared HTTP client); weather_service.py (cache → fetch → parse → store),
-│   │                            # forecast_parser.py (pure parsing), forecast_cache.py (saved-location & point caches);
-│   │                            # grid & geocoding services
+│   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
+│   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
+│   │                            # forecast_cache.py (saved-location, point & grid-day caches),
+│   │                            # grid_weather_service.py, geocode_service.py, model_info.py (run times,
+│   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
-    │   ├── components/          # MapView, WindOverlay, WindBarb, ForecastTimeSelector, Navbar, modals,
-    │   │                        # MapExportControl, mapTiles.ts
-    │   ├── hooks/               # useMapSettings, useUnitPreferences, useTimezone, useLocations, useAllWeather,
-    │   │                        # useWindGrid, useLocalStorageState, useLatest
-    │   ├── api/                 # Typed API client (one request() helper, ApiError)
+    │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
+    │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog, MapSettingsModal,
+    │   │                        # PreferencesModal, SavedLocationsModal, WeatherModelGuideModal,
+    │   │                        # QuotaWarningDialog, mapTiles.ts
+    │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
+    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useLocalStorageState.ts, useLatest.ts
+    │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
     │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (canvas capture),
+    │   │                        # pdfExport.ts (PDF page fitting), exportRange.ts (range planning),
+    │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
+    │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
     │   │                        # modelGuide.ts (model table), html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
+    │   ├── assets/              # weather-models.md, icon artwork
     │   ├── constants.ts         # Defaults, timezone list, storage keys
     │   ├── types.ts             # TypeScript interfaces
+    │   ├── version.ts           # Injected __APP_VERSION__
     │   └── App.tsx              # Wires the hooks to the components
+    ├── appVersion.ts            # Reads VERSION and GIT_SHA for the build
     ├── package.json             # React, Leaflet, TailwindCSS, Vite
     └── vite.config.ts           # Dev proxy configuration
 ```
@@ -96,7 +118,8 @@ Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
 ### Map Layers & CARTO API Key
 
-- **OpenStreetMap Dark (Default):** Clean, high-contrast dark theme that requires **no API key** and has no watermarks.
+- **OpenStreetMap Dark (Default):** the same OpenStreetMap tiles, darkened in CSS, so it needs **no API key** and has no watermarks.
+- **OpenStreetMap Standard:** the plain OSM style, for when the dark base map hides a feature.
 - **CARTO Dark Matter:** CARTO requires a free API key to remove their *"API KEY REQUIRED"* watermark.
   1. Visit **[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)** to get an instant free key (up to 5 million requests/month).
   2. Click the **Map** button in the app's top bar to paste and save your key directly in the UI, or pass it via `CARTO_API_KEY` environment variable.
@@ -165,6 +188,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | Method   | Endpoint              | Description                                          |
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Health check endpoint                                |
+| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set) |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
 | `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
@@ -178,13 +202,15 @@ Cross-origin API access is off by default. If you call the API from another orig
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.
 
+The exception is exhausted quota *(SCRUM-170)*. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
+
 `/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time` *(SCRUM-115)*: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
 
 ---
 
 ## Versioning
 
-The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.7.1`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
+The app version follows the release version *(SCRUM-91)*. The `VERSION` file in the project root (e.g. `0.8.2`) is the single source of truth: the backend reports it from `GET /api/health` and the API docs, and the navbar shows it. For each release `vX.Y.Z`, update `VERSION` and `frontend/package.json` to `X.Y.Z` before tagging:
 
 ```bash
 echo "X.Y.Z" > VERSION
@@ -193,7 +219,9 @@ echo "X.Y.Z" > VERSION
 
 Tests fail if the two files disagree.
 
-The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0.7.1-db9f569` in the navbar and `"version": "0.7.1-db9f569"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.7.0` -> `0.7.1`): that is not a release, so it needs no release notes or tag.
+The displayed version also carries the short commit hash *(SCRUM-159)*, e.g. `v0.8.2-2af202f` in the navbar and `"version": "0.8.2-2af202f"` from `/api/health`, so a running build can be traced to a commit. `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata. `scripts/rebuild-container.sh` passes it as the `GIT_SHA` build arg (the `Dockerfile` gives it to the Vite build and the backend); a local frontend build falls back to `git rev-parse --short HEAD`, and a build with no hash shows plain `X.Y.Z`. When the user asks for a build to test, bump the last digit as well (`0.8.2` -> `0.8.3`): that is not a release, so it needs no release notes or tag.
+
+Every release also ships release notes in `release-notes/x-x-x.md` (dots replaced by hyphens, e.g. `0-8-2.md`), committed with the version bump and used for the GitHub release.
 
 ---
 
@@ -219,7 +247,8 @@ Backend test suite coverage includes:
 - 30-minute SQLite caching verification (<0.5s response time on cache hit)
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
 - Point weather endpoint — arbitrary lat/lon forecast with correct N/S/E/W name formatting and coordinate validation
-- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation
+- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range *(SCRUM-166)*
+- Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time *(SCRUM-166, SCRUM-170)*
 
 Frontend test suite coverage includes:
 - Wind barb SVG generation (feather counts, pennants, calm circles, direction encoding, temperature color, label rendering)
@@ -233,6 +262,8 @@ Frontend test suite coverage includes:
 - `PreferencesModal` controls, close buttons, and saved preferences restored on reload *(SCRUM-107)*
 - Map stacking context isolation, selected-marker highlight and pop-ups in the chosen units
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
+- Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window *(SCRUM-170)*
+- Wind colour legend stacking above the Leaflet panes *(SCRUM-168)*
 
 
 Run tests locally via:
@@ -273,6 +304,6 @@ GitHub Actions runs these on every pull request to `develop` or `master` and on 
 | CodeQL | Static analysis for Python and JavaScript/TypeScript (also weekly) | runs on GitHub |
 | Dependabot | Weekly update PRs for pip, npm, Docker and GitHub Actions (target `develop`) | runs on GitHub |
 
-Coverage thresholds were set a little below the baseline when added (backend 99%, frontend about 92% statements), so CI fails on a real drop. Raise them as coverage improves.
+Coverage floors are 97% for the backend (`.coveragerc`) and 90% statements / 82% branches / 86% functions / 91% lines for the frontend (`frontend/vitest.config.ts`). They were set a little below the baseline when added, so CI fails on a real drop but not on noise. Raise them as coverage improves.
 
 Ruff enforces lint and formatting (SCRUM-109): `ruff check .` includes the `UP` pyupgrade rules, and `ruff format --check .` fails on unformatted Python. Both run in CI. The formatting-only commit is listed in `.git-blame-ignore-revs`, so `git blame` skips it once that file is configured in your clone (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).

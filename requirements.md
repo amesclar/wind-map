@@ -140,11 +140,10 @@ Frontend: React + Vite + Leaflet + TailwindCSS in dark minimalist style.
 + Location names and regions are HTML-escaped before being placed in map popups (SCRUM-92).
 + Map popups show wind speed, gust and temperature in the user's selected units (SCRUM-92), and a clicked barb's pop-up shows the same values from the grid response (SCRUM-126). Formatting lives in `src/utils/units.ts`.
 + Frontend defaults (model, timezone, timezone list, map center, localStorage keys) are in `src/constants.ts`; API calls go through one `request()` helper in `src/api/client.ts` that throws `ApiError` with the HTTP status.
-+ Frontend state (SCRUM-92, SCRUM-126): `App.tsx` only wires hooks together. `src/hooks/` holds settings (`useMapSettings`; `useUnitPreferences` for the temperature unit, wind speed unit and direction display; `useTimezone`; all persisted with `useLocalStorageState`), saved locations (`useLocations`), the map markers' current conditions (`useAllWeather`) and the wind grid (`useWindGrid`). One selection — a saved location or a clicked map point — drives the marker highlight and the map's fly-to; selecting a location again is a no-op because nothing needs reloading.
++ Frontend state (SCRUM-92, SCRUM-126): `App.tsx` only wires hooks together. `src/hooks/useSettings.ts` holds the settings (`useMapSettings`; `useUnitPreferences` for the temperature unit, wind speed unit and direction display; `useTimezone`; all persisted with `useLocalStorageState`), `useLocations.ts` the saved locations, `useForecast.ts` the map markers' current conditions (`useAllWeather`) and `useWindGrid.ts` the wind grid. One selection — a saved location or a clicked map point — drives the marker highlight and the map's fly-to; selecting a location again is a no-op because nothing needs reloading.
 + Saved-location markers are updated in place when weather, selection or units change; only added or deleted locations create or remove markers (SCRUM-92).
 + Wind grid requests are cancelled when superseded; only the latest response draws barbs, and a failed request is retried on the next pan/zoom (SCRUM-92).
 + Code quality (SCRUM-92): ESLint (`npm run lint`, TypeScript + React hooks rules, zero warnings allowed) and TypeScript `noUnusedLocals` / `noUnusedParameters`.
-+ Refactoring plan and progress: `SCRUM-92-refactor-maintainability.md`.
 
 # containerization
 the application should run in a self contained docker environment, using a lightweight framework (ie. Flask, FastAPI, etc.) and a database to store the locations and weather data and open source map library to display the map and open source weather api
@@ -175,7 +174,7 @@ the app version follows the release version (semantic versioning, e.g. 0.2.0 ↔
 + Single source of truth: `VERSION` file in the project root (plain `MAJOR.MINOR.PATCH`, no "v").
 + Backend reads it for the FastAPI app version (`/docs`) and returns it from `GET /api/health` as `version`.
 + Frontend reads it at build time (Vite `__APP_VERSION__`) and shows it in the navbar as `vX.Y.Z-<hash>`.
-+ Build hash (SCRUM-159): the displayed version appends the short commit hash (`git rev-parse --short HEAD`), so the navbar badge and `GET /api/health` identify the exact build (`0.7.1-db9f569`). `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata passed as the `GIT_SHA` Docker build arg by `scripts/rebuild-container.sh`, with local builds falling back to git and a build without a hash showing plain `X.Y.Z`.
++ Build hash (SCRUM-159): the displayed version appends the short commit hash (`git rev-parse --short HEAD`), so the navbar badge and `GET /api/health` identify the exact build (`0.8.2-2af202f`). `VERSION`, `frontend/package.json` and release tags stay plain `X.Y.Z` / `vX.Y.Z`; the hash is build metadata passed as the `GIT_SHA` Docker build arg by `scripts/rebuild-container.sh`, with local builds falling back to git and a build without a hash showing plain `X.Y.Z`.
 + User-testing builds (SCRUM-159): a build requested for testing bumps the PATCH digit as well as adding the hash, so it never shares a version with a release; it is not a release, so it needs no release notes or tag.
 + `frontend/package.json` `version` must match `VERSION`; tests fail if they differ.
 + For every release: update `VERSION` and `frontend/package.json` to the release number before tagging `vX.Y.Z`.
@@ -199,6 +198,8 @@ branching (SCRUM-94): work happens on ticket branches (`feature/PROJ-123-...` or
 Testing & Docs: Unit and integration tests (pytest for backend, frontend component tests) with comprehensive README.md.
 + Backend test setup (SCRUM-92): `backend/tests/conftest.py` gives every test its own temporary SQLite file (never the repo's `data/` directory, and independent of the working directory) and blocks real Open-Meteo calls; tests configure responses through the `open_meteo` fixture. Payload builders live in `backend/tests/factories.py`.
 + Frontend test setup (SCRUM-92): shared Leaflet mock (`src/test/leafletMock.ts`, used via `vi.mock('leaflet', () => import(...))`), data builders (`src/test/fixtures.ts`) and a setup file (`src/test/setup.ts`) that unmounts components after each test. Source, test, and config files (`vite.config.ts`, `vitest.config.ts`, `appVersion.ts`) are type-checked by `npm run typecheck` (SCRUM-93).
++ Screenshot (SCRUM-172): `README.md` opens with a screenshot of the running app, committed in the repository as `docs/screenshot.png` (no external image host) with alt text describing the barbs and the colour gradient.
++ Documentation upkeep (SCRUM-172): `README.md` and `requirements.md` are reviewed against the code whenever behavior, files or endpoints change; the README's architecture tree names only files that exist, and neither document points at a file that is not in the repository.
 
 # performance
 the application should be respond to users request within 3 seconds 
