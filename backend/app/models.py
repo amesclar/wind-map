@@ -79,6 +79,43 @@ class GridWindPoint(BaseModel):
     time: str | None = None
 
 
+class CurrentPoint(BaseModel):
+    """A single ocean-current observation for the map layer (SCRUM-96)."""
+
+    latitude: float
+    longitude: float
+    # Speed at the surface in knots (kept in the app's speed unit); direction the water flows
+    # towards in degrees, so a chevron rotates by this value directly.
+    velocity_knots: float
+    direction_deg: float
+    # Forecast hour these values describe; null means current conditions.
+    time: str | None = None
+
+
+class CurrentGridResponse(BaseModel):
+    """GET /api/currents/grid payload (SCRUM-96); land nodes are absent, not zeroed."""
+
+    points: list[CurrentPoint]
+    time: str | None = None
+
+
+class CurrentSeriesPoint(BaseModel):
+    """One hourly ocean-current value, in the app's speed unit, for a single point."""
+
+    time: str
+    velocity_knots: float
+    direction_deg: float
+
+
+class CurrentPointResponse(BaseModel):
+    """GET /api/currents/point payload (SCRUM-96): hourly values from the current hour."""
+
+    latitude: float
+    longitude: float
+    horizon_hours: int
+    points: list[CurrentSeriesPoint]
+
+
 class WeatherModelInfo(BaseModel):
     """One entry of GET /api/weather/models (SCRUM-115)."""
 
