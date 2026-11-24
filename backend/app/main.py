@@ -66,19 +66,30 @@ def get_config():
     }
 
 
-def resolve_static_file(full_path: str, static_dir: Path = STATIC_DIR) -> Path | None:
-    """The built file for `full_path`, or None when it does not exist inside `static_dir`.
+# Built once per build directory: the frontend bundle does not change while the app runs.
+_FILE_INDEX: dict[Path, dict[str, Path]] = {}
 
-    The containment check (SCRUM-174) means a path like `../VERSION` cannot read files next to
-    the frontend build; those requests fall back to `index.html` like any client-side route.
+
+def _static_file_index(static_dir: Path) -> dict[str, Path]:
+    """Every file in the build, keyed by its relative POSIX path."""
+    root = static_dir.resolve()
+    index = _FILE_INDEX.get(root)
+    if index is None:
+        index = {path.relative_to(root).as_posix(): path for path in root.rglob("*") if path.is_file()}
+        _FILE_INDEX[root] = index
+    return index
+
+
+def resolve_static_file(full_path: str, static_dir: Path = STATIC_DIR) -> Path | None:
+    """The built file for `full_path`, or None when the build has no such file.
+
+    The lookup runs over the files enumerated from the build (SCRUM-174), so the request can
+    only ever name a file that is already there: `../VERSION` is not a key and falls back to
+    `index.html` like any client-side route. No request path is used to build a filesystem path.
     """
     if not full_path:
         return None
-    root = static_dir.resolve()
-    candidate = (root / full_path).resolve()
-    if not candidate.is_relative_to(root) or not candidate.is_file():
-        return None
-    return candidate
+    return _static_file_index(static_dir).get(full_path)
 
 
 # Serve static frontend if available
