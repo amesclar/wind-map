@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 #   0 → 1 (SCRUM-92): all tables created here; grid cache has temperature_f.
 #   1 → 2 (SCRUM-92): forecast caches keyed by timezone too.
 #   2 → 3 (SCRUM-115): every cache row is keyed by the forecast hour too ('current' = live).
-SCHEMA_VERSION = 3
+#   3 → 4 (SCRUM-96): ocean-current grid cache, keyed by hour like the wind grid.
+SCHEMA_VERSION = 4
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -83,10 +84,28 @@ CREATE TABLE IF NOT EXISTS grid_weather_cache (
 );
 """
 
+# Ocean-current velocity and direction for grid points and point series, keyed by rounded
+# coordinates and forecast hour. A row with NULL values records that the point was checked and
+# has no current there (land, or outside the SMOC domain), so an inland view is not refetched
+# on every request (SCRUM-96).
+GRID_CURRENTS_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS grid_currents_cache (
+    lat_key        REAL NOT NULL,
+    lon_key        REAL NOT NULL,
+    hour           TEXT NOT NULL DEFAULT 'current',
+    cached_at      REAL NOT NULL,
+    expires_at     REAL NOT NULL,
+    velocity_knots REAL,
+    direction_deg  REAL,
+    PRIMARY KEY (lat_key, lon_key, hour)
+);
+"""
+
 CACHE_TABLE_DDL = {
     "weather_cache": WEATHER_CACHE_DDL,
     "point_weather_cache": POINT_CACHE_DDL,
     "grid_weather_cache": GRID_CACHE_DDL,
+    "grid_currents_cache": GRID_CURRENTS_CACHE_DDL,
 }
 CACHE_TABLES = tuple(CACHE_TABLE_DDL)
 

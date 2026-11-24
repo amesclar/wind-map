@@ -107,6 +107,16 @@ Forecast time (SCRUM-115): the API and the map layers can render any hour in the
 + The frontend threads it as `validTime`: `useWindGrid(map, model, enabled, validTime)` and `useAllWeather(model, timezone, validTime)` send `time` and refetch when it changes, and `MapView` accepts `validTime`. The model guide parses the new Time Horizon column (`ModelGuideRow.horizon`, `horizonHours`). The selector added by SCRUM-127 is what sets it.
 + Gone with the drawer (SCRUM-89, SCRUM-90, SCRUM-97): the per-slice cards, the "Now" slice, whole-degrees-true labels and the humidity field. The API still returns `humidity`, `wind_direction_deg` and the 16-slice `forecast` array unchanged, and `/api/weather/point` still names a point "48.78°N, 121.94°W".
 
+# ocean currents (SCRUM-96)
+show ocean and water currents on the map alongside the wind, with chevrons pointing where the water flows
+
++ Data source: Open-Meteo Marine API (`https://marine-api.open-meteo.com/v1/marine`), variables `ocean_current_velocity` and `ocean_current_direction`, provided by MeteoFrance SMOC (Copernicus Marine): global ~0.083° (~8 km), hourly, 10-day forecast, updated once a day. Currents are independent of the selected weather model — one field, with its own 240-hour horizon.
++ Velocity is requested in knots (`wind_speed_unit=kn`), matching the wind endpoints. `ocean_current_direction` is where the water flows **towards** (0° north, 90° east), so a chevron rotates by the value directly instead of the 180° flip wind barbs need.
++ `GET /api/currents/grid` takes `min_lat`, `max_lat`, `min_lon`, `max_lon`, `cols`, `rows` and an optional `time`, and returns `{points, time}`. Nodes with no current (land, or outside the model domain) are absent, never zeroed. `time` is validated against the 240-hour current horizon, not the weather model's horizon.
++ `GET /api/currents/point` takes `lat`/`lon` and returns up to 48 hourly values from the current hour (empty for an inland point), for the chevron pop-up.
++ `grid_currents_cache` stores velocity and direction per (rounded lat, lon, hour) with the 30-minute TTL. A row with null values records "checked, no current", so an inland view is not refetched on every pan, and one forecast-hour request stores every hour of that UTC day (the wind grid's pattern).
++ Marine calls go through the shared Open-Meteo client, so retries, `Retry-After` and the 429 → 503 `open_meteo_quota_exhausted` response with `reset_at` behave exactly as on the wind grid.
+
 # data persistence
 use a local SQLite database to store the locations and weather data
 

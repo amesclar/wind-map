@@ -70,10 +70,13 @@ DEFAULT_LOCATION = {
 # External API endpoints
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+# Ocean currents live on their own host (SCRUM-96).
+OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
 OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 900 points)
+OPEN_METEO_MARINE_TIMEOUT_SECONDS = 20.0  # batched marine request (same grid size)
 OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
 OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
@@ -136,6 +139,10 @@ COORD_CACHE_PRECISION = 2
 
 # Wind grid limits (per axis) to prevent runaway requests.
 GRID_MAX_DIM = 30
+
+# Ocean currents (SCRUM-96): MeteoFrance SMOC via Open-Meteo Marine covers 10 days hourly,
+# which is the layer's horizon regardless of the selected weather model.
+CURRENT_HORIZON_HOURS = 240
 
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
