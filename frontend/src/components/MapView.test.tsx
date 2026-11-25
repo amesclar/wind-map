@@ -4,13 +4,16 @@ import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
 import leaflet, {
   createdMarkers,
+  createdPolylines,
   createdTileLayers,
   currentMap,
   markerAt,
   resetLeafletMock,
 } from '../test/leafletMock';
 import {
+  CHART_BOUNDS,
   CHART_COVERAGE_MAX_LAT,
+  CHART_EDGE_PANE,
   CHART_MIN_ZOOM,
   CHART_PANE,
   NONNA_PANE,
@@ -315,6 +318,63 @@ describe('MapView chart declutter (SCRUM-211)', () => {
     render(<MapView {...baseProps} locations={[location]} windOverlayVisible />);
 
     await waitFor(() => expect(barbs()).toHaveLength(2));
+  });
+});
+
+describe('MapView chart edge treatment (SCRUM-215)', () => {
+  // The effect can be invoked twice by the test renderer; only the rule still on the map counts.
+  const liveBoundary = () => createdPolylines.filter((line) => line.remove.mock.calls.length === 0);
+
+  it('draws the 49.6 N rule across the coverage box, only while the chart is selected', async () => {
+    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+
+    await waitFor(() => expect(liveBoundary()).toHaveLength(1));
+    const boundary = liveBoundary()[0];
+    expect(boundary.latlngs).toEqual([
+      [CHART_BOUNDS.north, CHART_BOUNDS.west],
+      [CHART_BOUNDS.north, CHART_BOUNDS.east],
+    ]);
+    expect(boundary.options.pane).toBe(CHART_EDGE_PANE);
+    expect(boundary.options.dashArray).toBe('6 6');
+    expect(boundary.options.interactive).toBe(false);
+    // Above the tiles and below the depth shading, so soundings stay under the gradient only.
+    expect(currentMap().panes[CHART_EDGE_PANE].style.zIndex).toBe('206');
+    expect(currentMap().panes[CHART_EDGE_PANE].style.pointerEvents).toBe('none');
+
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    expect(boundary.remove).toHaveBeenCalled();
+  });
+
+  it('names the limit while the view crosses it, and stays quiet on either side', async () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+    const map = currentMap();
+
+    // The mock view (47-49 N) sits entirely on charted water.
+    await waitFor(() => expect(liveBoundary()).toHaveLength(1));
+    expect(screen.queryByTestId('chart-edge-notice')).toBeNull();
+
+    act(() => {
+      map.bounds = { south: 48.5, north: 50.5, west: -124, east: -122 };
+      map.fire('moveend');
+    });
+    expect(screen.getByTestId('chart-edge-notice').textContent).toContain('49.6° N');
+    expect(screen.queryByTestId('chart-coverage-notice')).toBeNull();
+
+    // Fully north of the clip: the coverage chip already explains that, so the edge one steps aside.
+    act(() => {
+      map.bounds = { south: 50, north: 51, west: -124, east: -122 };
+      map.fire('moveend');
+    });
+    expect(screen.queryByTestId('chart-edge-notice')).toBeNull();
+    expect(screen.getByTestId('chart-coverage-notice')).toBeTruthy();
+  });
+
+  it('shows no edge rule or notice on the other bases', async () => {
+    render(<MapView {...baseProps} locations={[]} />);
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(liveBoundary()).toHaveLength(0);
+    expect(screen.queryByTestId('chart-edge-notice')).toBeNull();
   });
 });
 
