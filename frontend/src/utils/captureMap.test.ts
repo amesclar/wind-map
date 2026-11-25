@@ -11,6 +11,7 @@ import {
   type CaptureContent,
 } from './captureChrome';
 import { DEFAULT_JPEG_QUALITY } from './download';
+import { barbLegendEntries } from './mapExport';
 
 function fakeContext() {
   return {
@@ -48,6 +49,8 @@ const content: CaptureContent = {
     { knots: 0, caption: 'calm' },
     { knots: 5, caption: '5 kt' },
     { knots: 10, caption: '10 kt' },
+    { knots: 15, caption: '15 kt' },
+    { knots: 20, caption: '20 kt' },
     { knots: 50, caption: '50 kt' },
   ],
   temperatures: [
@@ -218,6 +221,30 @@ describe('captureMapCanvas (SCRUM-116)', () => {
     for (const stop of scale.stops) {
       expect(gradient.addColorStop).toHaveBeenCalledWith(stop.offset, stop.color);
     }
+  });
+
+  it('draws every barb example from the legend list (SCRUM-240)', async () => {
+    const barbs = barbLegendEntries('knots');
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+
+    await captureMapCanvas(element, { ...content, barbs }, { domToCanvas, tileTimeoutMs: 0 });
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    expect(barbs).toHaveLength(6);
+    for (const entry of barbs) expect(texts).toContain(entry.caption);
+  });
+
+  it('keeps all six captions at the narrowest export width (SCRUM-240)', async () => {
+    mapCanvas = { width: 360, height: 600 } as HTMLCanvasElement;
+    const barbs = barbLegendEntries('kmh');
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+
+    await captureMapCanvas(element, { ...content, barbs }, { domToCanvas, tileTimeoutMs: 0 });
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    for (const entry of barbs) expect(texts).toContain(entry.caption);
   });
 
   it('keeps the barb and temperature rows when the gradient is off (SCRUM-165)', async () => {
