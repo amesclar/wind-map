@@ -48,6 +48,8 @@ export interface MapExportSettings {
   tileLayer: MapTileLayer;
   windOverlayVisible: boolean;
   windColorOverlayVisible: boolean;
+  /** Seamark overlay on: the exported footer credits OpenSeaMap (SCRUM-175). */
+  seamarksVisible: boolean;
   /** True while the saved-location data for the shown hour is in flight. */
   weatherLoading: boolean;
 }
@@ -69,6 +71,7 @@ export function useMapExport({
   tileLayer,
   windOverlayVisible,
   windColorOverlayVisible,
+  seamarksVisible,
   weatherLoading,
 }: MapExportSettings) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -123,6 +126,7 @@ export function useMapExport({
         unitSystem,
         speedUnit,
         attribution: attributionText(tileLayer),
+        seamarks: seamarksVisible,
         version: APP_VERSION,
       }),
       barbs: barbLegendEntries(speedUnit),
@@ -132,7 +136,7 @@ export function useMapExport({
       // The export shows the same scale as the on-screen strip only when the gradient is on.
       windColorScale: windColorOverlayVisible ? buildWindColorScale(speedUnit) : undefined,
     }),
-    [timezone, selectedModelInfo, unitSystem, speedUnit, tileLayer, windColorOverlayVisible],
+    [timezone, selectedModelInfo, unitSystem, speedUnit, tileLayer, windColorOverlayVisible, seamarksVisible],
   );
 
   /** Resolve once the map shows `hour` with that hour's grid data (when drawn) and its tiles. */

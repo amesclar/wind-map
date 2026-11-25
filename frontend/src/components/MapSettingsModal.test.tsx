@@ -15,6 +15,8 @@ const BASE_PROPS = {
   onToggleWindColorOverlay: vi.fn(),
   waterCurrentsVisible: false,
   onToggleWaterCurrents: vi.fn(),
+  seamarksVisible: false,
+  onToggleSeamarks: vi.fn(),
 };
 
 describe('MapSettingsModal wind overlay toggle', () => {
@@ -50,6 +52,25 @@ describe('MapSettingsModal wind overlay toggle', () => {
   it('does not render when isOpen is false', () => {
     const { container } = render(<MapSettingsModal {...BASE_PROPS} isOpen={false} />);
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
+  it('is off by default and calls the handler with the flipped value', () => {
+    const onToggle = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} seamarksVisible={false} onToggleSeamarks={onToggle} />);
+    const toggle = screen.getByTestId('seamarks-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('shows the pressed state and the licence credit with the navigation notice', () => {
+    render(<MapSettingsModal {...BASE_PROPS} seamarksVisible />);
+    expect(screen.getByTestId('seamarks-toggle').getAttribute('aria-pressed')).toBe('true');
+    const body = screen.getByTestId('map-settings-body');
+    expect(within(body).getByText(/OpenSeaMap/)).toBeTruthy();
+    expect(within(body).getByText(/Not for navigation/)).toBeTruthy();
   });
 });
 

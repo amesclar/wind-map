@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { tileLayerConfig } from './mapTiles';
+import {
+  SEAMARK_ATTRIBUTION_TEXT,
+  SEAMARK_NOTICE,
+  SEAMARK_PANE,
+  seamarkLayerConfig,
+  tileLayerConfig,
+} from './mapTiles';
 import { gridDimensions, MAX_GRID_DIM } from '../hooks/useWindGrid';
 
 describe('tileLayerConfig (SCRUM-92)', () => {
@@ -13,6 +19,23 @@ describe('tileLayerConfig (SCRUM-92)', () => {
     expect(tileLayerConfig('osm_dark').options.className).toBe('osm-dark-tiles');
     expect(tileLayerConfig('osm_standard').options.className).toBeUndefined();
     expect(tileLayerConfig('osm_standard').url).toBe('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  });
+});
+
+describe('seamarkLayerConfig (SCRUM-175)', () => {
+  it('draws OpenSeaMap tiles in their own pane, above the base map and below the wind layers', () => {
+    const { url, options } = seamarkLayerConfig();
+    expect(url).toBe('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png');
+    expect(options.pane).toBe(SEAMARK_PANE);
+    expect(options.crossOrigin).toBe(true);
+    // Measured 2026-11-25: z12 to z19 all answer 200, so the overlay follows the base layers.
+    expect(options.maxZoom).toBe(19);
+    expect(options.attribution).toContain('OpenSeaMap');
+  });
+
+  it('carries the licence credit and the navigation notice for the toggle and the export', () => {
+    expect(SEAMARK_ATTRIBUTION_TEXT).toBe('Seamarks © OpenSeaMap contributors');
+    expect(SEAMARK_NOTICE).toBe('Not for navigation');
   });
 });
 

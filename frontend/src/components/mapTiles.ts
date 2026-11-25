@@ -16,6 +16,36 @@ export function attributionText(layer: MapTileLayer): string {
   return layer === 'carto_dark' ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors';
 }
 
+/**
+ * The seamark overlay's own pane (SCRUM-175): above the base tiles (200), below the wind colour
+ * gradient (250), so the gradient and barbs always read on top of the nautical detail.
+ */
+export const SEAMARK_PANE = 'seamarkPane';
+const SEAMARK_ATTRIBUTION =
+  'Seamarks &copy; <a href="https://www.openseamap.org">OpenSeaMap</a> contributors';
+/** Plain-text seamark credit for the exported footer and the settings toggle (licence condition). */
+export const SEAMARK_ATTRIBUTION_TEXT = 'Seamarks © OpenSeaMap contributors';
+/** OpenSeaMap data is not surveyed for navigation; the toggle and the export both say so. */
+export const SEAMARK_NOTICE = 'Not for navigation';
+
+/**
+ * URL and options for the OpenSeaMap seamark overlay (SCRUM-175). It is an overlay, so it stays
+ * out of `MapTileLayer` and the base-map radios. Measured 2026-11-25: z12 to z19 all answer 200
+ * with `access-control-allow-origin: *`, so `maxZoom` matches the base layers and `crossOrigin`
+ * keeps the tiles usable in the canvas export. Nearly empty tiles are normal outside Europe.
+ */
+export function seamarkLayerConfig(): TileLayerConfig {
+  return {
+    url: 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+    options: {
+      attribution: SEAMARK_ATTRIBUTION,
+      pane: SEAMARK_PANE,
+      maxZoom: 19,
+      crossOrigin: true,
+    },
+  };
+}
+
 /** URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set. */
 export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLayerConfig {
   switch (layer) {

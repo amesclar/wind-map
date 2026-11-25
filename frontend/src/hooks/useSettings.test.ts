@@ -49,6 +49,23 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(localStorage.getItem(STORAGE_KEYS.cartoApiKey)).toBeNull();
   });
 
+  it('keeps the seamark overlay off unless it was turned on (SCRUM-175)', () => {
+    const off = renderHook(() => useMapSettings());
+    expect(off.result.current.seamarksVisible).toBe(false);
+
+    act(() => off.result.current.setSeamarksVisible(true));
+    expect(localStorage.getItem(STORAGE_KEYS.seamarks)).toBe('true');
+
+    const restored = renderHook(() => useMapSettings());
+    expect(restored.result.current.seamarksVisible).toBe(true);
+  });
+
+  it('falls back to off for a stored seamark value that is not a boolean', () => {
+    localStorage.setItem(STORAGE_KEYS.seamarks, 'maybe');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.seamarksVisible).toBe(false);
+  });
+
   it('uses a server CARTO key for the session only', () => {
     const { result } = renderHook(() => useMapSettings());
     act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));

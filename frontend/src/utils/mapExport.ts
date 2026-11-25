@@ -4,6 +4,7 @@
  * Pure functions so the wording, units, timezone handling and file naming are unit tested
  * without a canvas or a browser.
  */
+import { SEAMARK_ATTRIBUTION_TEXT, SEAMARK_NOTICE } from '../components/mapTiles';
 import type { UnitSystem, WindSpeedUnit } from '../types';
 import { formatStepLabel, floorToHour } from './forecastWindow';
 import { formatTemperatureFromF, roundKnotsInUnit, SPEED_UNIT_LABEL } from './units';
@@ -54,13 +55,25 @@ export interface ExportFooterInput {
   speedUnit: WindSpeedUnit;
   /** Plain-text attribution of the base map, e.g. "© OpenStreetMap contributors © CARTO". */
   attribution: string;
+  /** Seamark overlay on: its credit and the not-for-navigation notice join the footer (SCRUM-175). */
+  seamarks?: boolean;
   version: string;
 }
 
-/** Units, the base-map attribution (required by OSM and CARTO) and the app version. */
-export function buildExportFooter({ unitSystem, speedUnit, attribution, version }: ExportFooterInput): string {
+/**
+ * Units, the base-map attribution (required by OSM and CARTO) and the app version. The seamark
+ * credit and the "not for navigation" notice appear only while that overlay is on (SCRUM-175).
+ */
+export function buildExportFooter({
+  unitSystem,
+  speedUnit,
+  attribution,
+  seamarks = false,
+  version,
+}: ExportFooterInput): string {
   const temperature = unitSystem === 'imperial' ? '°F' : '°C';
-  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution} · Wind Map v${version}`;
+  const seamarkCredit = seamarks ? ` · ${SEAMARK_ATTRIBUTION_TEXT} · ${SEAMARK_NOTICE}` : '';
+  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${seamarkCredit} · Wind Map v${version}`;
 }
 
 export type ExportExtension = 'png' | 'jpeg' | 'pdf';
