@@ -310,7 +310,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       Color the map by wind speed
                     </div>
                     <div className="text-[11px] text-gray-400 mt-0.5">
-                      Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs gain a dark halo to stay readable.
+                      Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs keep a crisp outline so they stay readable.
                       On the Nautical Paper Chart base the gradient draws lighter; turning it off
                       keeps the chart's own symbols crisp.
                     </div>

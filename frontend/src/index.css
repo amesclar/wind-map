@@ -76,18 +76,9 @@
   filter: invert(100%) hue-rotate(185deg) brightness(92%) contrast(90%);
 }
 
-/* Dark halo keeps the temperature-colored barbs readable over the wind color gradient
-   (SCRUM-123); the two shadows give a soft outer glow rather than a hard outline. */
-.wind-barb-halo {
-  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
-}
-
-/* SCRUM-203 needed contrast on the light chart sheet; SCRUM-208 replaced the blurred glow with
-   SVG outline passes drawn behind the glyph (CHART_BARB_OUTLINES), which stay sharp at 32 px.
-   The class stays on the marker as the hook, but its blur would only soften that edge again. */
-.chart-base .wind-barb-halo {
-  filter: none;
-}
+/* The barbs used to carry a blurred `drop-shadow` halo (SCRUM-123), with a no-op override on the
+   chart (SCRUM-203). SCRUM-208 and SCRUM-218 replaced both with one SVG outline pass drawn behind
+   the glyph (BARB_OUTLINES), so there is no filter on any base and no CSS hook left to keep. */
 
 /* Wind color legend: sits just above the map attribution. The forecast drawer that used to
    push the strip up (via --drawer-height) is gone (SCRUM-126), so the offset is fixed. Mirrors
