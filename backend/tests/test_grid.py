@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
+from backend.app.config import GRID_MAX_DIM, GRID_REQUEST_MAX_POINTS
 from backend.app.services.grid_weather_service import get_grid_wind
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import coord_key as _cache_key
@@ -282,13 +283,13 @@ def test_grid_endpoint_rejects_inverted_lon(client, open_meteo):
 
 
 def test_grid_endpoint_rejects_cols_above_max(client, open_meteo):
-    resp = client.get("/api/weather/grid", params=grid_params(cols=31))  # 31 > MAX_COLS=30
+    resp = client.get("/api/weather/grid", params=grid_params(cols=GRID_MAX_DIM + 1))  # > MAX_COLS
     assert resp.status_code == 422
     assert open_meteo.call_count == 0
 
 
 def test_grid_endpoint_rejects_rows_above_max(client, open_meteo):
-    resp = client.get("/api/weather/grid", params=grid_params(rows=31))  # 31 > MAX_ROWS=30
+    resp = client.get("/api/weather/grid", params=grid_params(rows=GRID_MAX_DIM + 1))  # > MAX_ROWS
     assert resp.status_code == 422
     assert open_meteo.call_count == 0
 
@@ -438,14 +439,14 @@ def test_grid_endpoint_upstream_failure_is_502_without_internal_detail(client, o
 
 
 def test_read_cached_points_issues_one_query_for_a_full_view(monkeypatch):
-    """A whole 30 x 30 view costs one SELECT and still returns the points in request order."""
+    """A whole view costs one SELECT and still returns the points in request order."""
     import time
     from contextlib import contextmanager
 
     from backend.app.database import db_connection
     from backend.app.services import grid_weather_service as service
 
-    points = [(47.0 + r * 0.01, -122.0 + c * 0.01) for r in range(30) for c in range(30)]
+    points = [(47.0 + r * 0.01, -122.0 + c * 0.01) for r in range(GRID_MAX_DIM) for c in range(GRID_MAX_DIM)]
     now = time.time()
     with db_connection() as conn:
         conn.executemany(
@@ -487,3 +488,87 @@ def test_read_cached_points_issues_one_query_for_a_full_view(monkeypatch):
     assert seen["proxy"].queries == 1
     assert missing == []
     assert [(p.latitude, p.longitude) for p in results] == points
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-192: a large view is fetched in chunks Open-Meteo accepts
+# ---------------------------------------------------------------------------
+
+
+def _grid_points(count: int) -> list[tuple[float, float]]:
+    """`count` distinct coordinates, in request order."""
+    return [(47.0 + i * 0.001, -122.0 + i * 0.001) for i in range(count)]
+
+
+def _current_items(count: int, speed: float = 9.0) -> list[dict]:
+    return [grid_item(speed, 180.0) for _ in range(count)]
+
+
+@pytest.mark.asyncio
+async def test_fetch_current_splits_a_large_view_into_chunks(open_meteo):
+    """A view above the limit costs one request per chunk, in the caller's point order."""
+    points = _grid_points(GRID_REQUEST_MAX_POINTS + 10)
+    open_meteo.respond_sequence(
+        grid_payload(*_current_items(GRID_REQUEST_MAX_POINTS, speed=5.0)),
+        grid_payload(*_current_items(10, speed=6.0)),
+    )
+
+    result = await get_grid_wind(points, "best_match")
+
+    assert open_meteo.call_count == 2
+    assert [(p.latitude, p.longitude) for p in result] == points
+    assert [len(call["params"]["latitude"].split(",")) for call in open_meteo.calls] == [
+        GRID_REQUEST_MAX_POINTS,
+        10,
+    ]
+    assert result[0].wind_speed_knots == 5.0
+    assert result[-1].wind_speed_knots == 6.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_hourly_splits_a_large_view_into_chunks(open_meteo):
+    """The hourly series of every chunk is merged into the same cache hours."""
+    hour = "2026-11-25T12:00"
+    points = _grid_points(GRID_REQUEST_MAX_POINTS + 5)
+    open_meteo.respond_sequence(
+        grid_payload(*[grid_hourly_item(hour, speed=12.0)] * GRID_REQUEST_MAX_POINTS),
+        grid_payload(*[grid_hourly_item(hour, speed=13.0)] * 5),
+    )
+
+    result = await get_grid_wind(points, "best_match", datetime(2026, 11, 25, 12, tzinfo=UTC))
+
+    assert open_meteo.call_count == 2
+    assert len(result) == len(points)
+    assert all(p.time == hour for p in result)
+    assert {p.wind_speed_knots for p in result} == {12.0, 13.0}
+
+
+@pytest.mark.asyncio
+async def test_fetch_at_the_chunk_limit_stays_one_request(open_meteo):
+    """Small views keep the single batched request they had before SCRUM-192."""
+    points = _grid_points(GRID_REQUEST_MAX_POINTS)
+    open_meteo.respond(grid_payload(*_current_items(GRID_REQUEST_MAX_POINTS)))
+
+    result = await get_grid_wind(points, "best_match")
+
+    assert open_meteo.call_count == 1
+    assert len(result) == GRID_REQUEST_MAX_POINTS
+
+
+def test_grid_endpoint_full_view_is_chunked(client, open_meteo):
+    """A full view used to build one ~16 KB URL and fail with 414 → 502."""
+    points = GRID_MAX_DIM * GRID_MAX_DIM
+    chunks = [min(GRID_REQUEST_MAX_POINTS, points - i) for i in range(0, points, GRID_REQUEST_MAX_POINTS)]
+    open_meteo.respond_sequence(*[[grid_item(10.0, 180.0)] * size for size in chunks])
+
+    resp = client.get("/api/weather/grid", params=grid_params(cols=GRID_MAX_DIM, rows=GRID_MAX_DIM))
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == points
+    assert open_meteo.call_count == len(chunks)
+    assert all(len(call["params"]["latitude"].split(",")) <= GRID_REQUEST_MAX_POINTS for call in open_meteo.calls)
+
+
+def test_the_grid_cap_fits_the_open_meteo_minute_budget():
+    """One call per point against 600 per minute (SCRUM-194): a full view must fit, with headroom."""
+    assert GRID_MAX_DIM * GRID_MAX_DIM <= 600

@@ -59,12 +59,12 @@ wind-map/
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode, feedback)
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
 │   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
-│   │                            # geocode_service.py, model_info.py (run times,
+│   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
@@ -74,7 +74,7 @@ wind-map/
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
-    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, mapTiles.ts
+    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
     │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
     │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
@@ -121,6 +121,17 @@ docker run -d -p 5005:5005 -v wind_data:/app/data --name wind-map wind-map
 docker run -d -p 5005:5005 -e CARTO_API_KEY="$CARTO_API_KEY" -v wind_data:/app/data --name wind-map wind-map
 ```
 
+*(Optional: Enable the in-app feedback button, which files Jira issues through one service account)*:
+```bash
+docker run -d -p 5005:5005 \
+  -e JIRA_BASE_URL="https://nehes.atlassian.net" \
+  -e JIRA_EMAIL="$JIRA_EMAIL" \
+  -e JIRA_API_TOKEN="$JIRA_API_TOKEN" \
+  -e JIRA_FEEDBACK_PROJECT="SCRUM" \
+  -v wind_data:/app/data --name wind-map wind-map
+```
+Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP.
+
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
 ---
@@ -137,6 +148,142 @@ To stop the container:
 ```bash
 docker stop wind-map && docker rm wind-map
 ```
+
+### Password Protection and Litestream Replication
+
+The container is ready for the public Google Cloud Run deployment (`SCRUM-133`). Two environment
+variables control that mode; neither is needed for local use.
+
+- **`APP_PASSWORD`** turns on HTTP Basic authentication for every route except `GET /api/health`.
+  The username is ignored and one password is shared. Unset (the default) means open access, so
+  `docker run`, `npm run dev` and the test suite behave exactly as before. The container never logs
+  the password or the `Authorization` header.
+- **`LITESTREAM_BUCKET`** turns on Litestream, which replicates `/app/data/wind_map.db` to that GCS
+  bucket (`litestream.yml`) and restores it when a new instance starts with no database
+  (`scripts/docker-entrypoint.sh`). Unset, the entrypoint runs Uvicorn directly.
+
+```bash
+# Local container with a password, no replication
+docker run -d -p 5005:5005 -e APP_PASSWORD="$APP_PASSWORD" -v wind_data:/app/data --name wind-map wind-map
+```
+
+Google Cloud authentication for the bucket comes from Application Default Credentials of the
+runtime service account; no key file is baked into the image.
+
+### Google Cloud Infrastructure
+
+`scripts/gcp-provision.sh` creates the stage-2 resources in project `wind-app-515017` (SCRUM-135).
+It is idempotent, so running it again changes nothing and never rotates the stored password.
+
+```bash
+scripts/gcp-provision.sh                      # generates the shared password
+APP_PASSWORD='...' scripts/gcp-provision.sh   # or uses a password you choose
+CARTO_API_KEY='...' scripts/gcp-provision.sh  # optional, stores the CARTO key too
+```
+
+It provisions:
+
+- the private bucket `gs://wind-map-litestream-wind-app-515017` in `us-west1`, with uniform
+  bucket-level access, public access prevention and a 7-day abort of unfinished uploads;
+- the Secret Manager secrets `APP_PASSWORD`, and `CARTO_API_KEY` and `JIRA_API_TOKEN` when values
+  are supplied;
+- the service account `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with
+  `roles/storage.objectAdmin` on the bucket and `roles/secretmanager.secretAccessor` on the secrets.
+
+It finishes by impersonating that service account to write, read and delete a probe object in the
+bucket and to read `APP_PASSWORD`, which is the access the deployed container gets. For that check
+the script grants your own account `roles/iam.serviceAccountTokenCreator` on the runner; the deployed
+container does not use it. The password is never printed; read it with:
+
+```bash
+gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
+```
+
+### Google Cloud Run Deployment
+
+The public deployment runs the same image on Cloud Run behind HTTP Basic Auth, with SQLite
+replicated to the bucket above (SCRUM-136). It is live at
+<https://wind-map-qhtz2eay6a-uw.a.run.app> (username ignored, password from Secret Manager).
+
+**Merging into `develop` deploys it** (SCRUM-189). `.github/workflows/deploy-cloud-run.yml` builds
+the image for `linux/amd64` with the merge commit, pushes it to Artifact Registry as
+`VERSION-<merge-sha>` and `latest`, rolls the service and fails unless `/api/health` reports
+`status: ok`. It can also be started from the Actions tab. Authentication is keyless: the workflow
+exchanges GitHub's OIDC token for short-lived credentials through the Workload Identity pool
+`github`, which only accepts repository `amesclar/wind-map`, so no service account key is stored in
+GitHub. The deploy identity `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com` may push the
+image, deploy the service and act as the runner; it cannot read the password or write the bucket.
+
+The workflow applies these settings:
+
+| Setting | Value |
+| :--- | :--- |
+| Image | `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:VERSION-<sha>` |
+| Service account | `wind-map-runner@wind-app-515017.iam.gserviceaccount.com` |
+| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `JIRA_BASE_URL`, `JIRA_EMAIL`; `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN` from Secret Manager |
+| Scaling | `--max-instances=1 --min-instances=0 --no-cpu-throttling` (one writer, CPU always allocated) |
+| Access | `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM |
+
+**Manual deploy (emergency fallback).** If Actions is unavailable, build and deploy by hand; Cloud
+Build builds natively for amd64 and pushes both tags.
+
+```bash
+IMAGE=us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map
+TAG=$(cat VERSION)-$(git rev-parse --short HEAD)
+gcloud builds submit --project=wind-app-515017 --config=cloudbuild.yaml \
+  --substitutions=_TAG=$TAG,_GIT_SHA=$(git rev-parse --short HEAD)
+
+gcloud run deploy wind-map --project=wind-app-515017 --region=us-west1 \
+  --image="$IMAGE:$TAG" --port=5005 \
+  --service-account=wind-map-runner@wind-app-515017.iam.gserviceaccount.com \
+  --memory=512Mi --max-instances=1 --min-instances=0 --no-cpu-throttling \
+  --allow-unauthenticated \
+  --set-env-vars=LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017,JIRA_BASE_URL=https://nehes.atlassian.net,JIRA_EMAIL=you@example.com \
+  --set-secrets=APP_PASSWORD=APP_PASSWORD:latest,CARTO_API_KEY=CARTO_API_KEY:latest,JIRA_API_TOKEN=JIRA_API_TOKEN:latest
+```
+
+Cloud Run must allow unauthenticated requests so the app can answer with its own Basic Auth
+challenge; IAM is not the gate. Without `APP_PASSWORD` the same command would publish an open site,
+so the secret is part of the deployment, not an option.
+
+**Single writer.** Litestream replicates one database and assumes one writer, so the service is
+capped at one instance (`--max-instances=1`) with CPU always allocated (`--no-cpu-throttling`).
+Scaling to zero is safe: the next instance restores the database from the bucket before serving,
+and the entrypoint creates the schema when neither a local database nor a replica exists yet.
+
+**Verify the deployment.**
+
+```bash
+URL=$(gcloud run services describe wind-map --region=us-west1 --format='value(status.url)')
+curl -s -o /dev/null -w '%{http_code}\n' "$URL/api/health"   # 200, no credentials
+curl -s -o /dev/null -w '%{http_code}\n' "$URL/"             # 401
+curl -s -u "wind-map:$(gcloud secrets versions access latest --secret=APP_PASSWORD)" \
+  -o /dev/null -w '%{http_code}\n' "$URL/"                   # 200
+```
+
+To prove persistence, create a location and then replace the instance (a revision-level change such
+as `--update-env-vars`), and check that `GET /api/locations` still returns it; the new instance has
+an empty disk and must restore the database from GCS.
+
+**Rollback.** Every deployment creates a revision; move traffic back, or redeploy the previous tag.
+
+```bash
+gcloud run revisions list --service=wind-map --region=us-west1
+gcloud run services update-traffic wind-map --region=us-west1 \
+  --to-revisions=wind-map-00001-abc=100        # the revision to go back to
+gcloud run services update-traffic wind-map --region=us-west1 --to-latest   # back to the newest
+```
+
+**Runtime secrets (SCRUM-190).** The service reads three secrets, and the workflow injects all of
+them: `APP_PASSWORD` (Basic Auth), `CARTO_API_KEY` (map tiles) and `JIRA_API_TOKEN` (in-app
+feedback, together with the non-secret `JIRA_BASE_URL` and `JIRA_EMAIL`). They are listed in one
+place in the workflow because a deploy that names only some of them detaches the rest, which is
+exactly what used to drop the CARTO and Jira values on every merge.
+
+`scripts/gcp-provision.sh` creates the secrets and grants the runner access to each of them, so run
+it before the first deploy: `gcloud run deploy` fails when a referenced secret does not exist.
+Without a CARTO key the map uses the OpenStreetMap tiles; without the Jira trio the feedback button
+stays hidden.
 
 ---
 
@@ -197,7 +344,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | Method   | Endpoint              | Description                                          |
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Health check endpoint                                |
-| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set) |
+| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set, and `feedback_enabled`) |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
 | `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
@@ -209,6 +356,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
+| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.

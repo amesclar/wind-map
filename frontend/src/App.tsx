@@ -15,6 +15,7 @@ import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
 import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
+import { FeedbackModal } from './components/FeedbackModal';
 import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
@@ -72,6 +73,8 @@ export const App: React.FC = () => {
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   // Open-Meteo quota warning: shown once per reset window, however many grid requests fail.
   const [quotaWarning, setQuotaWarning] = useState<{ resetAt: string | null } | null>(null);
   const warnedQuotaRef = useRef<string | null>(null);
@@ -92,7 +95,9 @@ export const App: React.FC = () => {
     let cancelled = false;
     async function init() {
       try {
-        applyServerConfig(await fetchAppConfig());
+        const config = await fetchAppConfig();
+        applyServerConfig(config);
+        if (!cancelled) setFeedbackEnabled(Boolean(config.feedback_enabled));
         const availableModels = await fetchModels();
         if (!cancelled) setModels(availableModels);
 
@@ -186,6 +191,8 @@ export const App: React.FC = () => {
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
         onOpenExportDialog={mapExport.openDialog}
         savingMap={mapExport.savingMap}
+        feedbackEnabled={feedbackEnabled}
+        onOpenFeedback={() => setIsFeedbackOpen(true)}
       />
 
       <main className="flex-1 flex flex-col min-h-0 w-full">
@@ -251,6 +258,7 @@ export const App: React.FC = () => {
         onClose={() => setIsModelGuideOpen(false)}
       />
 
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
       <QuotaWarningDialog
         isOpen={quotaWarning !== null}
         resetAt={quotaWarning?.resetAt ?? null}

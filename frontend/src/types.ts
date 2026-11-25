@@ -80,6 +80,28 @@ export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' 
 /** GET /api/config. */
 export interface AppConfig {
   carto_api_key?: string;
+  /** True when the server has Jira credentials, so the feedback button is shown (SCRUM-179). */
+  feedback_enabled?: boolean;
+}
+
+/** Feedback types accepted by POST /api/feedback (SCRUM-179). */
+export type FeedbackType = 'bug' | 'new feature' | 'comment';
+
+/** Body of POST /api/feedback. */
+export interface FeedbackPayload {
+  type: FeedbackType;
+  subject: string;
+  comments: string;
+  contact_email?: string;
+  app_version: string;
+  timezone: string;
+  user_agent: string;
+}
+
+/** Response of POST /api/feedback: the Jira issue that was created. */
+export interface FeedbackResult {
+  issue_key: string;
+  issue_url: string;
 }
 
 /** One point of GET /api/weather/grid. */

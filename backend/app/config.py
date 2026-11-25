@@ -58,6 +58,11 @@ def parse_cors_origins(value: str | None) -> list[str]:
 # e.g. CORS_ORIGINS=http://localhost:5173
 CORS_ORIGINS = parse_cors_origins(os.getenv("CORS_ORIGINS"))
 
+# Access control (SCRUM-134): the public Cloud Run deployment is protected by one shared password.
+# Unset or empty disables authentication, which keeps local development, `docker run` and the
+# test suite open. The value comes from Secret Manager on Cloud Run, never from the image.
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+
 # Default seeded location
 DEFAULT_LOCATION = {
     "name": "Oak Harbor, WA",
@@ -75,7 +80,7 @@ OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
-OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 900 points)
+OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 400 points)
 OPEN_METEO_MARINE_TIMEOUT_SECONDS = 20.0  # batched marine request (same grid size)
 OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
@@ -137,8 +142,14 @@ def model_horizon_days(model: str) -> int:
 # Cache keys round coordinates to 2 decimals (~1.1 km), for point and grid caches.
 COORD_CACHE_PRECISION = 2
 
-# Wind grid limits (per axis) to prevent runaway requests.
-GRID_MAX_DIM = 30
+# Wind grid limits (per axis) to prevent runaway requests. Open-Meteo charges one call per point
+# against 600 per minute (SCRUM-194), so 20 x 20 = 400 points leaves 200 for a pan inside the same
+# window; the previous 30 x 30 = 900 could never fit and always ended in a quota 503.
+GRID_MAX_DIM = 20
+
+# Open-Meteo answers 414 Request-URI Too Large to a URL holding hundreds of coordinates (SCRUM-192),
+# so a view is fetched in chunks of at most this many points (~3.3 KB per request).
+GRID_REQUEST_MAX_POINTS = 150
 
 # Ocean currents (SCRUM-96): MeteoFrance SMOC via Open-Meteo Marine covers 10 days hourly,
 # which is the layer's horizon regardless of the selected weather model.
@@ -146,3 +157,31 @@ CURRENT_HORIZON_HOURS = 240
 
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
+
+# In-app feedback (SCRUM-179): POST /api/feedback files a Jira issue through one service account.
+# The feature is on only when the base URL, email and API token are all set; the credentials come
+# from the environment or a secret store and are never returned by the API or logged.
+JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "").strip().rstrip("/")
+JIRA_EMAIL = os.getenv("JIRA_EMAIL", "").strip()
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "").strip()
+JIRA_FEEDBACK_PROJECT = os.getenv("JIRA_FEEDBACK_PROJECT", "").strip() or "SCRUM"
+JIRA_TIMEOUT_SECONDS = 10.0
+FEEDBACK_LABEL = "in-app-feedback"
+FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+FEEDBACK_MAX_PER_HOUR = _positive_int("FEEDBACK_MAX_PER_HOUR", 5)  # per client IP
+FEEDBACK_GLOBAL_MAX_PER_HOUR = FEEDBACK_MAX_PER_HOUR * 4  # all clients together
+
+
+def feedback_enabled() -> bool:
+    """True when every Jira setting needed to file a ticket is present."""
+    return bool(JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN)

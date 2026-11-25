@@ -1,0 +1,15 @@
+# Litestream replication for the Cloud Run deployment (SCRUM-134).
+#
+# One SQLite database, one replica. The container entrypoint starts Litestream only when
+# LITESTREAM_BUCKET is set, so a local `docker run` never touches Google Cloud. On Cloud Run the
+# runtime service account provides Application Default Credentials for the private bucket; no
+# key file is stored in the image or the repository.
+#
+# `type: gs` is Litestream 0.5's name for a Google Cloud Storage replica (`gcs` is rejected), and
+# 0.5 takes a single `replica` per database instead of the deprecated `replicas` list.
+dbs:
+  - path: /app/data/wind_map.db
+    replica:
+      type: gs
+      bucket: ${LITESTREAM_BUCKET}
+      path: wind_map.db

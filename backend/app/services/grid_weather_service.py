@@ -14,6 +14,7 @@ import httpx
 from backend.app.config import (
     CACHE_TTL_SECONDS,
     DEFAULT_MODEL,
+    GRID_REQUEST_MAX_POINTS,
     OPEN_METEO_FORECAST_URL,
     OPEN_METEO_GRID_TIMEOUT_SECONDS,
 )
@@ -68,7 +69,7 @@ def _read_cached_points(
 ) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
     """Split points into cached results and coordinates that still need fetching.
 
-    One statement per request (SCRUM-174) instead of one per point: a full 30 x 30 view used to
+    One statement per request (SCRUM-174) instead of one per point: a full view used to
     run up to 900 SELECTs, which measured 5-6 ms per lookup. The rounded latitudes bound the
     scan, and the dict lookup keeps the caller's point order (and drops rows outside the box).
     """
@@ -139,6 +140,12 @@ def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: floa
         )
 
 
+def _chunks(points: list[tuple[float, float]]) -> list[list[tuple[float, float]]]:
+    """Split the points into requests whose URL Open-Meteo accepts (SCRUM-192)."""
+    size = GRID_REQUEST_MAX_POINTS
+    return [points[start : start + size] for start in range(0, len(points), size)]
+
+
 def _batch_params(points: list[tuple[float, float]], model: str) -> dict:
     """Open-Meteo accepts comma-separated lat/lon arrays, so one request covers every point."""
     return {
@@ -187,18 +194,21 @@ async def _fetch_current(
     points: list[tuple[float, float]],
     model: str,
 ) -> list[GridWindPoint]:
-    """One batched request for every point's live values."""
-    data = await open_meteo.get_json(
-        OPEN_METEO_FORECAST_URL,
-        {
-            **_batch_params(points, model),
-            "current": ",".join(GRID_VARIABLES),
-            "forecast_days": 1,
-        },
-        timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
-    )
-    items = _as_list(data, len(points))
-    return [_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(points, items, strict=True)]
+    """Live values for every point, in chunked batched requests (SCRUM-192)."""
+    fetched: list[GridWindPoint] = []
+    for chunk in _chunks(points):
+        data = await open_meteo.get_json(
+            OPEN_METEO_FORECAST_URL,
+            {
+                **_batch_params(chunk, model),
+                "current": ",".join(GRID_VARIABLES),
+                "forecast_days": 1,
+            },
+            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+        )
+        items = _as_list(data, len(chunk))
+        fetched.extend(_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(chunk, items, strict=True))
+    return fetched
 
 
 async def _fetch_hourly_day(
@@ -206,30 +216,35 @@ async def _fetch_hourly_day(
     model: str,
     at: datetime,
 ) -> dict[str, list[GridWindPoint]]:
-    """One request for the requested UTC day, parsed into every hour it contains.
+    """One request per chunk for the requested UTC day, merged into every hour it contains.
 
     Keys are cache hours (`2026-11-25T14:00`), so the caller can store the whole day and return
-    the requested hour without a second request.
+    the requested hour without a second request. Chunking (SCRUM-192) keeps each URL inside what
+    Open-Meteo accepts; the requests run one at a time because the free tier allows one concurrent
+    request per IP.
     """
     day = at.astimezone(UTC).strftime("%Y-%m-%d")
-    data = await open_meteo.get_json(
-        OPEN_METEO_FORECAST_URL,
-        {
-            **_batch_params(points, model),
-            "hourly": ",".join(GRID_VARIABLES),
-            "start_date": day,
-            "end_date": day,
-            "timezone": "UTC",
-        },
-        timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
-    )
-    items = _as_list(data, len(points))
-    times = _series_times(items)
-    series: dict[str, list[GridWindPoint]] = {_series_hour(stamp): [] for stamp in times}
-    for (lat, lon), item in zip(points, items, strict=True):
-        for index, stamp in enumerate(times):
-            series_hour = _series_hour(stamp)
-            series[series_hour].append(_point_from_hourly(lat, lon, item, index, series_hour))
+    series: dict[str, list[GridWindPoint]] = {}
+    for chunk in _chunks(points):
+        data = await open_meteo.get_json(
+            OPEN_METEO_FORECAST_URL,
+            {
+                **_batch_params(chunk, model),
+                "hourly": ",".join(GRID_VARIABLES),
+                "start_date": day,
+                "end_date": day,
+                "timezone": "UTC",
+            },
+            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+        )
+        items = _as_list(data, len(chunk))
+        times = _series_times(items)
+        for stamp in times:
+            series.setdefault(_series_hour(stamp), [])
+        for (lat, lon), item in zip(chunk, items, strict=True):
+            for index, stamp in enumerate(times):
+                series_hour = _series_hour(stamp)
+                series[series_hour].append(_point_from_hourly(lat, lon, item, index, series_hour))
 
     requested = hour_key(at)
     if requested not in series:
