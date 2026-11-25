@@ -12,6 +12,7 @@ import {
   formatFileSize,
   totalAttachmentBytes,
 } from '../utils/feedbackAttachments';
+import { SHRINK_FAILED_MESSAGE, screenshotFileName, shrinkScreenshot } from '../utils/screenshotPaste';
 
 export const MAX_SUBJECT = 50;
 export const MAX_COMMENTS = 1000;
@@ -32,6 +33,12 @@ interface FeedbackModalProps {
 
 type FieldName = 'type' | 'subject' | 'comments' | 'email';
 type Errors = Partial<Record<FieldName, string>>;
+
+interface AttachmentItem {
+  file: File;
+  /** The pasted screenshot's original size when it had to be re-encoded (SCRUM-220). */
+  shrunkFrom?: number;
+}
 
 function validate(type: string, subject: string, comments: string, email: string): Errors {
   const errors: Errors = {};
@@ -63,7 +70,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [issueKey, setIssueKey] = useState<string | null>(null);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [attachmentsFailed, setAttachmentsFailed] = useState(false);
@@ -118,12 +125,46 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
     const next = [...attachments];
     let problem: string | null = null;
     for (const file of Array.from(incoming)) {
-      const found = attachmentProblem(next, file);
+      const found = attachmentProblem(next.map((item) => item.file), file);
       if (found) {
         problem = found;
         continue;
       }
-      next.push(file);
+      next.push({ file });
+    }
+    setAttachments(next);
+    setAttachmentError(problem);
+  };
+
+  /** A pasted screenshot joins the list, shrunk to a JPEG when it is over the 4 MiB cap (SCRUM-220). */
+  const handlePaste = async (event: React.ClipboardEvent) => {
+    const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    // Pasted text still goes into the focused field as usual: only an image takes over the paste.
+    if (images.length === 0) return;
+    event.preventDefault();
+    const now = new Date();
+    const next = [...attachments];
+    let problem: string | null = null;
+    for (const [index, image] of images.entries()) {
+      const named = new File([image], screenshotFileName(now, index), {
+        type: image.type || 'image/png',
+      });
+      const shrunk = await shrinkScreenshot(named);
+      if (!shrunk) {
+        problem = SHRINK_FAILED_MESSAGE;
+        continue;
+      }
+      const found = attachmentProblem(
+        next.map((item) => item.file),
+        shrunk,
+      );
+      if (found) {
+        problem = found;
+        continue;
+      }
+      next.push({ file: shrunk, shrunkFrom: shrunk === named ? undefined : image.size });
     }
     setAttachments(next);
     setAttachmentError(problem);
@@ -151,7 +192,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
         app_version: APP_VERSION,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
         user_agent: navigator.userAgent.slice(0, 200),
-        ...(attachments.length > 0 ? { files: attachments } : {}),
+        ...(attachments.length > 0 ? { files: attachments.map((item) => item.file) } : {}),
       });
       setIssueKey(result.issue_key);
       setAttachmentsFailed(result.attachments_failed === true);
@@ -183,6 +224,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
         aria-modal="true"
         aria-labelledby={id('title')}
         data-testid="feedback-modal"
+        onPaste={handlePaste}
         className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-600">
@@ -351,17 +393,29 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
                     }}
                   />
                 </div>
+                <p className="mt-1 text-[11px] text-gray-500">You can also paste a screenshot.</p>
                 {attachments.length > 0 && (
                   <ul data-testid="attachment-list" className="mt-2 space-y-1">
-                    {attachments.map((file, index) => (
-                      <li key={`${file.name}-${index}`} className="flex items-center gap-2 text-xs text-gray-300">
+                    {attachments.map((item, index) => (
+                      <li
+                        key={`${item.file.name}-${index}`}
+                        className="flex items-center gap-2 text-xs text-gray-300"
+                      >
                         <span className="min-w-0 flex-1 truncate" data-testid="attachment-name">
-                          {file.name}
+                          {item.file.name}
                         </span>
-                        <span className="shrink-0 text-gray-500">{formatFileSize(file.size)}</span>
+                        {item.shrunkFrom !== undefined && (
+                          <span
+                            className="shrink-0 text-[11px] text-amber-300/80"
+                            data-testid="attachment-shrunk"
+                          >
+                            shrunk from {formatFileSize(item.shrunkFrom)}
+                          </span>
+                        )}
+                        <span className="shrink-0 text-gray-500">{formatFileSize(item.file.size)}</span>
                         <button
                           type="button"
-                          aria-label={`Remove ${file.name}`}
+                          aria-label={`Remove ${item.file.name}`}
                           onClick={() => removeFile(index)}
                           className="shrink-0 rounded p-0.5 text-gray-500 hover:bg-dark-700 hover:text-gray-200"
                         >
@@ -373,7 +427,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
                 )}
                 {attachments.length > 0 && (
                   <p className="mt-1 text-[11px] text-gray-500" data-testid="attachment-total">
-                    {formatFileSize(totalAttachmentBytes(attachments))} of{' '}
+                    {formatFileSize(totalAttachmentBytes(attachments.map((item) => item.file)))} of{' '}
                     {MAX_FEEDBACK_FILES_BYTES / (1024 * 1024)} MB
                   </p>
                 )}

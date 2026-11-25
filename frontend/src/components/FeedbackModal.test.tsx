@@ -2,13 +2,22 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FeedbackModal } from './FeedbackModal';
 import { ApiError, submitFeedback } from '../api/client';
+import { SHRINK_FAILED_MESSAGE, shrinkScreenshot } from '../utils/screenshotPaste';
 
 vi.mock('../api/client', async () => {
   const actual = await vi.importActual<typeof import('../api/client')>('../api/client');
   return { ...actual, submitFeedback: vi.fn() };
 });
 
+// The shrink loop itself is covered by screenshotPaste.test; here only the wiring matters.
+vi.mock('../utils/screenshotPaste', async () => {
+  const actual =
+    await vi.importActual<typeof import('../utils/screenshotPaste')>('../utils/screenshotPaste');
+  return { ...actual, shrinkScreenshot: vi.fn() };
+});
+
 const submit = vi.mocked(submitFeedback);
+const shrink = vi.mocked(shrinkScreenshot);
 
 function renderModal(isOpen = true, onClose = vi.fn()) {
   render(<FeedbackModal isOpen={isOpen} onClose={onClose} />);
@@ -34,7 +43,11 @@ const attach = (...files: File[]) =>
   fireEvent.change(screen.getByTestId('feedback-file-input'), { target: { files } });
 
 describe('FeedbackModal (SCRUM-179)', () => {
-  beforeEach(() => submit.mockReset());
+  beforeEach(() => {
+    submit.mockReset();
+    shrink.mockReset();
+    shrink.mockImplementation(async (file: File) => file);
+  });
 
   it('renders nothing when closed', () => {
     render(<FeedbackModal isOpen={false} onClose={vi.fn()} />);
@@ -272,6 +285,88 @@ describe('FeedbackModal (SCRUM-179)', () => {
       send();
       await screen.findByText('SCRUM-501');
       expect(submit.mock.calls[1][0].files).toHaveLength(1);
+    });
+
+    it('adds a pasted screenshot under a timestamped name', async () => {
+      renderModal();
+      const dialog = screen.getByRole('dialog');
+      const image = new File(['png'], 'image.png', { type: 'image/png' });
+
+      fireEvent.paste(dialog, { clipboardData: { files: [image] } });
+      await waitFor(() => expect(screen.getByTestId('attachment-name')).toBeTruthy());
+
+      const name = screen.getByTestId('attachment-name').textContent!;
+      expect(name).toMatch(/^screenshot-\d{8}-\d{6}\.png$/);
+      expect(shrink).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a text paste to the focused field', async () => {
+      renderModal();
+      const dialog = screen.getByRole('dialog');
+
+      fireEvent.paste(dialog, { clipboardData: { files: [], getData: () => 'hello' } });
+      await waitFor(() => expect(shrink).not.toHaveBeenCalled());
+      expect(screen.queryByTestId('attachment-list')).toBeNull();
+    });
+
+    it('does nothing while the dialog is closed', () => {
+      render(<FeedbackModal isOpen={false} onClose={vi.fn()} />);
+      fireEvent.paste(document.body, {
+        clipboardData: { files: [new File(['png'], 'image.png', { type: 'image/png' })] },
+      });
+      expect(shrink).not.toHaveBeenCalled();
+    });
+
+    it('refuses a pasted screenshot past the three-file limit', async () => {
+      renderModal();
+      attach(png('a.png'), png('b.png'), png('c.png'));
+
+      fireEvent.paste(screen.getByRole('dialog'), {
+        clipboardData: { files: [new File(['png'], 'image.png', { type: 'image/png' })] },
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('attachment-error').textContent).toBe('You can attach up to 3 files.'),
+      );
+      expect(screen.getAllByTestId('attachment-name')).toHaveLength(3);
+    });
+
+    it('attaches an oversize paste as a shrunk JPEG and says so', async () => {
+      shrink.mockImplementation(async (file: File) => {
+        const jpeg = new File(['jpg'], file.name.replace(/\.png$/, '.jpg'), { type: 'image/jpeg' });
+        Object.defineProperty(jpeg, 'size', { value: 2 * 1024 * 1024 });
+        return jpeg;
+      });
+      renderModal();
+      const huge = new File(['png'], 'image.png', { type: 'image/png' });
+      Object.defineProperty(huge, 'size', { value: 7.8 * 1024 * 1024 });
+
+      fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [huge] } });
+
+      await waitFor(() => expect(screen.getByTestId('attachment-shrunk')).toBeTruthy());
+      expect(screen.getByTestId('attachment-name').textContent).toMatch(/^screenshot-.*\.jpg$/);
+      expect(screen.getByTestId('attachment-shrunk').textContent).toContain('shrunk from 7.8 MB');
+    });
+
+    it('refuses a paste that cannot be shrunk under the cap', async () => {
+      shrink.mockResolvedValue(null);
+      renderModal();
+      const huge = new File(['png'], 'image.png', { type: 'image/png' });
+      Object.defineProperty(huge, 'size', { value: 7.8 * 1024 * 1024 });
+
+      fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [huge] } });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('attachment-error').textContent).toBe(SHRINK_FAILED_MESSAGE),
+      );
+      expect(screen.queryByTestId('attachment-list')).toBeNull();
+    });
+
+    it('never re-encodes a picked file, even an oversize one', () => {
+      renderModal();
+      attach(png('big.png', 5 * 1024 * 1024));
+      expect(shrink).not.toHaveBeenCalled();
+      expect(screen.getByTestId('attachment-error').textContent).toBe('big.png: each file can be at most 4 MB.');
     });
 
     it('warns in plain language when the issue was filed without its files', async () => {
