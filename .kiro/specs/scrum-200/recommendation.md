@@ -20,9 +20,13 @@ decisions SCRUM-203 inherits.
    it.
 4. **CHS NONNA is not mounted under the chart.** The paper-chart mode is opaque and covers U.S. water
    only; under it NONNA would be invisible. NONNA belongs to the B.C. view on a dark base.
-5. **Seamap (vector): rejected.** SCRUM-201 measured +309 kB gzip against 382 kB of current JS; its
-   licence ambiguity (CC-BY 4.0 in the repository, ODbL on the docs page) is therefore moot.
-   **CHS ENC: excluded** on licensing cost.
+5. **Seamap (vector): kept as an option, not as the chart overlay.** The product decision is to keep
+   it for its rendering of navigation aids, so SCRUM-201's costs are recorded rather than treated as
+   a rejection: +309 kB gzip against 382 kB of current JS, maxzoom 14, and a licence that needs
+   settling (CC-BY 4.0 on the tiles, ODbL on the OSM-derived layers inside the style). It is not a
+   chart substitute — at 1.0 under the wind gradient its pale style is the least legible of the
+   three — so it is offered as an optional base style in SCRUM-203, with the gradient off and a
+   light-map contrast pass. **CHS ENC: excluded** on licensing cost.
 
 ## Method
 
@@ -60,11 +64,17 @@ neither can signal "no chart here" either.
 | NOAA CD at 1.0, Strait of Georgia z11 | 0.76 | 78 % | coastline only, no soundings |
 | CHS NONNA at 0.7 over `osm_dark`, Victoria z12 | **0.44** | **0 %** | base map, street labels and contours all legible: a true overlay |
 
-Two conclusions follow. First, **no opacity turns the paper chart into an overlay**: at 0.7 the frame
-is neither base map (dark base invisible) nor chart (paper washed to 1 % light). The mode either
-replaces the base map at full strength or does not work. Second, **the conflict is the gradient, not
-the barbs**: with the gradient off, the chart at 1.0 is the cleanest image in the review, and the
-barbs and chevrons read against paper without any special treatment beyond a halo.
+Two conclusions follow. First, **the service cannot produce a true overlay**: it ignores `TRANSPARENT`
+and ships one opaque raster, so any opacity is a flat blend of paper and base. At 0.7 the blend is
+usable but compromised. A second render at Oak Harbor z14 (SCRUM-200's own review) keeps the OSM
+street labels legible through the paper — Northwest Crosby Avenue and West Crescent Harbor Road read
+at 0.7 — so the base is not lost the way it is at 1.0; but the chart's buff, yellow and pink depth
+fills are pulled toward one another, and colour-coded depth is exactly what a chart is for. Full
+strength reads as a chart; 0.7 reads as a washed chart over a faint base. That is why the primary
+delivery is a base map rather than an overlay, and why 0.7 is not offered as a default. Second, **the
+conflict is the gradient, not the barbs**: with the gradient off, the chart at 1.0 is the cleanest
+image in the review, and the barbs and chevrons read against paper without any special treatment
+beyond a halo.
 
 ## B.C. record (as the acceptance criteria require)
 
@@ -75,6 +85,12 @@ barbs and chevrons read against paper without any special treatment beyond a hal
 - **Strait of Georgia z11:** coastline and a little shallow-water tint, no soundings.
 - **Vancouver z12:** 94 % blank paper. This is the case the coverage notice has to explain, and the
   case that makes NONNA the B.C. answer rather than a chart.
+- **Coverage guard:** the service answers outside coverage with one uniform tile (887-888 B), so it
+  can never signal "no chart here" by staying silent. Ink share on the tile at the Strait of Georgia
+  (49.93 N) is 0 % at z10, z12 and z14, pixel standard deviation 0.000: a flat cream sheet at every
+  zoom, which as an overlay hides the base map and the barbs rather than leaving a hole. The chart
+  mode therefore needs a client-side clip south of about 49.6 N and a zoom floor of 12, and north of
+  that clip the coverage notice is the only signal on offer.
 
 ## `requirements.md` delta
 
@@ -96,7 +112,7 @@ barbs and chevrons read against paper without any special treatment beyond a hal
 | NOAA Chart Display | WMS 1.1.1 PNG, **opaque** | public domain, CC0; credit + "Not for navigation" | echoes Origin | 8-18 tested, maxZoom 19 | full | full (border zone) | full | ~0.6 s, `max-age=0` | yes, no filter | **adopted, as a base map only** (SCRUM-203) |
 | NOAA ENC Online | WMS 1.1.1 PNG, **opaque** | as above | echoes Origin | 8-18 | full | full | full | ~0.6 s, `max-age=0` | yes | **rejected for the overlay**; equivalent coverage and opacity to Chart Display, so it adds nothing here |
 | CHS NONNA | WMS 1.3.0 PNG, **transparent** | OGL-Canada + CHS derivative notice | `*` with Origin | 8-12 useful | none | overview | none | ~0.4-0.5 s | yes | **adopted for B.C. as an overlay** (new ticket) |
-| Open Waters Seamap | vector, MapLibre | CC-BY 4.0 / ODbL unresolved | `*` | max 14 | thin | thin | sparse | n/a | WebGL capture risk | **rejected**: +309 kB gzip, maxzoom 14, licence unresolved |
+| Open Waters Seamap | vector, MapLibre | CC-BY 4.0 tiles, ODbL for the OSM-derived layers | `*` | max 14 | thin | thin | sparse | n/a | WebGL capture solved (SCRUM-204) | **kept as an option** (product decision), offered as a base style in SCRUM-203 with the gradient off; costs: +309 kB gzip, maxzoom 14 |
 | OpenSeaMap | XYZ PNG, transparent | ODbL data, CC-BY-SA tiles; credit required | `*` | to 19 | empty z14+ | sparse | some at z12 | 0.3-1 s | yes | **kept as shipped** (SCRUM-175), the only B.C. aid source |
 | CHS ENC | WMS PNG | Crown copyright, licence required | echoes Origin | 8-18 | none | full | none | ~0.5 s | yes | **excluded** on licensing cost (2026-11-25) |
 
@@ -118,6 +134,8 @@ SCRUM-201/SCRUM-199 closed the vector and export questions.
 | Coverage notice wording confirmed | blank paper is a real uniform colour with no marker, so the notice is the only signal available |
 | NONNA explicitly out of the chart mode | opaque chart + no B.C. coverage = nothing to layer; NONNA is its own B.C. ticket |
 | Seamark independence confirmed | B.C. depends on it; duplication in U.S. water is a wording issue |
+| Seamap stays one of the base styles | kept as an option rather than dropped, so the style switch has to accept a MapLibre canvas layer beside the raster chart |
+| Coverage clip and zoom floor | opaque blank paper outside coverage, so the chart mode clips south of about 49.6 N and starts at z12 instead of painting a cream sheet |
 
 ## Limitations
 
