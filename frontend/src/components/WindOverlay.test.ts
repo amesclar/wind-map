@@ -69,8 +69,8 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
   it('builds an unselected 32px icon without a highlight ring, colored by temperature', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), false);
     const html = icon.options.html as string;
-    expect(icon.options.iconSize).toEqual([32, 32]);
-    expect(icon.options.iconAnchor).toEqual([16, 16]);
+    expect(icon.options.iconSize).toEqual([40, 40]);
+    expect(icon.options.iconAnchor).toEqual([20, 20]);
     expect(html).toContain('data-selected="false"');
     expect(html).not.toContain('box-shadow');
     expect(html).toContain('rotate(90, 25, 25)');
@@ -83,7 +83,7 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
 
     const haloed = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
     expect(haloed).toContain('wind-barb-halo');
-    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 32));
+    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 40));
   });
 
   it('adds crisp outline passes on the light chart base and none on the dark ones (SCRUM-208)', () => {
@@ -98,11 +98,11 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), true);
     const html = icon.options.html as string;
-    expect(icon.options.iconSize).toEqual([40, 40]);
-    expect(icon.options.iconAnchor).toEqual([20, 20]);
+    expect(icon.options.iconSize).toEqual([48, 48]);
+    expect(icon.options.iconAnchor).toEqual([24, 24]);
     expect(html).toContain('data-selected="true"');
     expect(html).toContain('box-shadow:0 0 0 2px #ffffff');
-    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 40));
+    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 48));
   });
 });
 
