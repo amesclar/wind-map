@@ -11,6 +11,8 @@ const parseApiKey = (stored: string | null) => stored ?? '';
 const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
 const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
+// Off by default: the chart reduces the gradient on its own, so only other bases change (SCRUM-213).
+const parseHighContrast = (stored: string | null) => stored === 'true';
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
 const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
 const parseBcDepth = (stored: string | null) => stored === 'true'; // default off (SCRUM-205)
@@ -40,6 +42,12 @@ export function useMapSettings() {
   const [windColorOverlayVisible, setWindColorOverlayVisible] = useLocalStorageState(
     STORAGE_KEYS.windColorOverlayVisible,
     parseColorOverlay,
+  );
+  // High contrast gradient (SCRUM-213): opt-in, so the chart's automatic reduction is the only
+  // default and the other bases keep full colour until asked otherwise.
+  const [windColorHighContrast, setWindColorHighContrast] = useLocalStorageState(
+    STORAGE_KEYS.windColorHighContrast,
+    parseHighContrast,
   );
   // Set by the layer toggle in SCRUM-100; the overlay itself ships in SCRUM-99.
   const [waterCurrentsVisible, setWaterCurrentsVisible] = useLocalStorageState(
@@ -90,6 +98,8 @@ export function useMapSettings() {
     setWindOverlayVisible,
     windColorOverlayVisible,
     setWindColorOverlayVisible,
+    windColorHighContrast,
+    setWindColorHighContrast,
     waterCurrentsVisible,
     setWaterCurrentsVisible,
     seamarksVisible,

@@ -131,6 +131,18 @@ describe('useMapSettings (SCRUM-92)', () => {
     act(() => result.current.setWindColorOverlayVisible(false));
     expect(localStorage.getItem(STORAGE_KEYS.windColorOverlayVisible)).toBe('false');
   });
+
+  it('defaults the high contrast gradient to off and persists it (SCRUM-213)', () => {
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(false);
+
+    const { result } = renderHook(() => useMapSettings());
+    act(() => result.current.setWindColorHighContrast(true));
+    expect(localStorage.getItem(STORAGE_KEYS.windColorHighContrast)).toBe('true');
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(true);
+
+    act(() => result.current.setWindColorHighContrast(false));
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(false);
+  });
 });
 
 describe('useUnitPreferences (SCRUM-92, SCRUM-107)', () => {

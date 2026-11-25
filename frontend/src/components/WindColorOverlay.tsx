@@ -17,6 +17,21 @@ export const WIND_COLOR_OPACITY = 0.55;
  * so the Seamap base style (SCRUM-206) reuses the same value instead of inventing another.
  */
 export const WIND_COLOR_OPACITY_ON_CHART = 0.35;
+
+/**
+ * Which wash strength to draw (SCRUM-203, SCRUM-213): the chart always reduces it so its soundings
+ * stay readable, and the user's high-contrast choice asks for the same reduction on the other bases.
+ * `WIND_COLOR_OPACITY_ON_CHART` remains the single source of the reduced number.
+ */
+export function windColorOpacity({
+  onChart,
+  highContrast,
+}: {
+  onChart: boolean;
+  highContrast: boolean;
+}): number {
+  return onChart || highContrast ? WIND_COLOR_OPACITY_ON_CHART : WIND_COLOR_OPACITY;
+}
 /** One sample per 4 CSS pixels; the browser smooths the upscaled canvas. */
 export const WIND_COLOR_SAMPLE_PX = 4;
 

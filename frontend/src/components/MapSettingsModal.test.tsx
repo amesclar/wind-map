@@ -13,6 +13,8 @@ const BASE_PROPS = {
   onToggleWindOverlay: vi.fn(),
   windColorOverlayVisible: false,
   onToggleWindColorOverlay: vi.fn(),
+  windColorHighContrast: false,
+  onToggleWindColorHighContrast: vi.fn(),
   waterCurrentsVisible: false,
   onToggleWaterCurrents: vi.fn(),
   seamarksVisible: false,
@@ -206,6 +208,37 @@ describe('MapSettingsModal water currents toggle (SCRUM-100)', () => {
     expect(onToggle).toHaveBeenCalledWith(true);
     expect(BASE_PROPS.onToggleWindOverlay).not.toHaveBeenCalled();
     expect(BASE_PROPS.onToggleWindColorOverlay).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapSettingsModal high contrast gradient (SCRUM-213)', () => {
+  it('is off by default and reports the flipped value', () => {
+    const onToggle = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        windColorHighContrast={false}
+        onToggleWindColorHighContrast={onToggle}
+      />,
+    );
+
+    const toggle = screen.getByTestId('wind-color-high-contrast-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('says the chart already draws lighter, and reflects the saved choice', () => {
+    render(<MapSettingsModal {...BASE_PROPS} windColorHighContrast />);
+
+    expect(screen.getByTestId('wind-color-high-contrast-toggle').getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(
+      within(screen.getByTestId('map-settings-body')).getByText(
+        /always does this so its soundings stay readable/,
+      ),
+    ).toBeTruthy();
   });
 });
 

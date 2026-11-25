@@ -24,6 +24,9 @@ interface MapSettingsModalProps {
   onToggleWindOverlay: (visible: boolean) => void;
   windColorOverlayVisible: boolean;
   onToggleWindColorOverlay: (visible: boolean) => void;
+  /** Forces the chart's reduced gradient opacity on every base (SCRUM-213). */
+  windColorHighContrast: boolean;
+  onToggleWindColorHighContrast: (enabled: boolean) => void;
   /** Ocean-current chevrons (SCRUM-100), independent of the wind layers. */
   waterCurrentsVisible: boolean;
   onToggleWaterCurrents: (visible: boolean) => void;
@@ -46,6 +49,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onToggleWindOverlay,
   windColorOverlayVisible,
   onToggleWindColorOverlay,
+  windColorHighContrast,
+  onToggleWindColorHighContrast,
   waterCurrentsVisible,
   onToggleWaterCurrents,
   seamarksVisible,
@@ -327,6 +332,33 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
                         windColorOverlayVisible ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* High contrast gradient (SCRUM-213): the chart's rule, available everywhere. */}
+                <div className="mt-2 flex items-center justify-between p-2.5 rounded-lg border border-dark-600/70 bg-dark-900/40">
+                  <div>
+                    <div className="text-xs font-medium text-gray-100">High contrast gradient</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      Draws the gradient at the chart's lighter strength on every base. The Nautical
+                      Paper Chart always does this so its soundings stay readable; turn this on for
+                      the same on the other bases.
+                    </div>
+                  </div>
+                  <button
+                    data-testid="wind-color-high-contrast-toggle"
+                    type="button"
+                    onClick={() => onToggleWindColorHighContrast(!windColorHighContrast)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
+                      windColorHighContrast ? 'bg-sky-500' : 'bg-dark-600'
+                    }`}
+                    aria-pressed={windColorHighContrast}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        windColorHighContrast ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
                   </button>
