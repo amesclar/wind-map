@@ -136,6 +136,74 @@ async def test_cached_points_keep_the_cell(open_meteo):
 
 
 @pytest.mark.asyncio
+async def test_cell_on_land_is_dropped(open_meteo):
+    """The Marine mask calls Whidbey sea; elevation puts the cell on the island (SCRUM-238)."""
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+
+
+@pytest.mark.asyncio
+async def test_sea_level_cell_is_kept(open_meteo):
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.20834, -122.54166)))
+    open_meteo.respond_elevation(0.0)
+
+    result = await get_grid_currents([(48.19, -122.51)])
+
+    assert (result[0].latitude, result[0].longitude) == (48.20834, -122.54166)
+
+
+@pytest.mark.asyncio
+async def test_elevation_is_looked_up_once_per_cell(open_meteo):
+    open_meteo.respond(
+        [
+            current_item(0.4, 90.0, cell=(48.29166, -122.62499)),
+            current_item(0.5, 90.0, cell=(48.29166, -122.62499)),
+            current_item(0.6, 90.0, cell=(48.20834, -122.54166)),
+        ]
+    )
+    open_meteo.respond_elevation([21.0, 0.0])
+
+    result = await get_grid_currents([(48.30, -122.65), (48.29, -122.63), (48.19, -122.51)])
+
+    assert [(point.latitude, point.longitude) for point in result] == [(48.20834, -122.54166)]
+    assert len(open_meteo.elevation_calls) == 1
+    assert open_meteo.elevation_calls[0]["params"]["latitude"] == "48.29166,48.20834"
+
+
+@pytest.mark.asyncio
+async def test_land_cells_are_cached_without_another_lookup(open_meteo):
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+
+    assert open_meteo.call_count == 1
+    assert len(open_meteo.elevation_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_elevation_failure_keeps_the_cell(open_meteo):
+    """Without a land verdict, keep the current: hiding real water is worse than the rare miss."""
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.fail_elevation(upstream_error("elevation down"))
+
+    result = await get_grid_currents([(48.30, -122.65)])
+
+    assert [(point.latitude, point.longitude) for point in result] == [(48.29166, -122.62499)]
+
+
+@pytest.mark.asyncio
+async def test_hourly_land_cells_are_dropped(open_meteo):
+    open_meteo.respond(*hourly_payload([(1.0, 90.0)] * 24, day=HOUR, cells=[(48.29166, -122.62499)]))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)], at=HOUR) == []
+
+
+@pytest.mark.asyncio
 async def test_fetch_requests_knots_and_the_current_variables(open_meteo):
     open_meteo.respond(current_item(3.0, 350.0))
 

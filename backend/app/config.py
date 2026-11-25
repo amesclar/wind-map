@@ -77,11 +77,17 @@ OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 # Ocean currents live on their own host (SCRUM-96).
 OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
+# Land/water test for current cells (SCRUM-238): the Marine land mask is coarser than the chart,
+# so a cell it calls sea can sit on a narrow island. Elevation puts the chevron back on water.
+OPEN_METEO_ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+# A current cell whose centre is above this elevation is land, not water (SCRUM-238).
+LAND_ELEVATION_THRESHOLD_M = 0.5
 
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
 OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 400 points)
 OPEN_METEO_MARINE_TIMEOUT_SECONDS = 20.0  # batched marine request (same grid size)
+OPEN_METEO_ELEVATION_TIMEOUT_SECONDS = 8.0  # batched elevation lookup for a grid's cells
 OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
 OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
