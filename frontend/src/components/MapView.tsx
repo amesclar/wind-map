@@ -638,7 +638,6 @@ export const MapView: React.FC<MapViewProps> = ({
         points={currentPoints}
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
-        halo={lightBase}
       />
       {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (

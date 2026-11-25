@@ -1,6 +1,6 @@
 import React from 'react';
 import type { WindSpeedUnit } from '../types';
-import { CURRENT_TIERS, tierRangeLabel } from '../utils/currentTiers';
+import { CURRENT_TIERS, CURRENT_TIER_OUTLINE, tierRangeLabel } from '../utils/currentTiers';
 import { SPEED_UNIT_LABEL } from '../utils/units';
 
 /**
@@ -27,8 +27,8 @@ export const CurrentLegend: React.FC<{ speedUnit: WindSpeedUnit }> = ({ speedUni
           <span key={tier.id} data-testid={`current-legend-${tier.id}`} className="flex items-center gap-1 text-[9px] text-gray-300">
             <span
               aria-hidden="true"
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: tier.color, opacity: tier.opacity }}
+              className="inline-block h-2 w-2 rounded-full border"
+              style={{ backgroundColor: tier.color, borderColor: CURRENT_TIER_OUTLINE }}
             />
             {tierRangeLabel(tier, speedUnit)}
           </span>
