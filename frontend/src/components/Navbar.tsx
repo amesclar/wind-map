@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { APP_VERSION } from '../version';
+import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
   Layers,
@@ -34,8 +35,8 @@ interface NavbarProps {
   canRefresh?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** Tooltip: why the button is disabled, or what it will do. */
-  refreshTitle?: string;
+  /** Hover hint: why the button is disabled, or what it will do (SCRUM-257). */
+  refreshHint?: RefreshHint;
   /** Non-blocking failure of the last click; the old data stays on screen. */
   refreshError?: string | null;
 }
@@ -57,9 +58,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   canRefresh = false,
   refreshing = false,
   onRefresh,
-  refreshTitle,
+  refreshHint,
   refreshError = null,
 }) => {
+  const hint = refreshHint ?? {
+    text: canRefresh ? 'Refresh data now' : 'Latest run already loaded',
+    detail: null,
+  };
+  const hintDescription = hint.detail ? `${hint.text} · ${hint.detail}` : hint.text;
+  // A disabled button takes no pointer events and no focus, so the hint hangs off a wrapper.
+  const [hintOpen, setHintOpen] = useState(false);
+
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
       {/* Brand & Title */}
@@ -125,17 +134,41 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Refresh (SCRUM-113): its own visibility rule, since the model dropdown hides below lg */}
-        <button
-          onClick={() => onRefresh?.()}
-          disabled={!canRefresh || refreshing}
-          aria-busy={refreshing}
-          aria-label="Refresh data now"
-          title={refreshTitle ?? 'Refresh data now'}
-          data-testid="refresh-data"
-          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        <span
+          className="relative inline-flex"
+          data-testid="refresh-zone"
+          onMouseEnter={() => setHintOpen(true)}
+          onMouseLeave={() => setHintOpen(false)}
+          onFocus={() => setHintOpen(true)}
+          onBlur={() => setHintOpen(false)}
         >
-          <RefreshCw className={`w-4 h-4 text-sky-400${refreshing ? ' animate-spin' : ''}`} />
-        </button>
+          <button
+            onClick={() => onRefresh?.()}
+            disabled={!canRefresh || refreshing}
+            aria-busy={refreshing}
+            aria-label="Refresh data now"
+            aria-describedby="refresh-hint"
+            data-testid="refresh-data"
+            className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-4 h-4 text-sky-400${refreshing ? ' animate-spin' : ''}`} />
+          </button>
+          {/* Always in the DOM, so the reason is announced even though the button cannot be focused. */}
+          <span id="refresh-hint" className="sr-only">
+            {hintDescription}
+          </span>
+          {hintOpen && (
+            <div
+              role="tooltip"
+              aria-hidden="true"
+              data-testid="refresh-hint-box"
+              className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-dark-600 bg-dark-900/95 px-2.5 py-2 text-[11px] leading-snug text-gray-200 shadow-lg"
+            >
+              <div>{hint.text}</div>
+              {hint.detail && <div className="mt-0.5 text-gray-400">{hint.detail}</div>}
+            </div>
+          )}
+        </span>
 
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
