@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import type { GridWindPoint, SelectedGridPoint, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
-import { generateWindBarbSvg } from './WindBarb';
+import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
 import { escapeHtml } from '../utils/html';
@@ -14,7 +14,7 @@ interface WindOverlayProps {
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Dark halo so temperature colors stay readable over the gradient (SCRUM-123). */
   halo?: boolean;
-  /** Paper chart base (SCRUM-203): the CSS halo gains a light inner glow. */
+  /** Paper chart base (SCRUM-203): SVG outline passes replace the CSS glow (SCRUM-208). */
   lightBase?: boolean;
   /** Units and direction display for the barb pop-up (SCRUM-126), the user's settings. */
   unitSystem?: UnitSystem;
@@ -31,6 +31,14 @@ function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boo
 
 /** Fallback color when a grid point has no temperature. */
 export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
+
+/**
+ * Chart-base outline pass (SCRUM-208): one tight dark rim, drawn as an SVG stroke behind the glyph.
+ * At 32 px the icon is 32/50 of the viewBox, so this 1.2-unit rim shows as about 0.8 px — enough to
+ * separate a green or teal barb from white water and cream land without the white piping that made
+ * a two-rim halo look washed out. Real geometry instead of a blurred CSS glow keeps the edge sharp.
+ */
+export const CHART_BARB_OUTLINES: WindBarbOutline[] = [{ color: '#161b22', width: 0.9 }];
 const BARB_SIZE = 32;
 const SELECTED_BARB_SIZE = 40;
 
@@ -43,6 +51,7 @@ export function generateGridBarbSvg(
   directionDeg: number,
   tempF: number | null | undefined,
   size: number = BARB_SIZE,
+  outlines?: WindBarbOutline[],
 ): string {
   const hasTemp = typeof tempF === 'number';
   return generateWindBarbSvg({
@@ -52,6 +61,7 @@ export function generateGridBarbSvg(
     size,
     showLabel: false,
     colorOverride: hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
+    outlines,
   });
 }
 
@@ -62,7 +72,13 @@ export function buildGridBarbIcon(
   lightBase = false,
 ): L.DivIcon {
   const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
-  const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
+  const svgHtml = generateGridBarbSvg(
+    pt.wind_speed_knots,
+    pt.wind_direction_deg,
+    pt.temperature_f,
+    size,
+    lightBase ? CHART_BARB_OUTLINES : undefined,
+  );
   // Selected barb gets a highlight ring: white on the dark bases, inverted on the light chart
   // sheet where white would disappear (SCRUM-203).
   const ring = lightBase
