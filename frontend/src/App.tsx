@@ -223,6 +223,7 @@ export const App: React.FC = () => {
             containerRef={mapContainerRef}
             onGridLoaded={mapExport.handleGridLoaded}
             onGridQuotaExhausted={handleGridQuotaExhausted}
+            onGridLoadingChange={mapExport.handleGridLoadingChange}
           />
         </div>
         <ForecastTimeSelector

@@ -74,6 +74,62 @@ describe('gridDimensions (SCRUM-92)', () => {
   });
 });
 
+describe('useWindGrid loading report (SCRUM-242)', () => {
+  it('reports a view request as in flight until its points are accepted', async () => {
+    const pending = deferred<GridWindPoint[]>();
+    vi.mocked(api.fetchWindGrid).mockReturnValueOnce(pending.promise);
+    const { map } = fakeMap();
+    const onLoading = vi.fn();
+
+    renderHook(() => useWindGrid(map, 'best_match', true, null, undefined, undefined, onLoading));
+
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(true));
+    // The only "not loading" report so far is the mount one; nothing settles while in flight.
+    const inFlightCalls = onLoading.mock.calls.length;
+    expect(onLoading.mock.calls.filter(([loading]) => loading === false)).toHaveLength(1);
+
+    pending.resolve([point(48)]);
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(false));
+    expect(onLoading.mock.calls).toHaveLength(inFlightCalls + 1);
+  });
+
+  it('does not report an aborted request as finished while a newer one runs', async () => {
+    const first = deferred<GridWindPoint[]>();
+    const second = deferred<GridWindPoint[]>();
+    vi.mocked(api.fetchWindGrid).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { map } = fakeMap();
+    const onLoading = vi.fn();
+
+    const { rerender } = renderHook(
+      ({ model }: { model: string }) =>
+        useWindGrid(map, model, true, null, undefined, undefined, onLoading),
+      { initialProps: { model: 'best_match' } },
+    );
+
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(true));
+    const inFlightCalls = onLoading.mock.calls.length;
+    rerender({ model: 'gfs_seamless' });
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+    // The aborted request reported nothing: the newer one is still in flight.
+    expect(onLoading).toHaveBeenCalledTimes(inFlightCalls);
+
+    second.resolve([point(48)]);
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(false));
+    expect(onLoading.mock.calls).toHaveLength(inFlightCalls + 1);
+  });
+
+  it('reports a failed request as finished, so an export is not held for the deadline', async () => {
+    vi.mocked(api.fetchWindGrid).mockRejectedValueOnce(new Error('network down'));
+    const { map } = fakeMap();
+    const onLoading = vi.fn();
+
+    renderHook(() => useWindGrid(map, 'best_match', true, null, undefined, undefined, onLoading));
+
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(false));
+    expect(onLoading).toHaveBeenCalledWith(true);
+  });
+});
+
 describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
   it('requests each view once and only refetches when the view changes', async () => {
     vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
