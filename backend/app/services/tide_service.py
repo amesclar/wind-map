@@ -1,0 +1,182 @@
+"""Tide service (SCRUM-195): sea level at one point with the nearest high and low.
+
+Values come from Open-Meteo's Marine API (`sea_level_height_msl`, MeteoFrance SMOC): hourly,
+about 8 km, 10 days, updated once a day. The value is sea level *including tides* referred to
+global mean sea level, not a chart datum, and Open-Meteo calls it unsuitable for navigation, so
+responses name the datum and the pop-up repeats the caveat.
+
+A pop-up needs the selected hour plus the nearest high and low around it, so one request covers
+the previous, selected and following UTC day and every hour of that window is cached. Extremes
+are found by neighbour comparison (which also says high or low unambiguously) and refined with a
+three-point parabola, which turns hourly samples into a time to the minute and a peak height.
+"""
+
+import logging
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+import httpx
+
+from backend.app.config import (
+    CACHE_TTL_SECONDS,
+    OPEN_METEO_MARINE_TIMEOUT_SECONDS,
+    OPEN_METEO_MARINE_URL,
+)
+from backend.app.database import db_connection
+from backend.app.models import TideExtreme, TidePointResponse, TideSample
+from backend.app.services import open_meteo
+from backend.app.services.model_info import floor_hour
+from backend.app.services.time_window import hour_key
+from backend.app.units import coord_key
+
+logger = logging.getLogger(__name__)
+
+TIDE_VARIABLE = "sea_level_height_msl"
+DATUM = "msl"
+
+
+@dataclass(frozen=True)
+class Height:
+    """One hourly sample."""
+
+    moment: datetime
+    height_m: float
+
+
+def _stamp(moment: datetime) -> str:
+    """UTC minute stamp, e.g. `2026-11-25T15:38` (the frontend reads it as UTC)."""
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M")
+
+
+def _parse(stamp: str) -> datetime:
+    return datetime.strptime(stamp, "%Y-%m-%dT%H:%M").replace(tzinfo=UTC)
+
+
+def _window_start(moment: datetime) -> datetime:
+    """Midnight UTC of the day before the selected hour."""
+    day = moment.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    return day - timedelta(days=1)
+
+
+def window_hours(moment: datetime) -> list[str]:
+    """Cache hours covering the previous, selected and following UTC day."""
+    start = _window_start(moment)
+    return [hour_key(start + timedelta(hours=step)) for step in range(72)]
+
+
+async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> TidePointResponse:
+    """Sea level around `at` (or now) with the nearest high and low on either side."""
+    moment = (at or floor_hour(datetime.now(UTC))).astimezone(UTC)
+    hours = window_hours(moment)
+    cached = _read_window(lat, lon, hours)
+    if any(hour not in cached for hour in hours):
+        cached = await _fetch_window(lat, lon, moment)
+
+    samples = [Height(_parse(hour), height) for hour in hours if (height := cached.get(hour)) is not None]
+    last, following = derive_extremes(samples, moment)
+    return TidePointResponse(
+        latitude=lat,
+        longitude=lon,
+        datum=DATUM,
+        unit="m",
+        hour=hour_key(moment),
+        points=[TideSample(time=_stamp(sample.moment), height_m=round(sample.height_m, 3)) for sample in samples],
+        last_extreme=last,
+        next_extreme=following,
+    )
+
+
+def _refine(previous: Height, current: Height, following: Height, kind: str) -> TideExtreme:
+    """Parabolic refinement of one extreme: time to the minute and a corrected height."""
+    denominator = previous.height_m - 2 * current.height_m + following.height_m
+    offset_hours = 0.0
+    height = current.height_m
+    if denominator != 0:
+        offset_hours = 0.5 * (previous.height_m - following.height_m) / denominator
+        offset_hours = max(-1.0, min(1.0, offset_hours))
+        height = current.height_m - 0.25 * (previous.height_m - following.height_m) * offset_hours
+    peak = current.moment + timedelta(hours=offset_hours)
+    peak = (peak + timedelta(seconds=30)).replace(second=0, microsecond=0)
+    return TideExtreme(type=kind, time=_stamp(peak), height_m=round(height, 3))
+
+
+def derive_extremes(samples: list[Height], moment: datetime) -> tuple[TideExtreme | None, TideExtreme | None]:
+    """Nearest high/low at or before `moment`, and the first one after it.
+
+    A sample above both neighbours is a high and one below both is a low, so a flat or
+    single-slope stretch never invents an extreme and the series edges are not extrapolated.
+    """
+    extremes: list[TideExtreme] = []
+    for index in range(1, len(samples) - 1):
+        previous, current, following = samples[index - 1], samples[index], samples[index + 1]
+        if current.height_m > previous.height_m and current.height_m >= following.height_m:
+            extremes.append(_refine(previous, current, following, "high"))
+        elif current.height_m < previous.height_m and current.height_m <= following.height_m:
+            extremes.append(_refine(previous, current, following, "low"))
+
+    last = next((extreme for extreme in reversed(extremes) if _parse(extreme.time) <= moment), None)
+    following = next((extreme for extreme in extremes if _parse(extreme.time) > moment), None)
+    return last, following
+
+
+def _read_window(lat: float, lon: float, hours: list[str]) -> dict[str, float | None]:
+    """Cached heights for the window; a NULL row means "checked, no water here"."""
+    lat_key, lon_key = coord_key(lat, lon)
+    placeholders = ",".join("?" for _ in hours)
+    with db_connection() as conn:
+        rows = conn.execute(
+            f"SELECT hour, height_m FROM tide_point_cache "  # noqa: S608
+            f"WHERE lat_key=? AND lon_key=? AND hour IN ({placeholders}) AND expires_at>?",
+            (lat_key, lon_key, *hours, time.time()),
+        ).fetchall()
+    return {row["hour"]: row["height_m"] for row in rows}
+
+
+def _store(lat: float, lon: float, values: dict[str, float | None], now: float) -> None:
+    """Write every hour of the fetched window, empty rows included (inland is not refetched)."""
+    lat_key, lon_key = coord_key(lat, lon)
+    rows = [(lat_key, lon_key, hour, now, now + CACHE_TTL_SECONDS, height) for hour, height in values.items()]
+    with db_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO tide_point_cache (lat_key, lon_key, hour, cached_at, expires_at, height_m)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(lat_key, lon_key, hour) DO UPDATE SET
+                cached_at=excluded.cached_at,
+                expires_at=excluded.expires_at,
+                height_m=excluded.height_m
+            """,
+            rows,
+        )
+
+
+async def _fetch_window(lat: float, lon: float, moment: datetime) -> dict[str, float | None]:
+    """One marine request for the three-day window, cached per hour."""
+    start = _window_start(moment)
+    end = start + timedelta(days=2)
+    data = await open_meteo.get_json(
+        OPEN_METEO_MARINE_URL,
+        {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": TIDE_VARIABLE,
+            "timezone": "UTC",
+            "start_date": start.strftime("%Y-%m-%d"),
+            "end_date": end.strftime("%Y-%m-%d"),
+        },
+        timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
+    )
+    item = data[0] if isinstance(data, list) else data
+    hourly = item.get("hourly") or {}
+    times = hourly.get("time") or []
+    heights = hourly.get(TIDE_VARIABLE) or []
+    if not times:
+        raise httpx.HTTPError("Open-Meteo marine response did not include hourly times")
+
+    values = {
+        hour_key(_parse(stamp)): (None if index >= len(heights) or heights[index] is None else float(heights[index]))
+        for index, stamp in enumerate(times)
+    }
+    _store(lat, lon, values, time.time())
+    return values

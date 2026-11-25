@@ -144,3 +144,31 @@ export interface CurrentGridResponse {
 
 /** The grid point whose barb is selected (highlighted) on the map. */
 export type SelectedGridPoint = Pick<GridWindPoint, 'latitude' | 'longitude'>;
+
+/** One hourly sea-level sample from GET /api/tides/point (SCRUM-195). */
+export interface TideSample {
+  /** UTC minute stamp, e.g. `2026-11-25T12:00`; read it as UTC. */
+  time: string;
+  /** Metres above global mean sea level. */
+  height_m: number;
+}
+
+/** A high or low tide, time refined to the minute (SCRUM-195). */
+export interface TideExtreme {
+  type: 'high' | 'low';
+  time: string;
+  height_m: number;
+}
+
+/** GET /api/tides/point payload; `points` is empty over land (SCRUM-195). */
+export interface TidePointResponse {
+  latitude: number;
+  longitude: number;
+  /** The reference for the heights: mean sea level, not a chart datum. */
+  datum: string;
+  unit: string;
+  hour: string;
+  points: TideSample[];
+  last_extreme: TideExtreme | null;
+  next_extreme: TideExtreme | null;
+}

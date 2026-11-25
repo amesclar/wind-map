@@ -28,6 +28,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
   - *NOAA GFS Seamless*
   - *CMC GEM Seamless*
   - *DWD ICON Seamless*
+- **Tide Pop-ups:** clicking a saved location or a wind barb also shows the tide there — height above mean sea level for the selected hour, plus the nearest low and high with their times. Tides come from Open-Meteo's Marine model, independent of the weather model, and the block is labelled *Not for navigation* because mean sea level is not a chart datum.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
 - **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
@@ -60,11 +61,12 @@ wind-map/
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode, feedback)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, tides, geocode, feedback)
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
 │   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+│   │                            # tide_service.py (sea level, high & low),
 │   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)

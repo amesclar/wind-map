@@ -33,7 +33,11 @@ const seamap = vi.hoisted(() => ({ createSeamapLayer: vi.fn(), mountSeamapLayer:
 vi.mock('./seamapLayer', () => seamap);
 
 // The shared wind grid fetch lives in MapView (SCRUM-122).
-vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn(), parseQuotaExhausted: vi.fn() }));
+vi.mock('../api/client', () => ({
+  fetchWindGrid: vi.fn(),
+  fetchPointTide: vi.fn(),
+  parseQuotaExhausted: vi.fn(),
+}));
 
 beforeEach(() => {
   resetLeafletMock();

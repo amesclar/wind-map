@@ -195,6 +195,7 @@ export function buildGridPointPopup(
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px; display: flex; align-items: center; gap: 4px;">🧭 ${direction}</div>
       ${timeLabel ? `<div style="margin-top: 2px; color: #9ca3af; font-size: 11px;">🕒 ${escapeHtml(timeLabel)}</div>` : ''}
+      <div data-tide-slot data-tide-lat="${pt.latitude}" data-tide-lon="${pt.longitude}"></div>
     </div>
   `;
 }

@@ -17,6 +17,7 @@ import { CurrentLegend } from './CurrentLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
+import { buildTideBlockHtml, loadPointTide } from '../utils/tideBlock';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
@@ -162,6 +163,7 @@ export function buildLocationPopup(
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">🧭 ${escapeHtml(direction)}</div>
       ${validTimeLabel ? `<div style="margin-top: 2px; color: #9ca3af; font-size: 11px;">🕒 ${escapeHtml(validTimeLabel)}</div>` : ''}
+      <div data-tide-slot data-tide-lat="${loc.latitude}" data-tide-lon="${loc.longitude}"></div>
     </div>
   `;
 }
@@ -274,6 +276,34 @@ export const MapView: React.FC<MapViewProps> = ({
     // The Leaflet map is created once; selectedLocation only sets its initial center.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fill a pop-up's tide slot when it opens (SCRUM-195). The slot carries only the point; the
+  // hour is this render's `validTime`, so the tide matches the rest of the pop-up.
+  useEffect(() => {
+    if (!mapInstance) return;
+    let cancelled = false;
+    const onPopupOpen = (event: L.PopupEvent) => {
+      const slot = event.popup.getElement()?.querySelector<HTMLElement>('[data-tide-slot]');
+      if (!slot) return;
+      const lat = Number(slot.dataset.tideLat);
+      const lon = Number(slot.dataset.tideLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      loadPointTide(lat, lon, validTime)
+        .then((tide) => {
+          if (!cancelled) {
+            slot.innerHTML = buildTideBlockHtml(tide, unitSystem, validTime === null, validTimeLabel);
+          }
+        })
+        .catch(() => {
+          // A tide that cannot be loaded leaves the rest of the pop-up untouched.
+        });
+    };
+    mapInstance.on('popupopen', onPopupOpen);
+    return () => {
+      cancelled = true;
+      mapInstance.off('popupopen', onPopupOpen);
+    };
+  }, [mapInstance, unitSystem, validTime, validTimeLabel]);
 
   // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
   // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
