@@ -91,6 +91,11 @@ def test_models_expose_cadence_horizon_and_run_times(client):
     assert gfs["last_run_utc"].endswith("Z") and gfs["next_run_utc"].endswith("Z")
     assert gfs["last_run_utc"] < gfs["next_run_utc"]
 
+    aifs = models["ecmwf_aifs025_single"]
+    assert aifs["horizon_hours"] == 360
+    assert aifs["update_hours"] == 6
+    assert aifs["update_cycles_utc"] == [0, 6, 12, 18]
+
 
 def test_model_table_horizons_match_config():
     """The bundled model table is the source of truth for cadence and horizon (SCRUM-115)."""
@@ -108,6 +113,7 @@ def test_model_table_horizons_match_config():
 
     expected_rows = {
         "ecmwf_ifs": "ECMWF IFS (HRES 9 km)",
+        "ecmwf_aifs025_single": "ECMWF AIFS (AI)",
         "gfs_seamless": "NOAA GFS",
         "icon_seamless": "DWD ICON Global",
     }
@@ -123,7 +129,13 @@ def test_model_table_horizons_match_config():
 
 @pytest.mark.parametrize(
     ("model", "days"),
-    [("best_match", 7), ("ecmwf_ifs", 15), ("gfs_seamless", 16), ("icon_seamless", 8)],
+    [
+        ("best_match", 7),
+        ("ecmwf_ifs", 15),
+        ("ecmwf_aifs025_single", 15),
+        ("gfs_seamless", 16),
+        ("icon_seamless", 8),
+    ],
 )
 def test_horizon_days_cover_the_window(model, days):
     assert model_horizon_days(model) == days
