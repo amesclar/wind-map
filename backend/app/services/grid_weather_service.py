@@ -69,7 +69,7 @@ def _read_cached_points(
 ) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
     """Split points into cached results and coordinates that still need fetching.
 
-    One statement per request (SCRUM-174) instead of one per point: a full 30 x 30 view used to
+    One statement per request (SCRUM-174) instead of one per point: a full view used to
     run up to 900 SELECTs, which measured 5-6 ms per lookup. The rounded latitudes bound the
     scan, and the dict lookup keeps the caller's point order (and drops rows outside the box).
     """

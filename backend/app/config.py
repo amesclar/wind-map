@@ -80,7 +80,7 @@ OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
-OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 900 points)
+OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 400 points)
 OPEN_METEO_MARINE_TIMEOUT_SECONDS = 20.0  # batched marine request (same grid size)
 OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
@@ -142,10 +142,12 @@ def model_horizon_days(model: str) -> int:
 # Cache keys round coordinates to 2 decimals (~1.1 km), for point and grid caches.
 COORD_CACHE_PRECISION = 2
 
-# Wind grid limits (per axis) to prevent runaway requests.
-GRID_MAX_DIM = 30
+# Wind grid limits (per axis) to prevent runaway requests. Open-Meteo charges one call per point
+# against 600 per minute (SCRUM-194), so 20 x 20 = 400 points leaves 200 for a pan inside the same
+# window; the previous 30 x 30 = 900 could never fit and always ended in a quota 503.
+GRID_MAX_DIM = 20
 
-# Open-Meteo answers 414 Request-URI Too Large to the ~16 KB URL a 30 x 30 view builds (SCRUM-192),
+# Open-Meteo answers 414 Request-URI Too Large to a URL holding hundreds of coordinates (SCRUM-192),
 # so a view is fetched in chunks of at most this many points (~3.3 KB per request).
 GRID_REQUEST_MAX_POINTS = 150
 

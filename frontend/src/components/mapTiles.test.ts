@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { tileLayerConfig } from './mapTiles';
-import { gridDimensions } from '../hooks/useWindGrid';
+import { gridDimensions, MAX_GRID_DIM } from '../hooks/useWindGrid';
 
 describe('tileLayerConfig (SCRUM-92)', () => {
   it('uses the keyed CARTO URL only when a key is set', () => {
@@ -17,9 +17,14 @@ describe('tileLayerConfig (SCRUM-92)', () => {
 });
 
 describe('gridDimensions', () => {
-  it('targets one barb per 80px, between 2 and 30 per axis', () => {
+  it('targets one barb per 80px, between 2 and 20 per axis', () => {
     expect(gridDimensions({ x: 800, y: 600 })).toEqual({ cols: 10, rows: 8 });
     expect(gridDimensions({ x: 50, y: 50 })).toEqual({ cols: 2, rows: 2 });
-    expect(gridDimensions({ x: 5000, y: 5000 })).toEqual({ cols: 30, rows: 30 });
+    expect(gridDimensions({ x: 5000, y: 5000 })).toEqual({ cols: 20, rows: 20 });
+  });
+
+  it('caps a full view inside the Open-Meteo per-minute budget (SCRUM-194)', () => {
+    // One call per point against 600 per minute, so a full view must stay well below it.
+    expect(MAX_GRID_DIM * MAX_GRID_DIM).toBeLessThanOrEqual(600);
   });
 });
