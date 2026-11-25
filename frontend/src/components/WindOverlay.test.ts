@@ -69,8 +69,8 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
   it('builds an unselected 32px icon without a highlight ring, colored by temperature', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), false);
     const html = icon.options.html as string;
-    expect(icon.options.iconSize).toEqual([40, 40]);
-    expect(icon.options.iconAnchor).toEqual([20, 20]);
+    expect(icon.options.iconSize).toEqual([32, 32]);
+    expect(icon.options.iconAnchor).toEqual([16, 16]);
     expect(html).toContain('data-selected="false"');
     expect(html).not.toContain('box-shadow');
     expect(html).toContain('rotate(90, 25, 25)');
@@ -83,26 +83,17 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
 
     const haloed = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
     expect(haloed).toContain('wind-barb-halo');
-    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 40));
-  });
-
-  it('adds crisp outline passes on the light chart base and none on the dark ones (SCRUM-208)', () => {
-    const chart = buildGridBarbIcon(pt(15, 90, 85), false, true, true).options.html as string;
-    expect(chart.match(/data-barb-outline="true"/g) ?? []).toHaveLength(1);
-    expect(chart).toContain('#161b22');
-
-    const darkBase = buildGridBarbIcon(pt(15, 90, 85), false, true, false).options.html as string;
-    expect(darkBase).not.toContain('data-barb-outline');
+    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 32));
   });
 
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), true);
     const html = icon.options.html as string;
-    expect(icon.options.iconSize).toEqual([48, 48]);
-    expect(icon.options.iconAnchor).toEqual([24, 24]);
+    expect(icon.options.iconSize).toEqual([40, 40]);
+    expect(icon.options.iconAnchor).toEqual([20, 20]);
     expect(html).toContain('data-selected="true"');
     expect(html).toContain('box-shadow:0 0 0 2px #ffffff');
-    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 48));
+    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 40));
   });
 });
 
@@ -130,23 +121,6 @@ describe('buildGridPointPopup (SCRUM-126)', () => {
     expect(el.textContent).toContain('12°C');
     expect(el.textContent).toContain('SW (220°)');
     expect(el.textContent).not.toContain('°F');
-  });
-
-  it('shows the gust in the chosen speed unit when the point carries one (SCRUM-210)', () => {
-    const imperial = parse(
-      buildGridPointPopup({ ...point, wind_gust_knots: 21.4 }, 'imperial', 'knots', 'deg'),
-    );
-    expect(imperial.textContent).toContain('⚡ G: 21.4 kt');
-
-    const metric = parse(
-      buildGridPointPopup({ ...point, wind_gust_knots: 21.4 }, 'metric', 'kmh', 'cardinal'),
-    );
-    expect(metric.textContent).toContain('⚡ G: 39.6 km/h');
-  });
-
-  it('leaves the gust out when the point has none', () => {
-    const el = parse(buildGridPointPopup({ ...point, wind_gust_knots: null }, 'imperial', 'knots'));
-    expect(el.textContent).not.toContain('⚡');
   });
 
   it('draws the barb when barb display is chosen, and shows -- without a temperature', () => {

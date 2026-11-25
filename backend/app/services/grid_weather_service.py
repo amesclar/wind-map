@@ -22,9 +22,9 @@ from backend.app.database import db_connection
 from backend.app.models import GridWindPoint
 from backend.app.services import open_meteo
 from backend.app.services.time_window import hour_key
-from backend.app.units import as_float, as_optional_float, c_to_f, coord_key
+from backend.app.units import as_float, c_to_f, coord_key
 
-GRID_VARIABLES = ("wind_speed_10m", "wind_gusts_10m", "wind_direction_10m", "temperature_2m")
+GRID_VARIABLES = ("wind_speed_10m", "wind_direction_10m", "temperature_2m")
 
 
 async def get_grid_wind(
@@ -80,8 +80,7 @@ def _read_cached_points(
     placeholders = ",".join("?" for _ in lat_keys)
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT lat_key, lon_key, wind_speed_knots, wind_gust_knots, wind_direction_deg, "  # noqa: S608
-            "temperature_f "
+            "SELECT lat_key, lon_key, wind_speed_knots, wind_direction_deg, temperature_f "  # noqa: S608
             "FROM grid_weather_cache "
             "WHERE model=? AND hour=? AND expires_at>? AND temperature_f IS NOT NULL "
             f"AND lat_key IN ({placeholders})",  # only generated placeholders, every value is bound
@@ -101,7 +100,6 @@ def _read_cached_points(
                 latitude=lat,
                 longitude=lon,
                 wind_speed_knots=row["wind_speed_knots"],
-                wind_gust_knots=row["wind_gust_knots"],
                 wind_direction_deg=row["wind_direction_deg"],
                 temperature_f=row["temperature_f"],
                 time=None if hour == "current" else hour,
@@ -117,13 +115,12 @@ def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: floa
             """
             INSERT INTO grid_weather_cache
                 (lat_key, lon_key, model, hour, cached_at, expires_at,
-                 wind_speed_knots, wind_gust_knots, wind_direction_deg, temperature_f)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 wind_speed_knots, wind_direction_deg, temperature_f)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(lat_key, lon_key, model, hour) DO UPDATE SET
                 cached_at=excluded.cached_at,
                 expires_at=excluded.expires_at,
                 wind_speed_knots=excluded.wind_speed_knots,
-                wind_gust_knots=excluded.wind_gust_knots,
                 wind_direction_deg=excluded.wind_direction_deg,
                 temperature_f=excluded.temperature_f
             """,
@@ -135,7 +132,6 @@ def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: floa
                     now,
                     expires_at,
                     p.wind_speed_knots,
-                    p.wind_gust_knots,
                     p.wind_direction_deg,
                     p.temperature_f,
                 )
@@ -174,7 +170,6 @@ def _point_from_current(lat: float, lon: float, item: dict, hour: str | None) ->
         latitude=lat,
         longitude=lon,
         wind_speed_knots=as_float(current.get("wind_speed_10m")),
-        wind_gust_knots=as_optional_float(current.get("wind_gusts_10m")),
         wind_direction_deg=as_float(current.get("wind_direction_10m")),
         temperature_f=c_to_f(current.get("temperature_2m")),
         time=hour,
@@ -189,7 +184,6 @@ def _point_from_hourly(lat: float, lon: float, item: dict, index: int, hour: str
         latitude=lat,
         longitude=lon,
         wind_speed_knots=as_float(values["wind_speed_10m"]),
-        wind_gust_knots=as_optional_float(values["wind_gusts_10m"]),
         wind_direction_deg=as_float(values["wind_direction_10m"]),
         temperature_f=c_to_f(values["temperature_2m"]),
         time=hour,

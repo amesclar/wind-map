@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { WindOverlay } from './WindOverlay';
-import { WIND_COLOR_OPACITY, WIND_COLOR_OPACITY_ON_CHART, WindColorOverlay } from './WindColorOverlay';
+import { WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
 import { CurrentLegend } from './CurrentLegend';
@@ -20,18 +20,7 @@ import { escapeHtml } from '../utils/html';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
-import {
-  CHART_BOUNDS,
-  CHART_MIN_ZOOM,
-  CHART_PANE,
-  nonnaLayerConfig,
-  NONNA_PANE,
-  NOAA_COVERAGE_NOTICE,
-  seamarkLayerConfig,
-  SEAMARK_PANE,
-  tileLayerConfig,
-} from './mapTiles';
-import { registerCaptureMap } from '../utils/captureReadiness';
+import { tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
@@ -45,10 +34,6 @@ interface MapViewProps {
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
-  /** Nautical seamark overlay (SCRUM-175); off unless turned on. */
-  seamarksVisible?: boolean;
-  /** CHS NONNA bathymetry for B.C. waters (SCRUM-205); off unless turned on. */
-  bcDepthVisible?: boolean;
   /** Ocean-current chevrons (SCRUM-99); off unless turned on. */
   waterCurrentsVisible?: boolean;
   selectedGridPoint: SelectedGridPoint | null;
@@ -80,15 +65,8 @@ const SELECTED_LOCATION_BARB_SIZE = 52;
 // Drawn until a location's forecast has loaded.
 const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 
-/**
- * Saved-location marker: a labelled wind barb, larger and glowing when selected. `halo` adds the
- * barb halo, which the paper chart base turns into a two-tone glow (SCRUM-203).
- */
-export function buildLocationIcon(
-  weather: WeatherForecastResponse | undefined,
-  isSelected: boolean,
-  halo = false,
-): L.DivIcon {
+/** Saved-location marker: a labelled wind barb, larger and glowing when selected. */
+export function buildLocationIcon(weather: WeatherForecastResponse | undefined, isSelected: boolean): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
   const svg = generateWindBarbSvg({
@@ -99,10 +77,9 @@ export function buildLocationIcon(
     showLabel: true,
   });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
-  const haloClass = halo ? 'wind-barb-halo ' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
-    html: `<div class="${haloClass}relative cursor-pointer transition-transform duration-200 ${glow}">${svg}</div>`,
+    html: `<div class="relative cursor-pointer transition-transform duration-200 ${glow}">${svg}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -150,8 +127,6 @@ export const MapView: React.FC<MapViewProps> = ({
   windOverlayVisible,
   windColorOverlayVisible,
   waterCurrentsVisible = false,
-  seamarksVisible = false,
-  bcDepthVisible = false,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -165,17 +140,11 @@ export const MapView: React.FC<MapViewProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersRef = useRef(new Map<number, LocationMarker>());
-
-  // SCRUM-203: the NOAA paper chart is a base map, not an overlay, and it is clipped to its
-  // coverage, so the notice below has to follow pans and zooms.
-  const chartBase = tileLayerType === 'paper_chart';
-  const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
   const onSelectLocationRef = useLatest(onSelectLocation);
-  // Read at fly time without re-flying when the base map changes.
-  const chartBaseRef = useLatest(chartBase);
 
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
@@ -212,12 +181,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
     mapInstanceRef.current = map;
     setMapInstance(map);
-    // The export waits on this map's tile layers, including the window before new tiles exist
-    // (SCRUM-204): a capture right after a layer is enabled must not miss it.
-    const unregisterCapture = registerCaptureMap(map);
 
     return () => {
-      unregisterCapture();
       map.remove();
       mapInstanceRef.current = null;
       setMapInstance(null);
@@ -226,111 +191,19 @@ export const MapView: React.FC<MapViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
-  // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
-  // service's coverage, so the clip edge reveals a working map instead of a blank canvas.
+  // Swap the base tile layer when the layer or CARTO key changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    const layers: L.Layer[] = [];
-
-    if (tileLayerType === 'paper_chart') {
-      const substrate = tileLayerConfig('osm_dark');
-      layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
-      if (!map.getPane(CHART_PANE)) {
-        const pane = map.createPane(CHART_PANE);
-        pane.style.zIndex = '205';
-        // Tiles only paint here: clicks must still reach the map and the barbs.
-        pane.style.pointerEvents = 'none';
-      }
-      const chart = tileLayerConfig('paper_chart');
-      if (chart.kind === 'wms') {
-        layers.push(
-          L.tileLayer
-            .wms(chart.url, {
-              ...chart.options,
-              pane: CHART_PANE,
-              minZoom: CHART_MIN_ZOOM,
-              bounds: L.latLngBounds(
-                [CHART_BOUNDS.south, CHART_BOUNDS.west],
-                [CHART_BOUNDS.north, CHART_BOUNDS.east],
-              ),
-            })
-            .addTo(map),
-        );
-      }
-    } else {
-      const base = tileLayerConfig(tileLayerType, cartoApiKey);
-      if (base.kind === 'xyz') layers.push(L.tileLayer(base.url, base.options).addTo(map));
-    }
-
+    const { url, options } = tileLayerConfig(tileLayerType, cartoApiKey);
+    const layer = L.tileLayer(url, options);
+    layer.addTo(map);
+    tileLayerRef.current = layer;
     return () => {
-      layers.forEach((layer) => layer.remove());
+      layer.remove();
+      if (tileLayerRef.current === layer) tileLayerRef.current = null;
     };
   }, [tileLayerType, cartoApiKey]);
-
-  // The chart draws only inside the clip; outside it the substrate shows, which is accurate but
-  // needs saying, because the service has no "no chart here" tile to speak for itself.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !chartBase) {
-      setChartOutsideCoverage(false);
-      return;
-    }
-    // The app opens below the chart's zoom floor, so selecting the mode would otherwise show a
-    // notice and no chart at all; zoom to the floor once, which the user can undo.
-    if (map.getZoom() < CHART_MIN_ZOOM) map.setZoom(CHART_MIN_ZOOM);
-    const update = () =>
-      setChartOutsideCoverage(
-        map.getBounds().getSouth() > CHART_BOUNDS.north || map.getZoom() < CHART_MIN_ZOOM,
-      );
-    update();
-    map.on('moveend', update);
-    map.on('zoomend', update);
-    return () => {
-      map.off('moveend', update);
-      map.off('zoomend', update);
-    };
-  }, [chartBase, mapInstance]);
-
-  // Nautical seamark overlay (SCRUM-175): its own pane, so the base map, the seamarks and the
-  // wind layers stack in a fixed order however they are toggled.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !seamarksVisible) return;
-    if (!map.getPane(SEAMARK_PANE)) {
-      const pane = map.createPane(SEAMARK_PANE);
-      pane.style.zIndex = '210';
-      // Tiles only paint here: clicks must still reach the map and the barbs.
-      pane.style.pointerEvents = 'none';
-    }
-    const { url, options } = seamarkLayerConfig();
-    const layer = L.tileLayer(url, options).addTo(map);
-    return () => {
-      layer.remove();
-    };
-    // The map is created by the effect above, before this one runs, so the ref is current; adding
-    // the map instance as a dependency would add the layer twice on the first render.
-  }, [seamarksVisible]);
-
-  // CHS NONNA bathymetry (SCRUM-205): its own pane above the chart and under the seamarks, so the
-  // depth shading never covers the aids it gives context to, whichever toggle ran last.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !bcDepthVisible) return;
-    if (!map.getPane(NONNA_PANE)) {
-      const pane = map.createPane(NONNA_PANE);
-      pane.style.zIndex = '208';
-      // Tiles only paint here: clicks must still reach the map and the barbs.
-      pane.style.pointerEvents = 'none';
-    }
-    const config = nonnaLayerConfig();
-    if (config.kind !== 'wms') return;
-    const layer = L.tileLayer.wms(config.url, config.options).addTo(map);
-    return () => {
-      layer.remove();
-    };
-  }, [bcDepthVisible]);
 
   // Saved-location markers, updated in place by location id (SCRUM-92): only added or
   // removed locations create or remove markers; the rest get a new icon and popup.
@@ -349,7 +222,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
     locations.forEach((loc) => {
       const weather = weatherMap[loc.id];
-      const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id, chartBase);
+      const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id);
       const popup = buildLocationPopup(loc, weather, unitSystem, speedUnit, validTimeLabel);
       const existing = markers.get(loc.id);
       if (existing) {
@@ -368,16 +241,7 @@ export const MapView: React.FC<MapViewProps> = ({
       entry.marker.on('click', () => onSelectLocationRef.current(entry.location));
       markers.set(loc.id, entry);
     });
-  }, [
-    locations,
-    weatherMap,
-    selectedLocation,
-    unitSystem,
-    speedUnit,
-    validTimeLabel,
-    onSelectLocationRef,
-    chartBase,
-  ]);
+  }, [locations, weatherMap, selectedLocation, unitSystem, speedUnit, validTimeLabel, onSelectLocationRef]);
 
   // Remove all saved-location markers when the map goes away
   useEffect(() => {
@@ -393,16 +257,13 @@ export const MapView: React.FC<MapViewProps> = ({
     const map = mapInstanceRef.current;
     if (!map || !selectedLocation) return;
 
-    // The chart does not draw below its floor, so the initial flight has to land where it does
-    // (SCRUM-203); every other base keeps the original zoom.
-    const zoom = chartBaseRef.current ? CHART_MIN_ZOOM : 9;
-    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], zoom, {
+    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], 9, {
       duration: 1.2,
       easeLinearity: 0.25,
     });
 
     markersRef.current.get(selectedLocation.id)?.marker.openPopup();
-  }, [selectedLocation, chartBaseRef]);
+  }, [selectedLocation]);
 
   // Hand the node to both the internal ref (used to create the map) and the export's ref.
   const setContainer = (node: HTMLDivElement | null) => {
@@ -411,21 +272,12 @@ export const MapView: React.FC<MapViewProps> = ({
   };
 
   return (
-    <div className={`w-full h-full relative isolate${chartBase ? ' chart-base' : ''}`}>
+    <div className="w-full h-full relative isolate">
       <div
         ref={setContainer}
         data-testid="map-canvas"
         className="w-full h-full"
       />
-      {chartBase && chartOutsideCoverage && (
-        <div
-          data-testid="chart-coverage-notice"
-          role="note"
-          className="absolute right-3 top-24 z-[750] max-w-[260px] rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
-        >
-          {NOAA_COVERAGE_NOTICE}
-        </div>
-      )}
       {/* The grid is shared with the gradient, so the barbs must hide on their own toggle
           (SCRUM-185): only the gradient keeping the fetch alive does not mean barbs are on. */}
       {windOverlayVisible && (
@@ -434,8 +286,7 @@ export const MapView: React.FC<MapViewProps> = ({
           points={gridPoints}
           selectedPoint={selectedGridPoint}
           onGridPointSelect={onGridPointSelect}
-          halo={windColorOverlayVisible || chartBase}
-          lightBase={chartBase}
+          halo={windColorOverlayVisible}
           unitSystem={unitSystem}
           speedUnit={speedUnit}
           dirDisplay={dirDisplay}
@@ -447,17 +298,11 @@ export const MapView: React.FC<MapViewProps> = ({
         points={currentPoints}
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
-        halo={chartBase}
       />
       {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (
         <>
-          <WindColorOverlay
-            map={mapInstance}
-            points={gridPoints}
-            visible
-            opacity={chartBase ? WIND_COLOR_OPACITY_ON_CHART : WIND_COLOR_OPACITY}
-          />
+          <WindColorOverlay map={mapInstance} points={gridPoints} visible />
           <WindColorLegend speedUnit={speedUnit} />
         </>
       )}

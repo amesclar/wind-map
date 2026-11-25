@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type L from 'leaflet';
 import {
   WIND_COLOR_OPACITY,
-  WIND_COLOR_OPACITY_ON_CHART,
   WIND_COLOR_PANE,
   WIND_COLOR_PANE_Z_INDEX,
   WindColorOverlay,
@@ -179,18 +178,6 @@ describe('WindColorOverlay (SCRUM-123, SCRUM-143)', () => {
     rerender(<WindColorOverlay map={map} points={points} visible />);
     expect(canvas.style.display).toBe('block');
     expect(ctx.fillRect).toHaveBeenCalled();
-  });
-
-  it('draws lighter on the paper chart base, and follows a change back (SCRUM-203)', () => {
-    const { map, pane } = fakeMap();
-    const { rerender } = render(
-      <WindColorOverlay map={map} points={points} visible opacity={WIND_COLOR_OPACITY_ON_CHART} />,
-    );
-    expect(WIND_COLOR_OPACITY_ON_CHART).toBeLessThan(WIND_COLOR_OPACITY);
-    expect(canvasOf(pane).style.opacity).toBe(String(WIND_COLOR_OPACITY_ON_CHART));
-
-    rerender(<WindColorOverlay map={map} points={points} visible />);
-    expect(canvasOf(pane).style.opacity).toBe(String(WIND_COLOR_OPACITY));
   });
 
   it('removes its canvas, pane, listeners and observer on unmount', () => {

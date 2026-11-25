@@ -1,16 +1,6 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Anchor, Layers } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves } from 'lucide-react';
 import { MapTileLayer } from '../types';
-import {
-  NOAA_ATTRIBUTION_TEXT,
-  NOAA_COVERAGE_NOTICE,
-  NOAA_NOTICE,
-  NONNA_ATTRIBUTION_TEXT,
-  NONNA_DERIVATIVE_NOTICE,
-  NONNA_NOTICE,
-  SEAMARK_ATTRIBUTION_TEXT,
-  SEAMARK_NOTICE,
-} from './mapTiles';
 
 interface MapSettingsModalProps {
   isOpen: boolean;
@@ -26,12 +16,6 @@ interface MapSettingsModalProps {
   /** Ocean-current chevrons (SCRUM-100), independent of the wind layers. */
   waterCurrentsVisible: boolean;
   onToggleWaterCurrents: (visible: boolean) => void;
-  /** Nautical seamark overlay (SCRUM-175), off by default. */
-  seamarksVisible: boolean;
-  onToggleSeamarks: (visible: boolean) => void;
-  /** CHS NONNA bathymetry for B.C. waters (SCRUM-205), off by default. */
-  bcDepthVisible: boolean;
-  onToggleBcDepth: (visible: boolean) => void;
 }
 
 export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
@@ -47,10 +31,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onToggleWindColorOverlay,
   waterCurrentsVisible,
   onToggleWaterCurrents,
-  seamarksVisible,
-  onToggleSeamarks,
-  bcDepthVisible,
-  onToggleBcDepth,
 }) => {
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
@@ -151,34 +131,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       </div>
                     </div>
                   </label>
-
-                  <label
-                    data-testid="tile-layer-paper-chart"
-                    className="flex items-start gap-3 p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 cursor-pointer transition"
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'paper_chart'}
-                      onChange={() => onChangeTileLayer('paper_chart')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div>
-                      <div className="text-xs font-medium text-gray-100 flex items-center gap-2">
-                        Nautical Paper Chart
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
-                          Free • No Key Needed
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">
-                        NOAA's official chart as the map itself: soundings, aids to navigation and
-                        channels, at about 0.5 s per tile because nothing is cached.
-                      </div>
-                      <div className="text-[11px] text-gray-500 mt-1">
-                        {NOAA_ATTRIBUTION_TEXT} · {NOAA_NOTICE}. {NOAA_COVERAGE_NOTICE}
-                      </div>
-                    </div>
-                  </label>
                 </div>
               </div>
 
@@ -200,11 +152,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   </a>
                 </div>
 
-                <p className="text-[11px] text-gray-400 mb-1">
+                <p className="text-[11px] text-gray-400 mb-2.5">
                   Get an instant free key from CARTO (up to 5 million requests/month) and paste it below to unlock watermark-free CARTO tiles.
-                </p>
-                <p className="text-[11px] text-gray-500 mb-2.5">
-                  The key applies to CARTO Dark Matter only.
                 </p>
 
                 <form onSubmit={handleSave} className="space-y-2.5">
@@ -308,8 +257,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     </div>
                     <div className="text-[11px] text-gray-400 mt-0.5">
                       Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs gain a dark halo to stay readable.
-                      On the Nautical Paper Chart base the gradient draws lighter; turning it off
-                      keeps the chart's own symbols crisp.
                     </div>
                   </div>
                   <button
@@ -355,73 +302,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
                         waterCurrentsVisible ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Nautical Seamarks Toggle (SCRUM-175) */}
-              <div className="pt-2 border-t border-dark-600/70">
-                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Anchor className="w-3.5 h-3.5 text-sky-400" />
-                  Nautical Seamarks
-                </label>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
-                  <div>
-                    <div className="text-xs font-medium text-gray-100">Show buoys, beacons and lights</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">
-                      OpenSeaMap overlay drawn under the wind layers. {SEAMARK_ATTRIBUTION_TEXT} · {SEAMARK_NOTICE}.
-                    </div>
-                  </div>
-                  <button
-                    data-testid="seamarks-toggle"
-                    type="button"
-                    onClick={() => onToggleSeamarks(!seamarksVisible)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
-                      seamarksVisible ? 'bg-sky-500' : 'bg-dark-600'
-                    }`}
-                    aria-pressed={seamarksVisible}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                        seamarksVisible ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* B.C. Depth Toggle (SCRUM-205) */}
-              <div className="pt-2 border-t border-dark-600/70">
-                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-sky-400" />
-                  B.C. Depth (CHS NONNA)
-                </label>
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
-                  <div>
-                    <div className="text-xs font-medium text-gray-100">
-                      Show bathymetry contours
-                    </div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">
-                      Shaded depth and contours for B.C. waters, where the paper chart has no
-                      coverage. Drawn under the seamarks and the wind layers. {NONNA_ATTRIBUTION_TEXT} ·{' '}
-                      {NONNA_NOTICE}.
-                    </div>
-                    <div className="text-[11px] text-gray-500 mt-1">{NONNA_DERIVATIVE_NOTICE}</div>
-                  </div>
-                  <button
-                    data-testid="bc-depth-toggle"
-                    type="button"
-                    onClick={() => onToggleBcDepth(!bcDepthVisible)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
-                      bcDepthVisible ? 'bg-sky-500' : 'bg-dark-600'
-                    }`}
-                    aria-pressed={bcDepthVisible}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                        bcDepthVisible ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
                   </button>

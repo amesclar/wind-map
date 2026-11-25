@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import type { GridWindPoint, SelectedGridPoint, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
-import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
+import { generateWindBarbSvg } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
 import { escapeHtml } from '../utils/html';
@@ -14,8 +14,6 @@ interface WindOverlayProps {
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Dark halo so temperature colors stay readable over the gradient (SCRUM-123). */
   halo?: boolean;
-  /** Paper chart base (SCRUM-203): SVG outline passes replace the CSS glow (SCRUM-208). */
-  lightBase?: boolean;
   /** Units and direction display for the barb pop-up (SCRUM-126), the user's settings. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
@@ -31,19 +29,8 @@ function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boo
 
 /** Fallback color when a grid point has no temperature. */
 export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
-
-/**
- * Chart-base outline pass (SCRUM-208): one tight dark rim, drawn as an SVG stroke behind the glyph.
- * At 32 px the icon is 32/50 of the viewBox, so this 1.2-unit rim shows as about 0.8 px — enough to
- * separate a green or teal barb from white water and cream land without the white piping that made
- * a two-rim halo look washed out. Real geometry instead of a blurred CSS glow keeps the edge sharp.
- */
-export const CHART_BARB_OUTLINES: WindBarbOutline[] = [{ color: '#161b22', width: 0.9 }];
-// Only about 40 % of the 50-unit viewBox is ink (staff y 25 → 6, feathers to x 37), so the drawn
-// glyph is far smaller than the box: 40 px here is a ~10 × 15 px barb. 40 still leaves the grid
-// barbs apart at z12 (SCRUM-209).
-const BARB_SIZE = 40;
-const SELECTED_BARB_SIZE = 48;
+const BARB_SIZE = 32;
+const SELECTED_BARB_SIZE = 40;
 
 /**
  * SVG for a grid barb — the same drawing and temperature colors the drawer uses.
@@ -54,7 +41,6 @@ export function generateGridBarbSvg(
   directionDeg: number,
   tempF: number | null | undefined,
   size: number = BARB_SIZE,
-  outlines?: WindBarbOutline[],
 ): string {
   const hasTemp = typeof tempF === 'number';
   return generateWindBarbSvg({
@@ -64,30 +50,16 @@ export function generateGridBarbSvg(
     size,
     showLabel: false,
     colorOverride: hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
-    outlines,
   });
 }
 
-export function buildGridBarbIcon(
-  pt: GridWindPoint,
-  isSelected: boolean,
-  halo = false,
-  lightBase = false,
-): L.DivIcon {
+export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean, halo = false): L.DivIcon {
   const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
-  const svgHtml = generateGridBarbSvg(
-    pt.wind_speed_knots,
-    pt.wind_direction_deg,
-    pt.temperature_f,
-    size,
-    lightBase ? CHART_BARB_OUTLINES : undefined,
-  );
-  // Selected barb gets a highlight ring: white on the dark bases, inverted on the light chart
-  // sheet where white would disappear (SCRUM-203).
-  const ring = lightBase
-    ? 'box-shadow:0 0 0 2px #161b22,0 0 0 3px rgba(255,255,255,0.85);background:rgba(22,27,34,0.12);'
-    : 'box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);';
-  const ringStyle = isSelected ? `border-radius:50%;${ring}` : '';
+  const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
+  // Selected barb gets a white highlight ring.
+  const ringStyle = isSelected
+    ? 'border-radius:50%;box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);'
+    : '';
   return L.divIcon({
     className: 'wind-grid-barb-marker',
     html: `<div data-wind-barb data-selected="${isSelected}" class="${halo ? 'wind-barb-halo' : ''}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
@@ -108,9 +80,6 @@ export function buildGridPointPopup(
   timeLabel: string | null = null,
 ): string {
   const speed = formatKnotsInUnit(pt.wind_speed_knots, speedUnit);
-  // Gusts come with the grid point (SCRUM-210); older cached frames may not have one.
-  const gust =
-    typeof pt.wind_gust_knots === 'number' ? formatKnotsInUnit(pt.wind_gust_knots, speedUnit) : null;
   const temperature =
     typeof pt.temperature_f === 'number' ? formatTemperatureFromF(pt.temperature_f, unitSystem) : '--';
   const direction =
@@ -125,7 +94,6 @@ export function buildGridPointPopup(
       <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">${pt.latitude.toFixed(2)}°, ${pt.longitude.toFixed(2)}°</div>
       <div style="display: flex; gap: 8px; font-weight: 600;">
         <span style="color: #38bdf8;">💨 ${speed}</span>
-        ${gust ? `<span style="color: #fb923c;">⚡ G: ${gust}</span>` : ''}
         <span style="color: #4ade80;">🌡️ ${temperature}</span>
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px; display: flex; align-items: center; gap: 4px;">🧭 ${direction}</div>
@@ -141,7 +109,6 @@ export function WindOverlay({
   selectedPoint,
   onGridPointSelect,
   halo = false,
-  lightBase = false,
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
@@ -152,7 +119,6 @@ export function WindOverlay({
   const onSelectRef = useLatest(onGridPointSelect);
   const selectedRef = useLatest(selectedPoint);
   const haloRef = useLatest(halo);
-  const lightBaseRef = useLatest(lightBase);
 
   // Draw one barb marker per grid point; replaced whenever the points change.
   useEffect(() => {
@@ -163,7 +129,6 @@ export function WindOverlay({
           point,
           isSamePoint(selectedRef.current, point.latitude, point.longitude),
           haloRef.current,
-          lightBaseRef.current,
         ),
         interactive: true,
       }).addTo(map);
@@ -177,21 +142,16 @@ export function WindOverlay({
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, haloRef, lightBaseRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
+  }, [map, points, selectedRef, haloRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {
     entriesRef.current.forEach(({ point, marker }) => {
       marker.setIcon(
-        buildGridBarbIcon(
-          point,
-          isSamePoint(selectedPoint, point.latitude, point.longitude),
-          halo,
-          lightBase,
-        ),
+        buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude), halo),
       );
     });
-  }, [selectedPoint, halo, lightBase]);
+  }, [selectedPoint, halo]);
 
   return null;
 }
