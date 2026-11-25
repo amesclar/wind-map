@@ -24,6 +24,9 @@ import {
   CHART_BOUNDS,
   CHART_MIN_ZOOM,
   CHART_PANE,
+  CHART_TILE_FAILURE_NOTICE,
+  CHART_TILE_FAILURE_THRESHOLD,
+  CHART_TILE_FAILURE_WINDOW_MS,
   nonnaLayerConfig,
   NONNA_PANE,
   NOAA_COVERAGE_NOTICE,
@@ -175,6 +178,9 @@ export const MapView: React.FC<MapViewProps> = ({
   // changing the stored toggle; it returns as soon as another base is chosen.
   const seamarksShown = seamarksShownFor(tileLayerType, seamarksVisible);
   const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
+  // SCRUM-217: the chart service failing is a state of its own, separate from being out of range.
+  const [chartTilesFailed, setChartTilesFailed] = useState(false);
+  const [chartRetryCount, setChartRetryCount] = useState(0);
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
   const onSelectLocationRef = useLatest(onSelectLocation);
@@ -233,10 +239,30 @@ export const MapView: React.FC<MapViewProps> = ({
   // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
   // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
   // service's coverage, so the clip edge reveals a working map instead of a blank canvas.
+  // SCRUM-217: the chart layer's tile failures are counted here, and Retry remounts this effect.
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
     const layers: L.Layer[] = [];
+    // Counted per tile batch, not per tile: one stray tile from a pan is not an outage.
+    let failures = 0;
+    let windowStartedAt = 0;
+    const noteTileError = () => {
+      const now = Date.now();
+      if (now - windowStartedAt > CHART_TILE_FAILURE_WINDOW_MS) {
+        failures = 0;
+        windowStartedAt = now;
+      }
+      failures += 1;
+      if (failures >= CHART_TILE_FAILURE_THRESHOLD) setChartTilesFailed(true);
+    };
+    const noteBatchLoaded = () => {
+      // Only a batch with no failures clears the notice: the load that follows an outage's failed
+      // tiles must not hide it again immediately, but a recovered service clears it with no click.
+      if (failures === 0) setChartTilesFailed(false);
+      failures = 0;
+      windowStartedAt = 0;
+    };
 
     if (tileLayerType === 'paper_chart') {
       const substrate = tileLayerConfig('osm_dark');
@@ -249,19 +275,18 @@ export const MapView: React.FC<MapViewProps> = ({
       }
       const chart = tileLayerConfig('paper_chart');
       if (chart.kind === 'wms') {
-        layers.push(
-          L.tileLayer
-            .wms(chart.url, {
-              ...chart.options,
-              pane: CHART_PANE,
-              minZoom: CHART_MIN_ZOOM,
-              bounds: L.latLngBounds(
-                [CHART_BOUNDS.south, CHART_BOUNDS.west],
-                [CHART_BOUNDS.north, CHART_BOUNDS.east],
-              ),
-            })
-            .addTo(map),
-        );
+        const chartLayer = L.tileLayer.wms(chart.url, {
+          ...chart.options,
+          pane: CHART_PANE,
+          minZoom: CHART_MIN_ZOOM,
+          bounds: L.latLngBounds(
+            [CHART_BOUNDS.south, CHART_BOUNDS.west],
+            [CHART_BOUNDS.north, CHART_BOUNDS.east],
+          ),
+        });
+        chartLayer.on('tileerror', noteTileError);
+        chartLayer.on('load', noteBatchLoaded);
+        layers.push(chartLayer.addTo(map));
       }
     } else {
       const base = tileLayerConfig(tileLayerType, cartoApiKey);
@@ -271,7 +296,7 @@ export const MapView: React.FC<MapViewProps> = ({
     return () => {
       layers.forEach((layer) => layer.remove());
     };
-  }, [tileLayerType, cartoApiKey]);
+  }, [tileLayerType, cartoApiKey, chartRetryCount]);
 
   // The chart draws only inside the clip; outside it the substrate shows, which is accurate but
   // needs saying, because the service has no "no chart here" tile to speak for itself.
@@ -279,6 +304,7 @@ export const MapView: React.FC<MapViewProps> = ({
     const map = mapInstanceRef.current;
     if (!map || !chartBase) {
       setChartOutsideCoverage(false);
+      setChartTilesFailed(false);
       return;
     }
     // The app opens below the chart's zoom floor, so selecting the mode would otherwise show a
@@ -421,13 +447,37 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
-      {chartBase && chartOutsideCoverage && (
-        <div
-          data-testid="chart-coverage-notice"
-          role="note"
-          className="absolute right-3 top-24 z-[750] max-w-[260px] rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
-        >
-          {NOAA_COVERAGE_NOTICE}
+      {chartBase && (chartOutsideCoverage || chartTilesFailed) && (
+        <div className="absolute right-3 top-24 z-[750] flex max-w-[260px] flex-col items-end gap-2">
+          {chartTilesFailed && (
+            <div
+              data-testid="chart-tile-error-notice"
+              role="status"
+              className="rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg"
+            >
+              <div>{CHART_TILE_FAILURE_NOTICE}</div>
+              <button
+                type="button"
+                data-testid="chart-retry"
+                onClick={() => {
+                  setChartTilesFailed(false);
+                  setChartRetryCount((count) => count + 1);
+                }}
+                className="mt-1.5 rounded-md border border-sky-500/60 bg-sky-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-sky-500"
+              >
+                Retry chart tiles
+              </button>
+            </div>
+          )}
+          {chartOutsideCoverage && (
+            <div
+              data-testid="chart-coverage-notice"
+              role="note"
+              className="rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
+            >
+              {NOAA_COVERAGE_NOTICE}
+            </div>
+          )}
         </div>
       )}
       {/* The grid is shared with the gradient, so the barbs must hide on their own toggle

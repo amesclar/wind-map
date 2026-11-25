@@ -7,6 +7,9 @@ import {
   CHART_MIN_ZOOM,
   CHART_PANE,
   CHART_TILE_CLASS,
+  CHART_TILE_FAILURE_NOTICE,
+  CHART_TILE_FAILURE_THRESHOLD,
+  CHART_TILE_FAILURE_WINDOW_MS,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_NOTICE,
   NONNA_ATTRIBUTION_TEXT,
@@ -130,6 +133,12 @@ describe('paper chart tile config (SCRUM-203)', () => {
     expect(chart.options.maxZoom).toBe(19);
     expect(chart.options.className).toBe(CHART_TILE_CLASS);
     expect(chart.options.className).not.toContain('osm-dark-tiles');
+  });
+
+  it('counts a batch of failures, not one stray tile, as an outage (SCRUM-217)', () => {
+    expect(CHART_TILE_FAILURE_THRESHOLD).toBeGreaterThan(1);
+    expect(CHART_TILE_FAILURE_WINDOW_MS).toBeGreaterThan(0);
+    expect(CHART_TILE_FAILURE_NOTICE).toContain('base map');
   });
 
   it('exports the clip and zoom floor the mount and the notice share', () => {

@@ -43,6 +43,16 @@ export const CHART_MIN_ZOOM = 12;
 /** Above the base tiles (200) and below the seamarks (210). */
 export const CHART_PANE = 'chartPane';
 
+/**
+ * What the tile-failure chip says (SCRUM-217). The substrate is still there, so the message names
+ * what is actually on screen rather than claiming the map is broken.
+ */
+export const CHART_TILE_FAILURE_NOTICE =
+  "Chart tiles unavailable — the base map is showing instead. NOAA's service may be busy or down.";
+/** One stray tile from panning is normal; a run of them means the service is failing. */
+export const CHART_TILE_FAILURE_THRESHOLD = 3;
+export const CHART_TILE_FAILURE_WINDOW_MS = 10_000;
+
 /** Coverage box the chart layer is clipped to; shared by the mount and its tests. */
 export const CHART_BOUNDS = { south: -85, west: -180, north: CHART_COVERAGE_MAX_LAT, east: -60 };
 
