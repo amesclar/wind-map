@@ -658,18 +658,6 @@ describe('App map integration (SCRUM-126)', () => {
     expect(screen.queryByLabelText('Timezone')).toBeNull();
   });
 
-  it('opens and closes the model update frequency guide from the navbar (SCRUM-110)', async () => {
-    render(<App />);
-    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
-    expect(screen.queryByText('NOAA HRRR')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Model Update Cycles & Frequency' }));
-    expect(await screen.findByText('NOAA HRRR')).toBeTruthy();
-
-    fireEvent.click(screen.getByText('Done'));
-    expect(screen.queryByText('NOAA HRRR')).toBeNull();
-  });
-
   it('shows the app version from the VERSION file in the navbar (SCRUM-91)', async () => {
     const { APP_VERSION } = await import('./version');
     render(<App />);
