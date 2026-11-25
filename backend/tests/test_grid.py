@@ -170,9 +170,9 @@ async def test_fetch_non_best_match_model_adds_models_param(open_meteo):
     """A non-default model should be forwarded in the Open-Meteo request params."""
     open_meteo.respond(grid_payload(grid_item()))
 
-    await get_grid_wind([(48.0, -122.0)], "ecmwf_ifs04")
+    await get_grid_wind([(48.0, -122.0)], "ecmwf_ifs")
 
-    assert open_meteo.last_params.get("models") == "ecmwf_ifs04"
+    assert open_meteo.last_params.get("models") == "ecmwf_ifs"
 
 
 @pytest.mark.asyncio
@@ -299,7 +299,7 @@ async def test_get_grid_wind_different_models_cached_independently(open_meteo):
     await get_grid_wind(pts, "best_match")
     assert open_meteo.call_count == 1
 
-    await get_grid_wind(pts, "ecmwf_ifs04")
+    await get_grid_wind(pts, "ecmwf_ifs")
     assert open_meteo.call_count == 2  # different model → cache miss
 
 

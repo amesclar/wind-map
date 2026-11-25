@@ -23,7 +23,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
-  - *ECMWF IFS 0.4°*
+  - *ECMWF IFS HRES 9 km*
   - *NOAA GFS Seamless*
   - *DWD ICON Seamless*
 - **Weather Model Guide:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
