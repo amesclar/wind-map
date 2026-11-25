@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
@@ -392,6 +392,65 @@ describe('MapView paper chart base (SCRUM-203)', () => {
     expect(html).toContain('wind-barb-halo');
     // White would disappear on white water: the chart base draws the ring dark (SCRUM-203).
     expect(html).toContain('box-shadow:0 0 0 2px #161b22');
+  });
+});
+
+describe('MapView chart tile failures (SCRUM-217)', () => {
+  const chartLayerMock = () =>
+    createdTileLayers.find(
+      (layer) => layer.kind === 'wms' && layer.url?.includes('NOAAChartDisplay'),
+    )!;
+
+  it('ignores a single stray tile', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+
+    act(() => {
+      chartLayerMock().fire('tileerror');
+      chartLayerMock().fire('load');
+    });
+
+    expect(screen.queryByTestId('chart-tile-error-notice')).toBeNull();
+  });
+
+  it('shows the notice and its retry once a batch fails, and clears it on a clean batch', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+
+    act(() => {
+      const chart = chartLayerMock();
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+      // The load that follows an outage's failed tiles must not hide the notice again.
+      chart.fire('load');
+    });
+
+    expect(screen.getByTestId('chart-tile-error-notice')).toBeTruthy();
+    expect(screen.getByTestId('chart-retry')).toBeTruthy();
+
+    // A recovered service clears it without the user doing anything.
+    act(() => chartLayerMock().fire('load'));
+    expect(screen.queryByTestId('chart-tile-error-notice')).toBeNull();
+  });
+
+  it('rebuilds the chart layer when Retry is clicked', async () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+
+    act(() => {
+      const chart = chartLayerMock();
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+    });
+
+    fireEvent.click(screen.getByTestId('chart-retry'));
+
+    await waitFor(() =>
+      expect(createdTileLayers.filter((layer) => layer.kind === 'wms')).toHaveLength(2),
+    );
+    const [first, second] = createdTileLayers.filter((layer) => layer.kind === 'wms');
+    expect(first.remove).toHaveBeenCalled();
+    expect(second.url).toContain('NOAAChartDisplay');
+    expect(screen.queryByTestId('chart-tile-error-notice')).toBeNull();
   });
 });
 

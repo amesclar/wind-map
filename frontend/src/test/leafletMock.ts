@@ -35,6 +35,10 @@ export interface MockTileLayer {
   url?: string;
   options?: Record<string, unknown>;
   kind: 'xyz' | 'wms';
+  /** Event handlers Leaflet would call, so tests can simulate tile errors and loads (SCRUM-217). */
+  handlers: Record<string, Handler[]>;
+  fire: (event: string) => void;
+  on: ReturnType<typeof vi.fn>;
   addTo: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
 }
@@ -163,13 +167,19 @@ const layer = (
   options: Record<string, unknown> | undefined,
   kind: 'xyz' | 'wms' = 'xyz',
 ): MockTileLayer => {
-  const created: MockTileLayer = {
+  const created = {
     url,
     options,
     kind,
+    handlers: {},
     addTo: vi.fn().mockReturnThis(),
     remove: vi.fn(),
-  };
+  } as MockTileLayer;
+  created.on = vi.fn((event: string, fn: Handler) => {
+    (created.handlers[event] ??= []).push(fn);
+    return created;
+  });
+  created.fire = (event) => (created.handlers[event] ?? []).forEach((fn) => fn());
   createdTileLayers.push(created);
   return created;
 };
