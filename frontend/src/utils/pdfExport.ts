@@ -35,6 +35,47 @@ export interface PdfPlacement {
   height: number;
 }
 
+/** Shown when the lazily imported library cannot be fetched, usually a tab left across a rebuild. */
+export const PDF_LIBRARY_ERROR = 'The PDF library could not be loaded. Reload the page and try again.';
+
+/** Shown when the browser hands back no usable JPEG for the composed map (an oversized canvas). */
+export const PDF_ENCODE_ERROR =
+  'The map image could not be encoded for the PDF: it may be too large. Try a smaller window or the PNG format.';
+
+const JPEG_DATA_URL_PREFIX = 'data:image/jpeg';
+
+/**
+ * Load jsPDF lazily, turning a failed chunk fetch into a message the dialog can show
+ * (SCRUM-241). A rebuild renames the chunk, so an open tab can ask for a name that is gone.
+ * The loader is a parameter so the failure path can be tested without a broken network.
+ */
+export async function loadJsPdf(
+  load: () => Promise<typeof import('jspdf')> = () => import('jspdf'),
+): Promise<typeof import('jspdf')> {
+  try {
+    return await load();
+  } catch (err) {
+    const detail = err instanceof Error ? ` (${err.message})` : '';
+    const error = new Error(`${PDF_LIBRARY_ERROR}${detail}`);
+    (error as Error & { cause?: unknown }).cause = err;
+    throw error;
+  }
+}
+
+/**
+ * `canvas.toDataURL()` as JPEG, rejecting when the browser returns nothing usable (SCRUM-241).
+ * An oversized canvas yields `data:,`, which jsPDF would otherwise accept and save as a page
+ * that cannot be decoded.
+ */
+export function encodeCanvasJpeg(canvas: HTMLCanvasElement, quality = PDF_IMAGE_QUALITY): string {
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  const comma = dataUrl.indexOf(',');
+  if (!dataUrl.startsWith(JPEG_DATA_URL_PREFIX) || comma === -1 || comma === dataUrl.length - 1) {
+    throw new Error(PDF_ENCODE_ERROR);
+  }
+  return dataUrl;
+}
+
 /** The page in points, swapped for landscape. */
 export function pageBox(size: PdfPageSize, orientation: PdfOrientation): PageBox {
   const portrait = PDF_PAGE_BOX[size];
@@ -69,16 +110,21 @@ export interface PdfSaveOptions {
   orientation: PdfOrientation;
 }
 
-/** Capture the current view and save it as a one-page PDF. */
+/** Capture dependencies plus a test seam for the lazy `jspdf` import. */
+export interface PdfDeps extends CaptureDeps {
+  loadJsPdf?: typeof loadJsPdf;
+}
+
+/** Capture the current view and save it as a one-page PDF (SCRUM-117, SCRUM-241). */
 export async function saveMapPdf(
   element: HTMLElement,
   content: CaptureContent,
   options: PdfSaveOptions,
-  deps?: CaptureDeps,
+  deps?: PdfDeps,
 ): Promise<void> {
   const canvas = await captureMapCanvas(element, content, deps);
   const page = pageBox(options.pageSize, options.orientation);
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF } = await (deps?.loadJsPdf ?? loadJsPdf)();
   const doc = new jsPDF({
     orientation: options.orientation,
     unit: 'pt',
@@ -86,7 +132,7 @@ export async function saveMapPdf(
   });
   const placement = fitToPage(canvas.width, canvas.height, page);
   doc.addImage(
-    canvas.toDataURL('image/jpeg', PDF_IMAGE_QUALITY),
+    encodeCanvasJpeg(canvas),
     'JPEG',
     placement.x,
     placement.y,

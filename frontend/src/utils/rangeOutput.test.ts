@@ -169,6 +169,21 @@ describe('saveRangePdf (SCRUM-156)', () => {
     expect(jsPdfDoc.save).toHaveBeenCalledWith('gfs_seamless_2026-11-23_2200UTC_2hours.pdf');
   });
 
+  it('refuses an empty JPEG data URL instead of adding it (SCRUM-241)', async () => {
+    const list = frames(2);
+    vi.mocked(list[0].canvas.toDataURL).mockReturnValue('data:,');
+
+    await expect(
+      saveRangePdf(list, {
+        modelId: 'best_match',
+        timezone: 'UTC',
+        pageSize: 'letter',
+        orientation: 'portrait',
+      }),
+    ).rejects.toThrow('could not be encoded');
+    expect(jsPdfDoc.addImage).not.toHaveBeenCalled();
+  });
+
   it('handles a single-page range and an empty one', async () => {
     await saveRangePdf(frames(1), {
       modelId: 'best_match',

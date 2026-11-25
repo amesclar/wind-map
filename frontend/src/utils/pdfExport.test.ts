@@ -11,6 +11,7 @@ vi.mock('jspdf', () => ({
 
 import {
   fitToPage,
+  loadJsPdf,
   pageBox,
   PDF_IMAGE_QUALITY,
   PDF_MARGIN_PT,
@@ -137,6 +138,40 @@ describe('saveMapPdf (SCRUM-117)', () => {
     const toDataURL = HTMLCanvasElement.prototype.toDataURL as unknown as ReturnType<typeof vi.fn>;
     expect(toDataURL).toHaveBeenCalledWith('image/jpeg', PDF_IMAGE_QUALITY);
     expect(PDF_IMAGE_QUALITY).toBe(0.92);
+  });
+
+  it('refuses an empty data URL instead of adding it to the page (SCRUM-241)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue({ width: 800, height: 600 } as HTMLCanvasElement);
+    vi.mocked(HTMLCanvasElement.prototype.toDataURL).mockReturnValue('data:,');
+
+    await expect(
+      saveMapPdf(
+        element,
+        content,
+        { fileName: 'wind-map.pdf', pageSize: 'letter', orientation: 'portrait' },
+        { domToCanvas, tileTimeoutMs: 0 },
+      ),
+    ).rejects.toThrow('could not be encoded');
+    expect(pdf.addImage).not.toHaveBeenCalled();
+    expect(pdf.save).not.toHaveBeenCalled();
+  });
+
+  it('names a jsPDF chunk that will not load (SCRUM-241)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue({ width: 800, height: 600 } as HTMLCanvasElement);
+    const failingChunk = () =>
+      Promise.reject(new Error('Failed to fetch dynamically imported module: /assets/jspdf.js'));
+
+    await expect(
+      saveMapPdf(
+        element,
+        content,
+        { fileName: 'wind-map.pdf', pageSize: 'letter', orientation: 'portrait' },
+        { domToCanvas, tileTimeoutMs: 0, loadJsPdf: () => loadJsPdf(failingChunk) },
+      ),
+    ).rejects.toThrow('Reload the page and try again');
+    expect(pdf.ctor).not.toHaveBeenCalled();
   });
 
   it('surfaces a capture failure without building a document', async () => {

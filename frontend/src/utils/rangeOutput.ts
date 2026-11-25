@@ -7,7 +7,14 @@
  */
 import { downloadBlob, type MapImageFormat } from './download';
 import { buildExportFileName, buildRangeArchiveName } from './mapExport';
-import { fitToPage, pageBox, type PdfOrientation, type PdfPageSize } from './pdfExport';
+import {
+  encodeCanvasJpeg,
+  fitToPage,
+  loadJsPdf,
+  pageBox,
+  type PdfOrientation,
+  type PdfPageSize,
+} from './pdfExport';
 import type { RangeFrame } from './rangeCapture';
 
 /** Range PDF pages re-encode at 0.9, as the ticket asks; single-page PDFs keep 0.92. */
@@ -90,7 +97,7 @@ export async function saveRangeImages(frames: RangeFrame[], options: RangeImageO
  */
 export async function saveRangePdf(frames: RangeFrame[], options: RangePdfOptions): Promise<void> {
   if (frames.length === 0) return;
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF } = await loadJsPdf();
   const page = pageBox(options.pageSize, options.orientation);
   const doc = new jsPDF({
     orientation: options.orientation,
@@ -101,7 +108,7 @@ export async function saveRangePdf(frames: RangeFrame[], options: RangePdfOption
     if (index > 0) doc.addPage();
     const placement = fitToPage(frame.canvas.width, frame.canvas.height, page);
     doc.addImage(
-      frame.canvas.toDataURL('image/jpeg', RANGE_PDF_IMAGE_QUALITY),
+      encodeCanvasJpeg(frame.canvas, RANGE_PDF_IMAGE_QUALITY),
       'JPEG',
       placement.x,
       placement.y,

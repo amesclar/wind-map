@@ -79,6 +79,8 @@ export function useMapExport({
 }: MapExportSettings) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [savingMap, setSavingMap] = useState(false);
+  // A failed single-view export: shown in the dialog, which keeps every option (SCRUM-241).
+  const [viewError, setViewError] = useState<MapExportError | null>(null);
 
   // Range export state (SCRUM-155): progress, a failure with the frames captured so far, the
   // frames themselves and the cancellation handle.
@@ -188,6 +190,7 @@ export function useMapExport({
         orientation: options.orientation,
       };
       setSavingMap(true);
+      setViewError(null);
       setRangeError(null);
       setRangeProgress(null);
       setRangeFrames([]);
@@ -257,6 +260,7 @@ export function useMapExport({
         return;
       }
       setSavingMap(true);
+      setViewError(null);
       try {
         // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
         const content = buildContent(forecastTime, options.fileName, capturedAt);
@@ -271,7 +275,12 @@ export function useMapExport({
         }
         setIsDialogOpen(false);
       } catch (err) {
+        // The dialog stays open with the chosen options; the message names what went wrong.
         console.error('Failed to export the map image:', err);
+        setViewError({
+          message: err instanceof Error ? err.message : 'The map image could not be saved.',
+          frames: 0,
+        });
       } finally {
         setSavingMap(false);
       }
@@ -303,7 +312,10 @@ export function useMapExport({
     }
   }, [rangeFrames, timezone, modelId]);
 
-  const openDialog = useCallback(() => setIsDialogOpen(true), []);
+  const openDialog = useCallback(() => {
+    setViewError(null);
+    setIsDialogOpen(true);
+  }, []);
   const closeDialog = useCallback(() => setIsDialogOpen(false), []);
 
   return {
@@ -314,6 +326,8 @@ export function useMapExport({
     savingMap,
     rangeProgress,
     rangeError,
+    /** The failure the dialog reports, whichever export path produced it (SCRUM-241). */
+    exportError: rangeError ?? viewError,
     rangeFrames,
     rangeHours,
     handleExport,
