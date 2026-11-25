@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import {
   SavedLocation,
@@ -185,6 +185,12 @@ export const MapView: React.FC<MapViewProps> = ({
   const onSelectLocationRef = useLatest(onSelectLocation);
   // Read at fly time without re-flying when the base map changes.
   const chartBaseRef = useLatest(chartBase);
+  // SCRUM-211: a saved location draws its own labelled barb, so the grid steps aside for it. Kept
+  // memoised because the overlay rebuilds its icons whenever this identity changes.
+  const chartKeepOut = useMemo(
+    () => locations.map(({ latitude, longitude }) => ({ latitude, longitude })),
+    [locations],
+  );
 
   // Expose the live map instance to child components via state so React
   // re-renders WindOverlay once the map is ready.
@@ -488,6 +494,8 @@ export const MapView: React.FC<MapViewProps> = ({
           selectedPoint={selectedGridPoint}
           onGridPointSelect={onGridPointSelect}
           lightBase={chartBase}
+          declutter={chartBase}
+          keepOut={chartBase ? chartKeepOut : undefined}
           unitSystem={unitSystem}
           speedUnit={speedUnit}
           dirDisplay={dirDisplay}

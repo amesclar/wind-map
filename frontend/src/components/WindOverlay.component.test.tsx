@@ -11,15 +11,21 @@ vi.mock('leaflet', () => import('../test/leafletMock'));
 
 function fakeMap() {
   const handlers: Record<string, () => void> = {};
+  const state = { zoom: 13 };
   const map = {
     getBounds: () => ({ getSouth: () => 47, getNorth: () => 49, getWest: () => -123, getEast: () => -121 }),
     getSize: () => ({ x: 800, y: 600 }),
+    getZoom: () => state.zoom,
+    latLngToContainerPoint: ([lat, lon]: [number, number]) => ({
+      x: ((lon + 123) / 2) * 800,
+      y: ((49 - lat) / 2) * 600,
+    }),
     on: vi.fn((event: string, fn: () => void) => {
       handlers[event] = fn;
     }),
     off: vi.fn(),
   };
-  return { map: map as unknown as L.Map };
+  return { map: map as unknown as L.Map, state };
 }
 
 const point = (lat: number, lon = -122): GridWindPoint => ({
@@ -100,6 +106,41 @@ describe('WindOverlay drawing (SCRUM-122)', () => {
       [47, -122],
       [46, -122],
     ]);
+  });
+
+  it('thins the chart grid at its native zoom and draws every point deeper in (SCRUM-211)', () => {
+    const { map, state } = fakeMap();
+    const props = { map, selectedPoint: null, onGridPointSelect: () => {} };
+    const points = [point(48, -122), point(48, -121.5), point(47.5, -122), point(47.5, -121.5)];
+
+    state.zoom = 12;
+    const { rerender } = render(<WindOverlay {...props} points={points} declutter />);
+    // Checkerboard: the even row + even column pair survives, its neighbours do not.
+    expect(created.map((m) => m.latlng)).toEqual([
+      [48, -122],
+      [47.5, -121.5],
+    ]);
+
+    state.zoom = 13;
+    rerender(<WindOverlay {...props} points={[...points]} declutter />);
+    expect(created).toHaveLength(6); // the two thinned markers plus the four redrawn
+    expect(created.slice(2).map((m) => m.latlng)).toHaveLength(4);
+  });
+
+  it('leaves a saved location clear of grid barbs on the chart (SCRUM-211)', () => {
+    const { map } = fakeMap();
+    render(
+      <WindOverlay
+        map={map}
+        points={[point(48, -122), point(48, -121)]}
+        selectedPoint={null}
+        onGridPointSelect={() => {}}
+        declutter
+        keepOut={[{ latitude: 48, longitude: -122 }]}
+      />,
+    );
+
+    expect(created.map((m) => m.latlng)).toEqual([[48, -121]]);
   });
 
   it('removes its markers when the points are cleared and on unmount', () => {
