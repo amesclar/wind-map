@@ -134,7 +134,7 @@ docker run -d -p 5005:5005 \
   -e JIRA_FEEDBACK_PROJECT="SCRUM" \
   -v wind_data:/app/data --name wind-map wind-map
 ```
-Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP. Up to three files can ride along in the same request — 4 MB each, 12 MB in total, and only images (PNG, JPEG, GIF, WebP), PDF or plain text — so the whole request stays under 12.5 MB, well below Cloud Run's 32 MiB limit; anything larger or of another type is refused with a short reason and nothing is filed.
+Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP. Up to three files can ride along in the same request — 4 MB each, 12 MB in total, and only images (PNG, JPEG, GIF, WebP), PDF or plain text — so the whole request stays under 12.5 MB, well below Cloud Run's 32 MiB limit; anything larger or of another type is refused with a short reason and nothing is filed. A screenshot can also be pasted into the open form; one over 4 MB is shrunk to JPEG automatically so it fits.
 
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
