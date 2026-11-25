@@ -9,6 +9,15 @@ import {
   CHART_TILE_CLASS,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_NOTICE,
+  NONNA_ATTRIBUTION_TEXT,
+  NONNA_DERIVATIVE_NOTICE,
+  NONNA_LAYERS,
+  NONNA_MAX_NATIVE_ZOOM,
+  NONNA_MIN_ZOOM,
+  NONNA_NOTICE,
+  NONNA_OPACITY,
+  NONNA_PANE,
+  nonnaLayerConfig,
   SEAMARK_ATTRIBUTION_TEXT,
   SEAMARK_NOTICE,
   SEAMARK_PANE,
@@ -45,6 +54,45 @@ describe('seamarkLayerConfig (SCRUM-175)', () => {
   it('carries the licence credit and the navigation notice for the toggle and the export', () => {
     expect(SEAMARK_ATTRIBUTION_TEXT).toBe('Seamarks © OpenSeaMap contributors');
     expect(SEAMARK_NOTICE).toBe('Not for navigation');
+  });
+});
+
+describe('nonnaLayerConfig (SCRUM-205)', () => {
+  const nonna = () => {
+    const config = nonnaLayerConfig();
+    if (config.kind !== 'wms') throw new Error('NONNA must be a WMS layer');
+    return config;
+  };
+
+  it('asks for NONNA 10 as WMS 1.3.0 in EPSG:3857, transparent and cross-origin', () => {
+    const { url, options } = nonna();
+    expect(url).toBe('https://nonna-geoserver.data.chs-shc.ca/geoserver/wms');
+    expect(options.layers).toBe(NONNA_LAYERS);
+    expect(options.format).toBe('image/png');
+    expect(options.transparent).toBe(true);
+    // NONNA runs 1.3.0 and takes `CRS=`; the NOAA chart's 1.1.1 takes `SRS=` (SCRUM-202).
+    expect(options.version).toBe('1.3.0');
+    expect(options.crs).toBe(L.CRS.EPSG3857);
+    expect(options.crossOrigin).toBe(true);
+    expect(options.opacity).toBe(NONNA_OPACITY);
+  });
+
+  it('stacks between the chart and the seamarks and caps at its native zoom', () => {
+    const { options } = nonna();
+    expect(options.pane).toBe(NONNA_PANE);
+    // A separate pane from the seamarks, so toggle order cannot bury the aids under the depth.
+    expect(NONNA_PANE).not.toBe(SEAMARK_PANE);
+    expect(options.minZoom).toBe(NONNA_MIN_ZOOM);
+    expect(options.maxNativeZoom).toBe(NONNA_MAX_NATIVE_ZOOM);
+    expect(options.maxZoom).toBe(19);
+    expect(NONNA_MAX_NATIVE_ZOOM).toBeLessThan(19);
+  });
+
+  it('carries the CHS credit, the navigation notice and the derivative notice', () => {
+    expect(NONNA_ATTRIBUTION_TEXT).toBe('Bathymetry © CHS NONNA');
+    expect(NONNA_NOTICE).toBe('Not for navigation');
+    expect(NONNA_DERIVATIVE_NOTICE).toContain('Canadian Hydrographic Service');
+    expect(NONNA_DERIVATIVE_NOTICE).toContain('does NOT constitute an endorsement');
   });
 });
 

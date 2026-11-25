@@ -66,6 +66,7 @@ export const App: React.FC = () => {
     tileLayer: mapSettings.tileLayer,
     windOverlayVisible: mapSettings.windOverlayVisible,
     windColorOverlayVisible: mapSettings.windColorOverlayVisible,
+    bcDepthVisible: mapSettings.bcDepthVisible,
     seamarksVisible: mapSettings.seamarksVisible,
     weatherLoading: allWeather.loading,
   });
@@ -210,6 +211,7 @@ export const App: React.FC = () => {
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
             waterCurrentsVisible={mapSettings.waterCurrentsVisible}
             seamarksVisible={mapSettings.seamarksVisible}
+            bcDepthVisible={mapSettings.bcDepthVisible}
             selectedGridPoint={selectedGridPoint}
             onGridPointSelect={handleGridPointSelect}
             unitSystem={units.unitSystem}
@@ -255,6 +257,8 @@ export const App: React.FC = () => {
         onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
         seamarksVisible={mapSettings.seamarksVisible}
         onToggleSeamarks={mapSettings.setSeamarksVisible}
+        bcDepthVisible={mapSettings.bcDepthVisible}
+        onToggleBcDepth={mapSettings.setBcDepthVisible}
       />
 
       <WeatherModelGuideModal

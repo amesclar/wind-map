@@ -24,6 +24,8 @@ import {
   CHART_BOUNDS,
   CHART_MIN_ZOOM,
   CHART_PANE,
+  nonnaLayerConfig,
+  NONNA_PANE,
   NOAA_COVERAGE_NOTICE,
   seamarkLayerConfig,
   SEAMARK_PANE,
@@ -45,6 +47,8 @@ interface MapViewProps {
   windColorOverlayVisible: boolean;
   /** Nautical seamark overlay (SCRUM-175); off unless turned on. */
   seamarksVisible?: boolean;
+  /** CHS NONNA bathymetry for B.C. waters (SCRUM-205); off unless turned on. */
+  bcDepthVisible?: boolean;
   /** Ocean-current chevrons (SCRUM-99); off unless turned on. */
   waterCurrentsVisible?: boolean;
   selectedGridPoint: SelectedGridPoint | null;
@@ -147,6 +151,7 @@ export const MapView: React.FC<MapViewProps> = ({
   windColorOverlayVisible,
   waterCurrentsVisible = false,
   seamarksVisible = false,
+  bcDepthVisible = false,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -307,6 +312,25 @@ export const MapView: React.FC<MapViewProps> = ({
     // The map is created by the effect above, before this one runs, so the ref is current; adding
     // the map instance as a dependency would add the layer twice on the first render.
   }, [seamarksVisible]);
+
+  // CHS NONNA bathymetry (SCRUM-205): its own pane above the chart and under the seamarks, so the
+  // depth shading never covers the aids it gives context to, whichever toggle ran last.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !bcDepthVisible) return;
+    if (!map.getPane(NONNA_PANE)) {
+      const pane = map.createPane(NONNA_PANE);
+      pane.style.zIndex = '208';
+      // Tiles only paint here: clicks must still reach the map and the barbs.
+      pane.style.pointerEvents = 'none';
+    }
+    const config = nonnaLayerConfig();
+    if (config.kind !== 'wms') return;
+    const layer = L.tileLayer.wms(config.url, config.options).addTo(map);
+    return () => {
+      layer.remove();
+    };
+  }, [bcDepthVisible]);
 
   // Saved-location markers, updated in place by location id (SCRUM-92): only added or
   // removed locations create or remove markers; the rest get a new icon and popup.
