@@ -38,9 +38,17 @@ def forecast_payload(**current_overrides) -> dict:
     return payload
 
 
-def grid_item(speed: float = 10.0, direction: float = 180.0, temp_c: float = 10.0) -> dict:
-    """One point of an Open-Meteo multi-point (grid) response."""
-    return {"current": {"wind_speed_10m": speed, "wind_direction_10m": direction, "temperature_2m": temp_c}}
+def grid_item(
+    speed: float = 10.0,
+    direction: float = 180.0,
+    temp_c: float = 10.0,
+    gust: float | None = 18.0,
+) -> dict:
+    """One point of an Open-Meteo multi-point (grid) response; `gust=None` omits the gust."""
+    current = {"wind_speed_10m": speed, "wind_direction_10m": direction, "temperature_2m": temp_c}
+    if gust is not None:
+        current["wind_gusts_10m"] = gust
+    return {"current": current}
 
 
 def grid_payload(*items: dict) -> dict | list:
@@ -62,15 +70,18 @@ def grid_hourly_item(
     speed: float = 10.0,
     direction: float = 180.0,
     temp_c: float = 10.0,
+    gust: float = 20.0,
 ) -> dict:
     """One point of a grid response for a requested forecast hour (SCRUM-115)."""
     times, speeds = _day_series(hour_iso, speed, 1.0)
+    _, gusts = _day_series(hour_iso, gust, 2.0)
     _, directions = _day_series(hour_iso, direction, 0.0)
     _, temps = _day_series(hour_iso, temp_c, 0.0)
     return {
         "hourly": {
             "time": times,
             "wind_speed_10m": speeds,
+            "wind_gusts_10m": gusts,
             "wind_direction_10m": directions,
             "temperature_2m": temps,
         }
@@ -111,6 +122,7 @@ def insert_grid_row(
     speed: float = 7.0,
     direction: float = 90.0,
     temperature_f: float | None = 55.0,
+    gust: float | None = 12.0,
     expires_in: float = 3600,
     hour: str = "current",
 ) -> None:
@@ -120,7 +132,7 @@ def insert_grid_row(
         conn.execute(
             "INSERT INTO grid_weather_cache "
             "(lat_key, lon_key, model, hour, cached_at, expires_at, wind_speed_knots, "
-            "wind_direction_deg, temperature_f) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
-            (lat, lon, model, hour, now, now + expires_in, speed, direction, temperature_f),
+            "wind_gust_knots, wind_direction_deg, temperature_f) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            (lat, lon, model, hour, now, now + expires_in, speed, gust, direction, temperature_f),
         )

@@ -31,6 +31,11 @@ def as_float(value: float | None, default: float = 0.0) -> float:
     return default if value is None else float(value)
 
 
+def as_optional_float(value: float | None) -> float | None:
+    """Keep a missing value missing, where 0 would be a lie (an unknown gust is not calm)."""
+    return None if value is None else float(value)
+
+
 def c_to_f(temp_c: float | None) -> float:
     """°C → °F rounded to 1 decimal. Used by both the drawer forecast and the map grid,
     so their colors always agree."""

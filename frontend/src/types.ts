@@ -110,6 +110,8 @@ export interface GridWindPoint {
   latitude: number;
   longitude: number;
   wind_speed_knots: number;
+  /** Gust for the same moment (SCRUM-210); absent when the model has none for the point. */
+  wind_gust_knots?: number | null;
   wind_direction_deg: number;
   /** Temperature in °F; colors the map barb (SCRUM-89). */
   temperature_f?: number | null;
