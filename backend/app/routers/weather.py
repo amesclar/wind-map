@@ -7,9 +7,10 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app import locations_repo
+from backend.app.config import MODEL_ALIASES, MODEL_IDS
 from backend.app.dependencies import model_param, timezone_param
-from backend.app.models import WeatherForecastResponse, WeatherModelInfo
-from backend.app.services import nws
+from backend.app.models import ModelAvailabilityInfo, WeatherForecastResponse, WeatherModelInfo
+from backend.app.services import model_availability, nws
 from backend.app.services.model_info import model_infos
 from backend.app.services.time_window import validate_forecast_time
 from backend.app.services.weather_service import get_location_forecast, get_point_forecast
@@ -36,6 +37,27 @@ def coverage_error() -> HTTPException:
 def list_models() -> list[WeatherModelInfo]:
     """Selectable models with their cadence, time horizon and current/next run time (SCRUM-115)."""
     return model_infos()
+
+
+@router.get("/models/{model}/availability", response_model=ModelAvailabilityInfo)
+async def get_model_availability(model: str) -> ModelAvailabilityInfo:
+    """When the model's newest run was published and when the next one is due (SCRUM-256).
+
+    Nulls mean "no usable metadata for this model": composites and GEM have no file to read, and
+    an upstream outage is an empty answer rather than an error, because this is a freshness hint
+    on top of the derived cycle, never the forecast itself.
+    """
+    resolved = MODEL_ALIASES.get(model, model)
+    if resolved not in MODEL_IDS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown model: {model}")
+
+    found = await model_availability.availability_for(resolved)
+    return ModelAvailabilityInfo(
+        model=resolved,
+        run_utc=found.run_utc if found else None,
+        available_utc=found.available_utc if found else None,
+        next_available_utc=found.next_available_utc if found else None,
+    )
 
 
 TIME_QUERY = Query(

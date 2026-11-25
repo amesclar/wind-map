@@ -181,6 +181,26 @@ if set(MODEL_METADATA) != MODEL_IDS:
     raise ValueError("MODEL_METADATA must describe every entry in AVAILABLE_MODELS")
 
 
+# Model publication times (SCRUM-256). `MODEL_METADATA` gives the cycle boundary, which is when a
+# run starts, not when Open-Meteo finishes publishing it (measured 3 to 8 hours later). Each model's
+# `meta.json` is the only place the publication time is exposed. Only models with one upstream run
+# are listed: `best_match` and the seamless blends are composites with no file, and GEM's metadata
+# has been frozen since 2026-05-26 even though its forecast still updates, so those keep the cycle.
+MODEL_AVAILABILITY_URL = "https://api.open-meteo.com/data/{model}/static/meta.json"
+MODEL_AVAILABILITY_IDS: dict[str, str] = {
+    "gfs_seamless": "ncep_gfs025",
+    "ecmwf_ifs": "ecmwf_ifs025",
+    "ecmwf_aifs025_single": "ecmwf_aifs025_single",
+    # The global ICON run, deliberately not EU/D2: the refinements publish sooner but cover Europe
+    # only, so the global run is the clock that never enables a refresh early elsewhere.
+    "icon_seamless": "dwd_icon",
+}
+if not set(MODEL_AVAILABILITY_IDS) <= MODEL_IDS:
+    raise ValueError("MODEL_AVAILABILITY_IDS names a model that is not selectable")
+MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0  # a freshness hint must never delay anything
+MODEL_AVAILABILITY_CACHE_SECONDS = 600  # ten minutes, failures included
+
+
 def model_metadata(model: str) -> dict[str, object]:
     """Metadata for `model`; unknown ids fall back to the default model's entry."""
     return MODEL_METADATA.get(model, MODEL_METADATA[DEFAULT_MODEL])

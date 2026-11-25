@@ -164,6 +164,21 @@ class TidePointResponse(BaseModel):
     next_extreme_after: TideExtreme | None = None
 
 
+class ModelAvailabilityInfo(BaseModel):
+    """GET /api/weather/models/{model}/availability (SCRUM-256).
+
+    Nulls mean the model has no single upstream run to ask about (`best_match`, the seamless
+    blends, NDFD), not that the lookup failed; the UI then keeps the derived cycle clock.
+    """
+
+    model: str
+    # Initialisation of the newest run, the moment it became downloadable, and when the next one
+    # is expected. ISO 8601 UTC.
+    run_utc: str | None = None
+    available_utc: str | None = None
+    next_available_utc: str | None = None
+
+
 class WeatherModelInfo(BaseModel):
     """One entry of GET /api/weather/models (SCRUM-115)."""
 

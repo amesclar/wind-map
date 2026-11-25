@@ -70,6 +70,18 @@ export interface WeatherModelInfo extends WeatherModel {
   next_run_utc: string;
 }
 
+/**
+ * GET /api/weather/models/{model}/availability (SCRUM-256): when the newest run of the selected
+ * model was published, and when the next one is due. Every field is null for a model with no
+ * single upstream run (best_match, the seamless blends), which keeps the derived cycle clock.
+ */
+export interface ModelAvailability {
+  model: string;
+  run_utc: string | null;
+  available_utc: string | null;
+  next_available_utc: string | null;
+}
+
 export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';

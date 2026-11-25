@@ -45,6 +45,7 @@ vi.mock('./api/client', () => ({
   addLocation: vi.fn(),
   deleteLocation: vi.fn(),
   fetchModels: vi.fn(),
+  fetchModelAvailability: vi.fn(),
   fetchAllWeather: vi.fn(),
   fetchAppConfig: vi.fn(),
   searchGeocode: vi.fn(),
@@ -130,6 +131,13 @@ describe('App map integration (SCRUM-126)', () => {
         next_run_utc: '2026-11-23T18:00:00Z',
       },
     ]);
+    // best_match has no single upstream run, so the run line keeps the derived cycle (SCRUM-256).
+    (api.fetchModelAvailability as any).mockResolvedValue({
+      model: 'best_match',
+      run_utc: null,
+      available_utc: null,
+      next_available_utc: null,
+    });
     (api.fetchAppConfig as any).mockResolvedValue({});
     (api.fetchAllWeather as any).mockResolvedValue([oakForecast, seattleForecast]);
     vi.mocked(api.parseQuotaExhausted).mockReturnValue(null);

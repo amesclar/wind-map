@@ -6,6 +6,7 @@ import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSett
 import { useLocations } from './hooks/useLocations';
 import { type Selection, useAllWeather } from './hooks/useForecast';
 import { useMapExport } from './hooks/useMapExport';
+import { useModelAvailability } from './hooks/useModelAvailability';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
@@ -54,6 +55,8 @@ export const App: React.FC = () => {
   const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
 
   const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
+  // Publication times of the selected model, when Open-Meteo exposes them (SCRUM-256).
+  const modelAvailability = useModelAvailability(selectedModel);
   const validTimeLabel = forecastTime ? formatStepLabel(forecastTime, timezone) : null;
 
   // Image export, range capture and their dialog state (SCRUM-174: own hook).
@@ -237,6 +240,7 @@ export const App: React.FC = () => {
         </div>
         <ForecastTimeSelector
           model={selectedModelInfo}
+          availability={modelAvailability}
           forecastTime={forecastTime}
           onChange={setForecastTime}
           timezone={timezone}
