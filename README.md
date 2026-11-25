@@ -205,10 +205,12 @@ The public deployment runs the same image on Cloud Run behind HTTP Basic Auth, w
 replicated to the bucket above (SCRUM-136). It is live at
 <https://wind-map-qhtz2eay6a-uw.a.run.app> (username ignored, password from Secret Manager).
 
-**Merging into `develop` deploys it** (SCRUM-189). `.github/workflows/deploy-cloud-run.yml` builds
+**Merging into `master` deploys it** (SCRUM-189, SCRUM-223), so only a release reaches production;
+a `develop` merge rebuilds the local container instead. `.github/workflows/deploy-cloud-run.yml` builds
 the image for `linux/amd64` with the merge commit, pushes it to Artifact Registry as
 `VERSION-<merge-sha>` and `latest`, rolls the service and fails unless `/api/health` reports
-`status: ok`. It can also be started from the Actions tab. Authentication is keyless: the workflow
+`status: ok`. A feature that needs testing on the public URL is deployed on purpose from the Actions
+tab by choosing its branch. Authentication is keyless: the workflow
 exchanges GitHub's OIDC token for short-lived credentials through the Workload Identity pool
 `github`, which only accepts repository `amesclar/wind-map`, so no service account key is stored in
 GitHub. The deploy identity `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com` may push the

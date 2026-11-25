@@ -1,4 +1,4 @@
-"""The Cloud Run deploy workflow must keep every runtime secret attached (SCRUM-190)."""
+"""The Cloud Run deploy workflow keeps every runtime secret (SCRUM-190) and deploys only on purpose (SCRUM-223)."""
 
 from pathlib import Path
 
@@ -25,6 +25,16 @@ def test_deploy_passes_the_jira_settings_feedback_needs():
     assert "LITESTREAM_BUCKET=$LITESTREAM_BUCKET" in env_line
     assert "JIRA_BASE_URL=$JIRA_BASE_URL" in env_line
     assert "JIRA_EMAIL=$JIRA_EMAIL" in env_line
+
+
+def test_only_master_deploys_automatically():
+    """A merge into develop rebuilds the local container; it must not replace the public service."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    on_block = text.split("\non:", 1)[1].split("\nconcurrency:", 1)[0]
+
+    assert "master" in on_block
+    assert "develop" not in on_block
+    assert "workflow_dispatch" in on_block
 
 
 def test_jira_settings_are_defined_in_the_workflow_env():

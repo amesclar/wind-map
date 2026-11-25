@@ -18,7 +18,7 @@ Rules: `.kiro/steering/release-versioning.md`. The tag must equal `v` + the cont
 5. Author release notes in `release-notes/x-x-x.md` (e.g., `release-notes/0-4-0.md`, replacing dots with hyphens) summarizing changes since the previous release.
 6. Run the `ci-checks` skill. `backend/tests/test_version.py` and `frontend/src/version.test.ts` must pass.
 7. Commit `SCRUM-xxx: Bump version to X.Y.Z for release`, open `[SCRUM-xxx] Bump version to X.Y.Z for release` into `develop`, merge once checks pass, delete the branch, comment the merge hash on the ticket and mark it Done.
-8. Merge `develop` into `master` through a PR (`gh pr create --base master --head develop --title "Release vX.Y.Z" --body-file release-notes/x-x-x.md`) and wait for checks.
+8. Merge `develop` into `master` through a PR (`gh pr create --base master --head develop --title "Release vX.Y.Z" --body-file release-notes/x-x-x.md`) and wait for checks. This master merge is what deploys to Google Cloud; a `develop` merge only rebuilds the local container (SCRUM-223).
 9. Tag and publish from `master`:
    ```bash
    git fetch origin && git checkout master && git pull --ff-only
