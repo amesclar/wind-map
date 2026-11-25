@@ -85,6 +85,19 @@ export const SEAMARK_ATTRIBUTION_TEXT = 'Seamarks © OpenSeaMap contributors';
 export const SEAMARK_NOTICE = 'Not for navigation';
 
 /**
+ * The paper chart draws NOAA's own aids to navigation, so the OpenSeaMap overlay would put a second,
+ * possibly disagreeing set of buoys and lights on top of it (SCRUM-214). The stored toggle is never
+ * changed: the overlay comes back as soon as another base map is chosen.
+ */
+export function seamarksShownFor(layer: MapTileLayer, seamarksVisible: boolean): boolean {
+  return seamarksVisible && layer !== 'paper_chart';
+}
+
+/** Why the seamark toggle is inert on the chart; shown in Map Settings and nowhere else. */
+export const SEAMARK_HIDDEN_ON_CHART =
+  "Hidden on the paper chart, which already draws NOAA's aids to navigation. Your seamark setting applies on the other base maps.";
+
+/**
  * URL and options for the OpenSeaMap seamark overlay (SCRUM-175). It is an overlay, so it stays
  * out of `MapTileLayer` and the base-map radios. Measured 2026-11-25: z12 to z19 all answer 200
  * with `access-control-allow-origin: *`, so `maxZoom` matches the base layers and `crossOrigin`
