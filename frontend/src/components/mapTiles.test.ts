@@ -22,6 +22,8 @@ import {
   SEAMARK_NOTICE,
   SEAMARK_PANE,
   seamarkLayerConfig,
+  seamarksShownFor,
+  SEAMARK_HIDDEN_ON_CHART,
   tileLayerConfig,
 } from './mapTiles';
 import { gridDimensions, MAX_GRID_DIM } from '../hooks/useWindGrid';
@@ -54,6 +56,22 @@ describe('seamarkLayerConfig (SCRUM-175)', () => {
   it('carries the licence credit and the navigation notice for the toggle and the export', () => {
     expect(SEAMARK_ATTRIBUTION_TEXT).toBe('Seamarks © OpenSeaMap contributors');
     expect(SEAMARK_NOTICE).toBe('Not for navigation');
+  });
+});
+
+describe('seamarksShownFor (SCRUM-214)', () => {
+  it('hides the overlay on the paper chart and keeps it on every other base', () => {
+    expect(seamarksShownFor('paper_chart', true)).toBe(false);
+    for (const layer of ['osm_dark', 'carto_dark', 'osm_standard'] as const) {
+      expect(seamarksShownFor(layer, true)).toBe(true);
+    }
+    // The stored toggle still decides for every base; it is only overridden on the chart.
+    expect(seamarksShownFor('osm_dark', false)).toBe(false);
+  });
+
+  it('explains why the toggle does nothing on the chart', () => {
+    expect(SEAMARK_HIDDEN_ON_CHART).toContain('aids to navigation');
+    expect(SEAMARK_HIDDEN_ON_CHART).toContain('other base maps');
   });
 });
 

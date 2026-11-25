@@ -28,6 +28,7 @@ import {
   NONNA_PANE,
   NOAA_COVERAGE_NOTICE,
   seamarkLayerConfig,
+  seamarksShownFor,
   SEAMARK_PANE,
   tileLayerConfig,
 } from './mapTiles';
@@ -170,6 +171,9 @@ export const MapView: React.FC<MapViewProps> = ({
   // SCRUM-203: the NOAA paper chart is a base map, not an overlay, and it is clipped to its
   // coverage, so the notice below has to follow pans and zooms.
   const chartBase = tileLayerType === 'paper_chart';
+  // SCRUM-214: the chart carries its own aids, so the seamark overlay is suppressed on it without
+  // changing the stored toggle; it returns as soon as another base is chosen.
+  const seamarksShown = seamarksShownFor(tileLayerType, seamarksVisible);
   const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
@@ -297,7 +301,7 @@ export const MapView: React.FC<MapViewProps> = ({
   // wind layers stack in a fixed order however they are toggled.
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !seamarksVisible) return;
+    if (!map || !seamarksShown) return;
     if (!map.getPane(SEAMARK_PANE)) {
       const pane = map.createPane(SEAMARK_PANE);
       pane.style.zIndex = '210';
@@ -311,7 +315,7 @@ export const MapView: React.FC<MapViewProps> = ({
     };
     // The map is created by the effect above, before this one runs, so the ref is current; adding
     // the map instance as a dependency would add the layer twice on the first render.
-  }, [seamarksVisible]);
+  }, [seamarksShown]);
 
   // CHS NONNA bathymetry (SCRUM-205): its own pane above the chart and under the seamarks, so the
   // depth shading never covers the aids it gives context to, whichever toggle ran last.

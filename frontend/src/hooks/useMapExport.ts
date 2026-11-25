@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { GridWindPoint, MapTileLayer, UnitSystem, WeatherModelInfo, WindSpeedUnit } from '../types';
-import { attributionText } from '../components/mapTiles';
+import { attributionText, seamarksShownFor } from '../components/mapTiles';
 import type {
   MapExportError,
   MapExportFormat,
@@ -130,7 +130,8 @@ export function useMapExport({
         speedUnit,
         attribution: attributionText(tileLayer),
         bcDepth: bcDepthVisible,
-        seamarks: seamarksVisible,
+        // The chart draws its own aids, so the credit goes with the hidden overlay (SCRUM-214).
+        seamarks: seamarksShownFor(tileLayer, seamarksVisible),
         version: APP_VERSION,
       }),
       barbs: barbLegendEntries(speedUnit),

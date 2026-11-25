@@ -114,6 +114,30 @@ describe('MapView seamark overlay (SCRUM-175)', () => {
     await waitFor(() => expect(layer.remove).toHaveBeenCalled());
   });
 
+  it('draws no seamarks on the paper chart and brings them back on another base (SCRUM-214)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    const { rerender } = render(
+      <MapView {...baseProps} locations={[]} tileLayerType="paper_chart" seamarksVisible />,
+    );
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seamarkCalls()).toHaveLength(0);
+
+    // Another base honours the stored preference without a reload.
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" seamarksVisible />);
+    await waitFor(() => expect(seamarkCalls()).toHaveLength(1));
+
+    // Back on the chart the layer goes again; the preference itself is untouched.
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" seamarksVisible />);
+    await waitFor(() =>
+      expect(
+        createdTileLayers.filter(
+          (layer) => layer.options?.pane === 'seamarkPane' && layer.remove.mock.calls.length === 0,
+        ),
+      ).toHaveLength(0),
+    );
+  });
+
   it('adds no seamark layer when the overlay is off', async () => {
     vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
     render(<MapView {...baseProps} locations={[]} />);

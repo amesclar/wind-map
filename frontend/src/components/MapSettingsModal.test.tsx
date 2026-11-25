@@ -67,6 +67,35 @@ describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
     expect(onToggle).toHaveBeenCalledWith(true);
   });
 
+  it('is disabled on the paper chart and explains that the chart draws its own aids (SCRUM-214)', () => {
+    const onToggle = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        tileLayer="paper_chart"
+        seamarksVisible
+        onToggleSeamarks={onToggle}
+      />,
+    );
+
+    const toggle = screen.getByTestId('seamarks-toggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(
+      within(screen.getByTestId('map-settings-body')).getByText(/already draws NOAA's aids/),
+    ).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('stays usable on the other bases', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_dark" seamarksVisible />);
+    const toggle = screen.getByTestId('seamarks-toggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('shows the pressed state and the licence credit with the navigation notice', () => {
     render(<MapSettingsModal {...BASE_PROPS} seamarksVisible />);
     expect(screen.getByTestId('seamarks-toggle').getAttribute('aria-pressed')).toBe('true');

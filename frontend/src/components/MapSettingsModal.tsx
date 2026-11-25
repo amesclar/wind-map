@@ -9,6 +9,7 @@ import {
   NONNA_DERIVATIVE_NOTICE,
   NONNA_NOTICE,
   SEAMARK_ATTRIBUTION_TEXT,
+  SEAMARK_HIDDEN_ON_CHART,
   SEAMARK_NOTICE,
 } from './mapTiles';
 
@@ -54,6 +55,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
 }) => {
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
+  // The chart carries NOAA's own aids, so the seamark overlay is suppressed there (SCRUM-214).
+  const chartBase = tileLayer === 'paper_chart';
 
   if (!isOpen) return null;
 
@@ -371,21 +374,29 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   <div>
                     <div className="text-xs font-medium text-gray-100">Show buoys, beacons and lights</div>
                     <div className="text-[11px] text-gray-400 mt-0.5">
-                      OpenSeaMap overlay drawn under the wind layers. {SEAMARK_ATTRIBUTION_TEXT} · {SEAMARK_NOTICE}.
+                      {chartBase ? (
+                        SEAMARK_HIDDEN_ON_CHART
+                      ) : (
+                        <>
+                          OpenSeaMap overlay drawn under the wind layers. {SEAMARK_ATTRIBUTION_TEXT} ·{' '}
+                          {SEAMARK_NOTICE}.
+                        </>
+                      )}
                     </div>
                   </div>
                   <button
                     data-testid="seamarks-toggle"
                     type="button"
+                    disabled={chartBase}
                     onClick={() => onToggleSeamarks(!seamarksVisible)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
-                      seamarksVisible ? 'bg-sky-500' : 'bg-dark-600'
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 disabled:opacity-40 disabled:cursor-not-allowed ${
+                      seamarksVisible && !chartBase ? 'bg-sky-500' : 'bg-dark-600'
                     }`}
-                    aria-pressed={seamarksVisible}
+                    aria-pressed={seamarksVisible && !chartBase}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                        seamarksVisible ? 'translate-x-4' : 'translate-x-0'
+                        seamarksVisible && !chartBase ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
                   </button>
