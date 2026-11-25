@@ -3,7 +3,7 @@ import { DEFAULT_TIMEZONE, STORAGE_KEYS, TIMEZONES } from '../constants';
 import type { AppConfig, MapTileLayer, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { useLocalStorageState } from './useLocalStorageState';
 
-const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'osm_dark', 'osm_standard', 'paper_chart'];
+const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'osm_dark', 'osm_standard'];
 
 const parseTileLayer = (stored: string | null): MapTileLayer =>
   TILE_LAYER_IDS.includes(stored as MapTileLayer) ? (stored as MapTileLayer) : 'osm_dark';
@@ -12,8 +12,6 @@ const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
 const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
-const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
-const parseBcDepth = (stored: string | null) => stored === 'true'; // default off (SCRUM-205)
 
 /** Tile layer, CARTO API key and wind overlay visibility, persisted to localStorage. */
 export function useMapSettings() {
@@ -46,16 +44,6 @@ export function useMapSettings() {
     STORAGE_KEYS.waterCurrentsVisible,
     parseCurrents,
   );
-  // Nautical seamark overlay (SCRUM-175): a community tile server, so off unless asked for.
-  const [seamarksVisible, setSeamarksVisible] = useLocalStorageState(
-    STORAGE_KEYS.seamarks,
-    parseSeamarks,
-  );
-  // B.C. depth context (SCRUM-205): CHS NONNA is an extra overseas request per tile, so off too.
-  const [bcDepthVisible, setBcDepthVisible] = useLocalStorageState(
-    STORAGE_KEYS.bcDepth,
-    parseBcDepth,
-  );
 
   /** Saving a key switches to the CARTO layer; clearing it keeps the current layer. */
   const saveCartoApiKey = useCallback(
@@ -72,13 +60,10 @@ export function useMapSettings() {
     (config: AppConfig) => {
       if (config.carto_api_key && !cartoApiKey) {
         setServerKey(config.carto_api_key);
-        // A stored paper chart (SCRUM-203) outranks the key's session default, or the mode would be
-        // unreachable in production after every reload, where the server key is always present.
-        // The key itself is still adopted, so switching to CARTO later does not need a reload.
-        if (storedTileLayer !== 'paper_chart') setSessionTileLayer('carto_dark');
+        setSessionTileLayer('carto_dark');
       }
     },
-    [cartoApiKey, storedTileLayer],
+    [cartoApiKey],
   );
 
   return {
@@ -92,10 +77,6 @@ export function useMapSettings() {
     setWindColorOverlayVisible,
     waterCurrentsVisible,
     setWaterCurrentsVisible,
-    seamarksVisible,
-    setSeamarksVisible,
-    bcDepthVisible,
-    setBcDepthVisible,
     applyServerConfig,
   };
 }

@@ -15,10 +15,6 @@ const BASE_PROPS = {
   onToggleWindColorOverlay: vi.fn(),
   waterCurrentsVisible: false,
   onToggleWaterCurrents: vi.fn(),
-  seamarksVisible: false,
-  onToggleSeamarks: vi.fn(),
-  bcDepthVisible: false,
-  onToggleBcDepth: vi.fn(),
 };
 
 describe('MapSettingsModal wind overlay toggle', () => {
@@ -54,73 +50,6 @@ describe('MapSettingsModal wind overlay toggle', () => {
   it('does not render when isOpen is false', () => {
     const { container } = render(<MapSettingsModal {...BASE_PROPS} isOpen={false} />);
     expect(container.firstChild).toBeNull();
-  });
-});
-
-describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
-  it('is off by default and calls the handler with the flipped value', () => {
-    const onToggle = vi.fn();
-    render(<MapSettingsModal {...BASE_PROPS} seamarksVisible={false} onToggleSeamarks={onToggle} />);
-    const toggle = screen.getByTestId('seamarks-toggle');
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(toggle);
-    expect(onToggle).toHaveBeenCalledWith(true);
-  });
-
-  it('shows the pressed state and the licence credit with the navigation notice', () => {
-    render(<MapSettingsModal {...BASE_PROPS} seamarksVisible />);
-    expect(screen.getByTestId('seamarks-toggle').getAttribute('aria-pressed')).toBe('true');
-    const body = screen.getByTestId('map-settings-body');
-    expect(within(body).getByText(/OpenSeaMap/)).toBeTruthy();
-    // The chart note carries the same notice (SCRUM-203), so both are expected here.
-    expect(within(body).getAllByText(/Not for navigation/).length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe('MapSettingsModal B.C. depth toggle (SCRUM-205)', () => {
-  it('is off by default and calls the handler with the flipped value', () => {
-    const onToggle = vi.fn();
-    render(<MapSettingsModal {...BASE_PROPS} bcDepthVisible={false} onToggleBcDepth={onToggle} />);
-    const toggle = screen.getByTestId('bc-depth-toggle');
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(toggle);
-    expect(onToggle).toHaveBeenCalledWith(true);
-  });
-
-  it('names CHS, the navigation notice and the derivative notice', () => {
-    render(<MapSettingsModal {...BASE_PROPS} bcDepthVisible />);
-    const body = screen.getByTestId('map-settings-body');
-    expect(within(body).getByText(/B\.C\. Depth \(CHS NONNA\)/)).toBeTruthy();
-    expect(within(body).getByText(/Bathymetry © CHS NONNA/)).toBeTruthy();
-    expect(within(body).getByText(/Canadian Hydrographic Service/)).toBeTruthy();
-    expect(screen.getByTestId('bc-depth-toggle').getAttribute('aria-pressed')).toBe('true');
-  });
-});
-
-describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
-  it('offers a fourth, non-default radio that reports its choice', () => {
-    const onChange = vi.fn();
-    render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
-
-    const options = within(screen.getByTestId('map-settings-column-options'));
-    expect(options.getAllByRole('radio')).toHaveLength(4);
-
-    const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
-    expect((radio as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(radio);
-    expect(onChange).toHaveBeenCalledWith('paper_chart');
-  });
-
-  it('states the NOAA credit, the navigation notice and the coverage limit', () => {
-    render(<MapSettingsModal {...BASE_PROPS} tileLayer="paper_chart" />);
-
-    const body = screen.getByTestId('map-settings-body');
-    expect(within(body).getByText(/© NOAA Office of Coast Survey/)).toBeTruthy();
-    expect(within(body).getByText(/Canadian border/)).toBeTruthy();
-    expect(
-      (screen.getByTestId('tile-layer-paper-chart').querySelector('input') as HTMLInputElement)
-        .checked,
-    ).toBe(true);
   });
 });
 

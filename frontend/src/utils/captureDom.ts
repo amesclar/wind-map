@@ -3,7 +3,6 @@
  * `captureMap.ts`). Chrome is filtered out, Leaflet's tiles leave the DOM for the capture and are
  * drawn from their loaded images instead.
  */
-import { loadingTileLayers, waitForVectorIdle } from './captureReadiness';
 
 /** The CSS filter `.osm-dark-tiles` puts on the keyless OSM layer. */
 export const DARK_TILE_FILTER = 'invert(100%) hue-rotate(185deg) brightness(92%) contrast(90%)';
@@ -52,34 +51,23 @@ export function collectTiles(container: HTMLElement): TileFrame[] {
     .filter((tile) => tile.width > 0 && tile.height > 0);
 }
 
-/**
- * Tiles that are still loading: Leaflet adds `leaflet-tile-loaded` only once a tile has decoded or
- * failed, so a tile that exists but has not painted yet is counted here too (SCRUM-204).
- */
+/** Tiles that are still loading, if the layer is mid-load. */
 export function pendingTiles(container: HTMLElement): number {
   return container.querySelectorAll('img.leaflet-tile:not(.leaflet-tile-loaded)').length;
 }
 
 /**
- * Wait (bounded) for the map to finish painting, so a capture right after a pan or a layer change
- * is not blank. Three signals, because a DOM snapshot alone is not enough (SCRUM-204):
- *
- * - tiles already in the DOM that have not decoded yet (`pendingTiles`);
- * - tile layers that are fetching, including the window before Leaflet creates their `<img>`
- *   nodes, which only the layer itself knows (`isLoading()`);
- * - vector renderers, which have no `<img>` tiles at all and paint in WebGL (`idle`).
- *
- * Resolves on the timeout as well: a layer that never settles must not block the save.
+ * Wait (bounded) for the base map to finish loading, so a capture right after a pan or a layer
+ * change is not blank. Resolves on the timeout as well: an image that never loads must not block
+ * the save.
  */
 export async function waitForTiles(container: HTMLElement, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const tiles = container.querySelectorAll('img.leaflet-tile').length;
-    if (tiles > 0 && pendingTiles(container) === 0 && loadingTileLayers() === 0) break;
+    if (tiles > 0 && pendingTiles(container) === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  // Vector paint is not observable in the DOM; the renderer reports when it has finished.
-  await waitForVectorIdle(Math.max(0, deadline - Date.now()));
 }
 
 /** Paint the tiles under the overlay, applying the dark-map filter where the layer has it. */

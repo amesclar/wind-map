@@ -11,12 +11,6 @@ export const WIND_COLOR_PANE_Z_INDEX = 250;
  * high enough that the speed field still reads at a glance (SCRUM-143).
  */
 export const WIND_COLOR_OPACITY = 0.55;
-/**
- * On the paper chart base (SCRUM-203) the wash stays lighter: at 0.55 it covers the chart's magenta
- * and shallow-water blues, which is the whole point of that mode (measured in SCRUM-200). Exported
- * so the Seamap base style (SCRUM-206) reuses the same value instead of inventing another.
- */
-export const WIND_COLOR_OPACITY_ON_CHART = 0.35;
 /** One sample per 4 CSS pixels; the browser smooths the upscaled canvas. */
 export const WIND_COLOR_SAMPLE_PX = 4;
 
@@ -28,8 +22,6 @@ interface WindColorOverlayProps {
   /** The same shared grid the barbs use (SCRUM-122); nothing is fetched here. */
   points: GridWindPoint[];
   visible: boolean;
-  /** Canvas opacity; the chart base passes the lighter value (SCRUM-203). */
-  opacity?: number;
 }
 
 /**
@@ -44,18 +36,11 @@ interface WindColorOverlayProps {
  * the viewport after every drag. A container resize repaints through a ResizeObserver,
  * because the map can change size without any pan or zoom.
  */
-export function WindColorOverlay({
-  map,
-  points,
-  visible,
-  opacity = WIND_COLOR_OPACITY,
-}: WindColorOverlayProps) {
+export function WindColorOverlay({ map, points, visible }: WindColorOverlayProps) {
   const pointsRef = useRef(points);
   pointsRef.current = points;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const opacityRef = useRef(opacity);
-  opacityRef.current = opacity;
   const paintRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -72,6 +57,7 @@ export function WindColorOverlay({
     canvas.style.left = '0';
     canvas.style.top = '0';
     canvas.style.pointerEvents = 'none';
+    canvas.style.opacity = String(WIND_COLOR_OPACITY);
     pane.appendChild(canvas);
 
     /** Place the canvas exactly over the map viewport, whatever the pane is offset by. */
@@ -87,8 +73,6 @@ export function WindColorOverlay({
     const paint = () => {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      // Applied on every paint, so a base-map switch reaches the canvas without remounting it.
-      canvas.style.opacity = String(opacityRef.current);
 
       if (!visibleRef.current) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -150,10 +134,10 @@ export function WindColorOverlay({
     };
   }, [map]);
 
-  // New data, a visibility change or a different base map replaces the frame outright.
+  // New data or a visibility change replaces the frame outright.
   useEffect(() => {
     paintRef.current?.();
-  }, [points, visible, opacity]);
+  }, [points, visible]);
 
   return null;
 }
