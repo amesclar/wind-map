@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import L from 'leaflet';
 import {
+  attributionText,
+  CHART_BOUNDS,
+  CHART_COVERAGE_MAX_LAT,
+  CHART_MIN_ZOOM,
+  CHART_PANE,
+  CHART_TILE_CLASS,
+  NOAA_ATTRIBUTION_TEXT,
+  NOAA_NOTICE,
   SEAMARK_ATTRIBUTION_TEXT,
   SEAMARK_NOTICE,
   SEAMARK_PANE,
@@ -36,6 +45,45 @@ describe('seamarkLayerConfig (SCRUM-175)', () => {
   it('carries the licence credit and the navigation notice for the toggle and the export', () => {
     expect(SEAMARK_ATTRIBUTION_TEXT).toBe('Seamarks © OpenSeaMap contributors');
     expect(SEAMARK_NOTICE).toBe('Not for navigation');
+  });
+});
+
+describe('paper chart tile config (SCRUM-203)', () => {
+  it('asks for the NOAA chart as WMS 1.1.1 in EPSG:3857, never through the dark filter', () => {
+    const chart = tileLayerConfig('paper_chart');
+
+    expect(chart.kind).toBe('wms');
+    expect(chart.url).toContain('NOAAChartDisplay');
+    expect(chart.options.layers).toBe('0,1,2,3,6');
+    expect(chart.options.format).toBe('image/png');
+    expect(chart.options.version).toBe('1.1.1');
+    // Default 4326 returns blank tiles: the service wants the Web Mercator CRS (SCRUM-202).
+    expect(chart.options.crs).toBe(L.CRS.EPSG3857);
+    expect(chart.options.crossOrigin).toBe(true);
+    expect(chart.options.maxZoom).toBe(19);
+    expect(chart.options.className).toBe(CHART_TILE_CLASS);
+    expect(chart.options.className).not.toContain('osm-dark-tiles');
+  });
+
+  it('exports the clip and zoom floor the mount and the notice share', () => {
+    expect(CHART_COVERAGE_MAX_LAT).toBe(49.6);
+    expect(CHART_MIN_ZOOM).toBe(12);
+    expect(CHART_PANE).toBe('chartPane');
+    expect(CHART_BOUNDS.north).toBe(CHART_COVERAGE_MAX_LAT);
+  });
+
+  it('credits NOAA with the navigation notice and leaves the other three strings unchanged', () => {
+    expect(attributionText('paper_chart')).toBe(`${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`);
+    expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
+    expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
+    expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
+  });
+
+  it('never puts the dark filter on a chart or a standard layer', () => {
+    for (const layer of ['paper_chart', 'osm_standard', 'carto_dark'] as const) {
+      expect(tileLayerConfig(layer).options.className ?? '').not.toContain('osm-dark-tiles');
+    }
+    expect(tileLayerConfig('osm_dark').options.className).toContain('osm-dark-tiles');
   });
 });
 

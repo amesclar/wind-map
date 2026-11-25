@@ -1,8 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
-import leaflet, { createdMarkers, currentMap, markerAt, resetLeafletMock } from '../test/leafletMock';
+import leaflet, {
+  createdMarkers,
+  createdTileLayers,
+  currentMap,
+  markerAt,
+  resetLeafletMock,
+} from '../test/leafletMock';
+import { CHART_COVERAGE_MAX_LAT, CHART_MIN_ZOOM, CHART_PANE } from './mapTiles';
 import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
@@ -198,6 +205,117 @@ describe('MapView barb pop-ups (SCRUM-126)', () => {
     marker.fire('click');
     expect(onGridPointSelect).toHaveBeenCalledWith(expect.objectContaining({ latitude: 48.75 }));
     expect(api.fetchWindGrid).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MapView paper chart base (SCRUM-203)', () => {
+  const chartLayer = () => createdTileLayers.find((layer) => layer.kind === 'wms')!;
+
+  it('mounts a keyless substrate plus one clipped chart layer in its own pane', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+
+    const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
+    expect(substrate.url).toContain('tile.openstreetmap.org');
+    expect(substrate.options?.className).toBe('osm-dark-tiles');
+
+    const chart = chartLayer();
+    expect(chart.url).toContain('NOAAChartDisplay');
+    expect(chart.options?.className).toBe('noaa-chart-tiles');
+    expect(chart.options?.pane).toBe(CHART_PANE);
+    expect(chart.options?.minZoom).toBe(CHART_MIN_ZOOM);
+    const bounds = chart.options?.bounds as { getNorth: () => number };
+    expect(bounds.getNorth()).toBe(CHART_COVERAGE_MAX_LAT);
+
+    const pane = currentMap().panes[CHART_PANE];
+    expect(pane.style.zIndex).toBe('205');
+    expect(pane.style.pointerEvents).toBe('none');
+  });
+
+  it('replaces both layers when another base is chosen', () => {
+    const { rerender } = render(
+      <MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />,
+    );
+    const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
+    const chart = chartLayer();
+
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+
+    expect(substrate.remove).toHaveBeenCalled();
+    expect(chart.remove).toHaveBeenCalled();
+    // No live chart layer is left behind.
+    expect(
+      createdTileLayers.filter(
+        (layer) => layer.kind === 'wms' && layer.remove.mock.calls.length === 0,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('zooms to the chart floor when the mode is selected below it, and leaves a deeper view alone', () => {
+    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    const map = currentMap();
+
+    // The app opens around z10, where the chart would not draw at all.
+    map.zoom = CHART_MIN_ZOOM - 2;
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+    expect(map.setZoom).toHaveBeenCalledWith(CHART_MIN_ZOOM);
+
+    map.setZoom.mockClear();
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    map.zoom = CHART_MIN_ZOOM + 1;
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+    expect(map.setZoom).not.toHaveBeenCalled();
+  });
+
+  it('explains the missing chart north of the clip and below the zoom floor only', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+    expect(screen.queryByTestId('chart-coverage-notice')).toBeNull();
+
+    const map = currentMap();
+    act(() => {
+      map.bounds = { south: 50.2, north: 51.5, west: -124, east: -122 };
+      map.fire('moveend');
+    });
+    expect(screen.getByTestId('chart-coverage-notice')).toBeTruthy();
+
+    act(() => {
+      map.bounds = { south: 47, north: 49, west: -123, east: -121 };
+      map.zoom = CHART_MIN_ZOOM - 1;
+      map.fire('zoomend');
+    });
+    expect(screen.getByTestId('chart-coverage-notice')).toBeTruthy();
+
+    act(() => {
+      map.zoom = CHART_MIN_ZOOM;
+      map.fire('zoomend');
+    });
+    expect(screen.queryByTestId('chart-coverage-notice')).toBeNull();
+  });
+
+  it('haloes the barbs and inverts the selected ring on the light base', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      {
+        latitude: 48,
+        longitude: -122,
+        wind_speed_knots: 12,
+        wind_direction_deg: 180,
+        temperature_f: 55,
+      },
+    ]);
+    render(
+      <MapView
+        {...baseProps}
+        locations={[]}
+        tileLayerType="paper_chart"
+        windOverlayVisible
+        selectedGridPoint={{ latitude: 48, longitude: -122 }}
+      />,
+    );
+
+    await waitFor(() => expect(createdMarkers).toHaveLength(1));
+    const html = (createdMarkers[0].icon as { html: string }).html;
+    expect(html).toContain('wind-barb-halo');
+    // White would disappear on white water: the chart base draws the ring dark (SCRUM-203).
+    expect(html).toContain('box-shadow:0 0 0 2px #161b22');
   });
 });
 

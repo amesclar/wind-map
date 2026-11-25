@@ -82,6 +82,15 @@
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
 }
 
+/* SCRUM-203: on the light chart sheet a dark halo alone is not enough. The light inner glow
+   separates a light temperature colour from white water, and the dark outer glow still separates
+   the glyph from cream land. */
+.chart-base .wind-barb-halo {
+  filter: drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.95))
+    drop-shadow(0 0 1.6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 3.5px rgba(0, 0, 0, 0.75));
+}
+
 /* Wind color legend: sits just above the map attribution. The forecast drawer that used to
    push the strip up (via --drawer-height) is gone (SCRUM-126), so the offset is fixed. Mirrors
    LEGEND_BOTTOM_PX. */

@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Anchor } from 'lucide-react';
 import { MapTileLayer } from '../types';
-import { SEAMARK_ATTRIBUTION_TEXT, SEAMARK_NOTICE } from './mapTiles';
+import {
+  NOAA_ATTRIBUTION_TEXT,
+  NOAA_COVERAGE_NOTICE,
+  NOAA_NOTICE,
+  SEAMARK_ATTRIBUTION_TEXT,
+  SEAMARK_NOTICE,
+} from './mapTiles';
 
 interface MapSettingsModalProps {
   isOpen: boolean;
@@ -137,6 +143,34 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       </div>
                     </div>
                   </label>
+
+                  <label
+                    data-testid="tile-layer-paper-chart"
+                    className="flex items-start gap-3 p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 cursor-pointer transition"
+                  >
+                    <input
+                      type="radio"
+                      name="tileLayer"
+                      checked={tileLayer === 'paper_chart'}
+                      onChange={() => onChangeTileLayer('paper_chart')}
+                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    />
+                    <div>
+                      <div className="text-xs font-medium text-gray-100 flex items-center gap-2">
+                        Nautical Paper Chart
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
+                          Free • No Key Needed
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        NOAA's official chart as the map itself: soundings, aids to navigation and
+                        channels, at about 0.5 s per tile because nothing is cached.
+                      </div>
+                      <div className="text-[11px] text-gray-500 mt-1">
+                        {NOAA_ATTRIBUTION_TEXT} · {NOAA_NOTICE}. {NOAA_COVERAGE_NOTICE}
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -158,8 +192,11 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   </a>
                 </div>
 
-                <p className="text-[11px] text-gray-400 mb-2.5">
+                <p className="text-[11px] text-gray-400 mb-1">
                   Get an instant free key from CARTO (up to 5 million requests/month) and paste it below to unlock watermark-free CARTO tiles.
+                </p>
+                <p className="text-[11px] text-gray-500 mb-2.5">
+                  The key applies to CARTO Dark Matter only.
                 </p>
 
                 <form onSubmit={handleSave} className="space-y-2.5">
@@ -263,6 +300,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     </div>
                     <div className="text-[11px] text-gray-400 mt-0.5">
                       Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs gain a dark halo to stay readable.
+                      On the Nautical Paper Chart base the gradient draws lighter; turning it off
+                      keeps the chart's own symbols crisp.
                     </div>
                   </div>
                   <button

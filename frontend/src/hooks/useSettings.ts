@@ -3,7 +3,7 @@ import { DEFAULT_TIMEZONE, STORAGE_KEYS, TIMEZONES } from '../constants';
 import type { AppConfig, MapTileLayer, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { useLocalStorageState } from './useLocalStorageState';
 
-const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'osm_dark', 'osm_standard'];
+const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'osm_dark', 'osm_standard', 'paper_chart'];
 
 const parseTileLayer = (stored: string | null): MapTileLayer =>
   TILE_LAYER_IDS.includes(stored as MapTileLayer) ? (stored as MapTileLayer) : 'osm_dark';
@@ -66,10 +66,13 @@ export function useMapSettings() {
     (config: AppConfig) => {
       if (config.carto_api_key && !cartoApiKey) {
         setServerKey(config.carto_api_key);
-        setSessionTileLayer('carto_dark');
+        // A stored paper chart (SCRUM-203) outranks the key's session default, or the mode would be
+        // unreachable in production after every reload, where the server key is always present.
+        // The key itself is still adopted, so switching to CARTO later does not need a reload.
+        if (storedTileLayer !== 'paper_chart') setSessionTileLayer('carto_dark');
       }
     },
-    [cartoApiKey],
+    [cartoApiKey, storedTileLayer],
   );
 
   return {
