@@ -72,7 +72,8 @@ export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
 
-export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard';
+/** Base maps; `paper_chart` is the NOAA chart (SCRUM-203), which must not be darkened. */
+export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard' | 'paper_chart';
 
 /** Body of POST /api/locations. */
 export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' | 'admin1' | 'country'>;
@@ -109,6 +110,8 @@ export interface GridWindPoint {
   latitude: number;
   longitude: number;
   wind_speed_knots: number;
+  /** Gust for the same moment (SCRUM-210); absent when the model has none for the point. */
+  wind_gust_knots?: number | null;
   wind_direction_deg: number;
   /** Temperature in °F; colors the map barb (SCRUM-89). */
   temperature_f?: number | null;

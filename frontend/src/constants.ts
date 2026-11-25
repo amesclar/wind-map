@@ -26,6 +26,8 @@ export const STORAGE_KEYS = {
   windOverlayVisible: 'wind_overlay_visible',
   windColorOverlayVisible: 'wind_color_overlay_visible',
   waterCurrentsVisible: 'water_currents_visible',
+  seamarks: 'map_seamarks_visible',
+  bcDepth: 'nonna_bc_visible',
   unitSystem: 'unit_system',
   speedUnit: 'speed_unit',
   dirDisplay: 'dir_display',

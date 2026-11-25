@@ -44,6 +44,18 @@ describe('generateCurrentChevronSvg (SCRUM-99)', () => {
     expect(stroke(3.5).getAttribute('stroke')).toBe('#f59e0b');
   });
 
+  it('draws a light under-stroke first only when the chart base asks for it (SCRUM-203)', () => {
+    expect(parse(generateCurrentChevronSvg(1.3, 333)).querySelectorAll('g')).toHaveLength(1);
+
+    const groups = parse(generateCurrentChevronSvg(1.3, 333, 28, { halo: true })).querySelectorAll('g');
+    expect(groups).toHaveLength(2);
+    // The under-stroke is wider and white; the tier stroke stays on top and unchanged.
+    expect(groups[0].getAttribute('stroke')).toBe('#ffffff');
+    expect(groups[0].getAttribute('stroke-width')).toBe('5.5');
+    expect(groups[1].getAttribute('stroke')).toBe('#06b6d4');
+    expect(groups[1].getAttribute('stroke-width')).toBe('3');
+  });
+
   it('labels the glyph for screen readers with the speed and direction', () => {
     const svg = parse(generateCurrentChevronSvg(1.3, 333)).querySelector('svg')!;
 

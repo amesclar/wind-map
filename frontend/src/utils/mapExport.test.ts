@@ -47,6 +47,36 @@ describe('buildExportHeader (SCRUM-116)', () => {
 });
 
 describe('buildExportFooter (SCRUM-116)', () => {
+  it('credits OpenSeaMap and adds the navigation notice only with the seamark overlay on (SCRUM-175)', () => {
+    const base = {
+      unitSystem: 'imperial' as const,
+      speedUnit: 'knots' as const,
+      attribution: '© OpenStreetMap contributors',
+      version: '0.10.0',
+    };
+    expect(buildExportFooter(base)).not.toContain('OpenSeaMap');
+    const withSeamarks = buildExportFooter({ ...base, seamarks: true });
+    expect(withSeamarks).toContain('Seamarks © OpenSeaMap contributors · Not for navigation');
+    expect(withSeamarks.endsWith('· Wind Map v0.10.0')).toBe(true);
+  });
+
+  it('credits CHS NONNA only with the B.C. depth overlay on, ahead of the seamark credit (SCRUM-205)', () => {
+    const base = {
+      unitSystem: 'imperial' as const,
+      speedUnit: 'knots' as const,
+      attribution: '© NOAA Office of Coast Survey · Not for navigation',
+      version: '0.10.0',
+    };
+    expect(buildExportFooter(base)).not.toContain('CHS');
+
+    const withDepth = buildExportFooter({ ...base, bcDepth: true });
+    expect(withDepth).toContain('Bathymetry © CHS NONNA · Not for navigation');
+    expect(withDepth.endsWith('· Wind Map v0.10.0')).toBe(true);
+
+    const both = buildExportFooter({ ...base, bcDepth: true, seamarks: true });
+    expect(both.indexOf('CHS NONNA')).toBeLessThan(both.indexOf('OpenSeaMap'));
+  });
+
   it('carries the units, attribution and app version', () => {
     expect(
       buildExportFooter({

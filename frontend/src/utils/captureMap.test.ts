@@ -125,6 +125,34 @@ describe('tiles (SCRUM-116)', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(140);
   });
 
+  it('keeps seamark tiles after the base tiles and outside the dark filter (SCRUM-175)', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ left: 0, top: 0 }) as DOMRect;
+    const tile = (parent: HTMLElement) => {
+      const image = document.createElement('img');
+      image.className = 'leaflet-tile leaflet-tile-loaded';
+      Object.defineProperty(image, 'complete', { value: true });
+      Object.defineProperty(image, 'naturalWidth', { value: 256 });
+      image.getBoundingClientRect = () => ({ left: 0, top: 0, width: 256, height: 256 }) as DOMRect;
+      parent.appendChild(image);
+      return image;
+    };
+    // The base layer's pane carries the dark class; the seamark pane does not.
+    const darkPane = document.createElement('div');
+    darkPane.className = 'osm-dark-tiles';
+    container.appendChild(darkPane);
+    const baseTile = tile(darkPane);
+    const seamarkTile = tile(container);
+
+    const tiles = collectTiles(container);
+    expect(tiles.map((t) => t.image)).toEqual([baseTile, seamarkTile]);
+    expect(tiles.map((t) => t.dark)).toEqual([true, false]);
+
+    drawTiles(ctx as unknown as CanvasRenderingContext2D, tiles, 1);
+    // Pane order decides paint order: seamarks land on top of the base map.
+    expect(ctx.drawImage.mock.calls.map((call: unknown[]) => call[0])).toEqual([baseTile, seamarkTile]);
+  });
+
   it('draws tiles at the capture scale and applies the dark filter where the layer has it', () => {
     const image = document.createElement('img');
     drawTiles(ctx as unknown as CanvasRenderingContext2D, [

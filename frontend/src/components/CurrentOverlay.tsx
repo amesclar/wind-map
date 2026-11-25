@@ -10,18 +10,26 @@ interface CurrentOverlayProps {
   speedUnit?: WindSpeedUnit;
   /** Selected hour for the pop-up, e.g. "Mon 23 Nov 12:00 PST". */
   timeLabel?: string | null;
+  /** Light under-stroke so the glyphs read on the paper chart base (SCRUM-203). */
+  halo?: boolean;
 }
 
 /**
  * Draws ocean currents as clickable chevrons (SCRUM-99). Every point already carries its speed
  * and direction, so a click opens a pop-up without another request — the wind barbs' pattern.
  */
-export function CurrentOverlay({ map, points, speedUnit = 'knots', timeLabel = null }: CurrentOverlayProps) {
+export function CurrentOverlay({
+  map,
+  points,
+  speedUnit = 'knots',
+  timeLabel = null,
+  halo = false,
+}: CurrentOverlayProps) {
   useEffect(() => {
     if (!map) return;
     const markers = points.map((point) => {
       const marker = L.marker([point.latitude, point.longitude], {
-        icon: buildCurrentChevronIcon(point),
+        icon: buildCurrentChevronIcon(point, undefined, halo),
         interactive: true,
       }).addTo(map);
       marker.bindPopup(buildCurrentPopup(point, speedUnit, timeLabel));
@@ -30,7 +38,7 @@ export function CurrentOverlay({ map, points, speedUnit = 'knots', timeLabel = n
     return () => {
       markers.forEach((marker) => marker.remove());
     };
-  }, [map, points, speedUnit, timeLabel]);
+  }, [map, points, speedUnit, timeLabel, halo]);
 
   return null;
 }

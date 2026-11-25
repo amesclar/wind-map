@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 #   1 → 2 (SCRUM-92): forecast caches keyed by timezone too.
 #   2 → 3 (SCRUM-115): every cache row is keyed by the forecast hour too ('current' = live).
 #   3 → 4 (SCRUM-96): ocean-current grid cache, keyed by hour like the wind grid.
-SCHEMA_VERSION = 4
+#   4 → 5 (SCRUM-210): the wind grid cache keeps the gust too, so barb pop-ups show it.
+SCHEMA_VERSION = 5
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS grid_weather_cache (
     cached_at          REAL NOT NULL,
     expires_at         REAL NOT NULL,
     wind_speed_knots   REAL NOT NULL,
+    wind_gust_knots    REAL,
     wind_direction_deg REAL NOT NULL,
     temperature_f      REAL,
     PRIMARY KEY (lat_key, lon_key, model, hour)

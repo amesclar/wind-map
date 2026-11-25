@@ -82,6 +82,13 @@
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
 }
 
+/* SCRUM-203 needed contrast on the light chart sheet; SCRUM-208 replaced the blurred glow with
+   SVG outline passes drawn behind the glyph (CHART_BARB_OUTLINES), which stay sharp at 32 px.
+   The class stays on the marker as the hook, but its blur would only soften that edge again. */
+.chart-base .wind-barb-halo {
+  filter: none;
+}
+
 /* Wind color legend: sits just above the map attribution. The forecast drawer that used to
    push the strip up (via --drawer-height) is gone (SCRUM-126), so the offset is fixed. Mirrors
    LEGEND_BOTTOM_PX. */

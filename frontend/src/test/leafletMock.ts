@@ -30,6 +30,18 @@ export interface MockMarker {
   openPopup: ReturnType<typeof vi.fn>;
 }
 
+/** One tile layer created by the table; `kind` says whether it came from `tileLayer` or `tileLayer.wms`. */
+export interface MockTileLayer {
+  url?: string;
+  options?: Record<string, unknown>;
+  kind: 'xyz' | 'wms';
+  addTo: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+}
+
+/** Every tile layer created, in order (kept for pane and clip assertions). */
+export const createdTileLayers: MockTileLayer[] = [];
+
 export interface MockMap {
   /** Element the map was created on (SCRUM-143 reads it for the overlay viewport). */
   container: HTMLElement;
@@ -38,10 +50,15 @@ export interface MockMap {
   fire: (event: string) => void;
   bounds: { south: number; north: number; west: number; east: number };
   size: { x: number; y: number };
+  zoom: number;
+  panes: Record<string, HTMLElement>;
+  getZoom: ReturnType<typeof vi.fn>;
+  setZoom: ReturnType<typeof vi.fn>;
   getBounds: ReturnType<typeof vi.fn>;
   getSize: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   createPane: ReturnType<typeof vi.fn>;
+  getPane: ReturnType<typeof vi.fn>;
   containerPointToLatLng: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
@@ -96,7 +113,14 @@ function makeMap(container?: HTMLElement): MockMap {
     handlers: {},
     bounds: { south: 47.0, north: 49.0, west: -123.0, east: -121.0 },
     size: { x: 800, y: 600 },
+    zoom: 13,
+    panes: {} as Record<string, HTMLElement>,
   } as MockMap;
+  map.getZoom = vi.fn(() => map.zoom);
+  map.setZoom = vi.fn((zoom: number) => {
+    map.zoom = zoom;
+    return map;
+  });
   map.getContainer = vi.fn(() => map.container);
   map.fire = (event) => (map.handlers[event] ?? []).forEach((fn) => fn());
   map.getBounds = vi.fn(() => ({
@@ -107,8 +131,14 @@ function makeMap(container?: HTMLElement): MockMap {
   }));
   map.getSize = vi.fn(() => map.size);
   // Panes are detached divs: jsdom has no layout, and the gradient layer only needs a
-  // parent it can remove on unmount (SCRUM-123).
-  map.createPane = vi.fn(() => document.createElement('div'));
+  // parent it can remove on unmount (SCRUM-123). They are registered so `getPane` answers for a
+  // pane the component created, as real Leaflet does (SCRUM-203 asserts the chart pane).
+  map.createPane = vi.fn((name: string) => {
+    const pane = document.createElement('div');
+    map.panes[name] = pane;
+    return pane;
+  });
+  map.getPane = vi.fn((name: string) => map.panes[name] ?? null);
   map.containerPointToLatLng = vi.fn(([x, y]: [number, number]) => ({
     lat: map.bounds.north - (y / map.size.y) * (map.bounds.north - map.bounds.south),
     lng: map.bounds.west + (x / map.size.x) * (map.bounds.east - map.bounds.west),
@@ -127,13 +157,46 @@ function makeMap(container?: HTMLElement): MockMap {
   return map;
 }
 
-const layer = () => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn() });
+// URL and options are kept so tests can check which layer a call asked for (SCRUM-175).
+const layer = (
+  url: string | undefined,
+  options: Record<string, unknown> | undefined,
+  kind: 'xyz' | 'wms' = 'xyz',
+): MockTileLayer => {
+  const created: MockTileLayer = {
+    url,
+    options,
+    kind,
+    addTo: vi.fn().mockReturnThis(),
+    remove: vi.fn(),
+  };
+  createdTileLayers.push(created);
+  return created;
+};
 
 const leaflet = {
   map: vi.fn((container?: HTMLElement) => makeMap(container)),
   marker: vi.fn((latlng: [number, number], options?: Record<string, unknown>) => makeMarker(latlng, options)),
   divIcon: vi.fn((options: Record<string, unknown>) => ({ ...options })),
-  tileLayer: vi.fn(layer),
+  tileLayer: Object.assign(
+    vi.fn((url?: string, options?: Record<string, unknown>) => layer(url, options, 'xyz')),
+    {
+      // SCRUM-203 mounts the NOAA chart through L.tileLayer.wms, which Leaflet exposes as a
+      // property of tileLayer; the mock keeps that shape.
+      wms: vi.fn((url?: string, options?: Record<string, unknown>) => layer(url, options, 'wms')),
+    },
+  ),
+  // The WMS mount needs a real CRS value; the mock only has to be recognisable (SCRUM-203).
+  CRS: { EPSG3857: { code: 'EPSG:3857' }, EPSG4326: { code: 'EPSG:4326' } },
+  latLngBounds: vi.fn((southWest: [number, number], northEast: [number, number]) => ({
+    _southWest: southWest,
+    _northEast: northEast,
+    getSouth: () => southWest[0],
+    getNorth: () => northEast[0],
+    getWest: () => southWest[1],
+    getEast: () => northEast[1],
+    contains: () => true,
+  })),
   control: { zoom: vi.fn(() => ({ addTo: vi.fn() })) },
 };
 
@@ -159,9 +222,12 @@ export function currentMap(): MockMap {
 /** Clear recorded maps/markers and call history. Call in beforeEach. */
 export function resetLeafletMock(): void {
   createdMarkers.length = 0;
+  createdTileLayers.length = 0;
   mapInstances.length = 0;
   leaflet.map.mockClear();
   leaflet.marker.mockClear();
   leaflet.divIcon.mockClear();
   leaflet.tileLayer.mockClear();
+  leaflet.tileLayer.wms.mockClear();
+  leaflet.latLngBounds.mockClear();
 }

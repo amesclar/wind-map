@@ -73,6 +73,8 @@ class GridWindPoint(BaseModel):
     latitude: float
     longitude: float
     wind_speed_knots: float
+    # Gust for the same moment (SCRUM-210); null when Open-Meteo has none for the point.
+    wind_gust_knots: float | None = None
     wind_direction_deg: float
     temperature_f: float | None = None
     # Forecast hour these values describe (SCRUM-115); null means current conditions.
