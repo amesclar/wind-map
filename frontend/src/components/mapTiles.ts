@@ -56,6 +56,15 @@ export const CHART_TILE_FAILURE_WINDOW_MS = 10_000;
 /** Coverage box the chart layer is clipped to; shared by the mount and its tests. */
 export const CHART_BOUNDS = { south: -85, west: -180, north: CHART_COVERAGE_MAX_LAT, east: -60 };
 
+/**
+ * The clip at 49.6 N is a data limit, not a rendering fault, so the edge is drawn as a chart-ink
+ * dashed rule in its own pane: above the chart (205) and below the depth shading (208). SCRUM-215.
+ */
+export const CHART_EDGE_PANE = 'chartEdgePane';
+/** Names the limit where the rule crosses the viewport, so the cut explains itself without a hover. */
+export const CHART_EDGE_NOTICE =
+  'NOAA chart coverage ends at 49.6° N. Canadian waters north of it show the base map.';
+
 /** WMS request for the paper chart, clipped by the caller to `CHART_BOUNDS`. */
 export function chartLayerConfig(): TileLayerConfig {
   return {

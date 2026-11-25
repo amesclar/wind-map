@@ -46,6 +46,17 @@ export interface MockTileLayer {
 /** Every tile layer created, in order (kept for pane and clip assertions). */
 export const createdTileLayers: MockTileLayer[] = [];
 
+/** One polyline: the chart's 49.6 N boundary rule (SCRUM-215). */
+export interface MockPolyline {
+  latlngs: [number, number][];
+  options: Record<string, unknown>;
+  addTo: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+}
+
+/** Every polyline created, in order. */
+export const createdPolylines: MockPolyline[] = [];
+
 export interface MockMap {
   /** Element the map was created on (SCRUM-143 reads it for the overlay viewport). */
   container: HTMLElement;
@@ -191,6 +202,16 @@ const layer = (
 
 const leaflet = {
   map: vi.fn((container?: HTMLElement) => makeMap(container)),
+  polyline: vi.fn((latlngs: [number, number][], options?: Record<string, unknown>) => {
+    const line: MockPolyline = {
+      latlngs,
+      options: options ?? {},
+      addTo: vi.fn().mockReturnThis(),
+      remove: vi.fn(),
+    };
+    createdPolylines.push(line);
+    return line;
+  }),
   marker: vi.fn((latlng: [number, number], options?: Record<string, unknown>) => makeMarker(latlng, options)),
   divIcon: vi.fn((options: Record<string, unknown>) => ({ ...options })),
   tileLayer: Object.assign(
@@ -238,10 +259,12 @@ export function currentMap(): MockMap {
 export function resetLeafletMock(): void {
   createdMarkers.length = 0;
   createdTileLayers.length = 0;
+  createdPolylines.length = 0;
   mapInstances.length = 0;
   leaflet.map.mockClear();
   leaflet.marker.mockClear();
   leaflet.divIcon.mockClear();
+  leaflet.polyline.mockClear();
   leaflet.tileLayer.mockClear();
   leaflet.tileLayer.wms.mockClear();
   leaflet.latLngBounds.mockClear();

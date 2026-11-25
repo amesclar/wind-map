@@ -4,6 +4,8 @@ import {
   attributionText,
   CHART_BOUNDS,
   CHART_COVERAGE_MAX_LAT,
+  CHART_EDGE_NOTICE,
+  CHART_EDGE_PANE,
   CHART_MIN_ZOOM,
   CHART_PANE,
   CHART_TILE_CLASS,
@@ -146,6 +148,12 @@ describe('paper chart tile config (SCRUM-203)', () => {
     expect(CHART_MIN_ZOOM).toBe(12);
     expect(CHART_PANE).toBe('chartPane');
     expect(CHART_BOUNDS.north).toBe(CHART_COVERAGE_MAX_LAT);
+  });
+
+  it('names the edge treatment and its limit (SCRUM-215)', () => {
+    expect(CHART_EDGE_PANE).toBe('chartEdgePane');
+    expect(CHART_EDGE_NOTICE).toContain('49.6');
+    expect(CHART_EDGE_NOTICE).toContain('base map');
   });
 
   it('credits NOAA with the navigation notice and leaves the other three strings unchanged', () => {

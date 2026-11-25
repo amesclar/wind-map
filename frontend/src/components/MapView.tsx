@@ -22,6 +22,9 @@ import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
 import {
   CHART_BOUNDS,
+  CHART_COVERAGE_MAX_LAT,
+  CHART_EDGE_NOTICE,
+  CHART_EDGE_PANE,
   CHART_MIN_ZOOM,
   CHART_PANE,
   CHART_TILE_FAILURE_NOTICE,
@@ -177,6 +180,8 @@ export const MapView: React.FC<MapViewProps> = ({
   // changing the stored toggle; it returns as soon as another base is chosen.
   const seamarksShown = seamarksShownFor(tileLayerType, seamarksVisible);
   const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
+  // SCRUM-215: a view that crosses the clip shows where the chart ends instead of an unexplained cut.
+  const [chartStraddlesEdge, setChartStraddlesEdge] = useState(false);
   // SCRUM-217: the chart service failing is a state of its own, separate from being out of range.
   const [chartTilesFailed, setChartTilesFailed] = useState(false);
   const [chartRetryCount, setChartRetryCount] = useState(0);
@@ -309,16 +314,21 @@ export const MapView: React.FC<MapViewProps> = ({
     const map = mapInstanceRef.current;
     if (!map || !chartBase) {
       setChartOutsideCoverage(false);
+      setChartStraddlesEdge(false);
       setChartTilesFailed(false);
       return;
     }
     // The app opens below the chart's zoom floor, so selecting the mode would otherwise show a
     // notice and no chart at all; zoom to the floor once, which the user can undo.
     if (map.getZoom() < CHART_MIN_ZOOM) map.setZoom(CHART_MIN_ZOOM);
-    const update = () =>
-      setChartOutsideCoverage(
-        map.getBounds().getSouth() > CHART_BOUNDS.north || map.getZoom() < CHART_MIN_ZOOM,
+    const update = () => {
+      const bounds = map.getBounds();
+      const belowFloor = map.getZoom() < CHART_MIN_ZOOM;
+      setChartOutsideCoverage(bounds.getSouth() > CHART_BOUNDS.north || belowFloor);
+      setChartStraddlesEdge(
+        !belowFloor && bounds.getSouth() <= CHART_BOUNDS.north && bounds.getNorth() > CHART_BOUNDS.north,
       );
+    };
     update();
     map.on('moveend', update);
     map.on('zoomend', update);
@@ -327,6 +337,35 @@ export const MapView: React.FC<MapViewProps> = ({
       map.off('zoomend', update);
     };
   }, [chartBase, mapInstance]);
+
+  // SCRUM-215: draw the 49.6 N clip as a rule, so the chart does not simply stop in the middle of
+  // the water. It spans the chart's own coverage box and only paints while the chart base is on.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !chartBase) return;
+    if (!map.getPane(CHART_EDGE_PANE)) {
+      const pane = map.createPane(CHART_EDGE_PANE);
+      pane.style.zIndex = '206';
+      pane.style.pointerEvents = 'none';
+    }
+    const boundary = L.polyline(
+      [
+        [CHART_COVERAGE_MAX_LAT, CHART_BOUNDS.west],
+        [CHART_COVERAGE_MAX_LAT, CHART_BOUNDS.east],
+      ],
+      {
+        pane: CHART_EDGE_PANE,
+        color: '#161b22',
+        weight: 1.2,
+        opacity: 0.5,
+        dashArray: '6 6',
+        interactive: false,
+      },
+    ).addTo(map);
+    return () => {
+      boundary.remove();
+    };
+  }, [chartBase, mapInstance, chartRetryCount]);
 
   // Nautical seamark overlay (SCRUM-175): its own pane, so the base map, the seamarks and the
   // wind layers stack in a fixed order however they are toggled.
@@ -452,7 +491,7 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
-      {chartBase && (chartOutsideCoverage || chartTilesFailed) && (
+      {chartBase && (chartOutsideCoverage || chartTilesFailed || chartStraddlesEdge) && (
         <div className="absolute right-3 top-24 z-[750] flex max-w-[260px] flex-col items-end gap-2">
           {chartTilesFailed && (
             <div
@@ -472,6 +511,15 @@ export const MapView: React.FC<MapViewProps> = ({
               >
                 Retry chart tiles
               </button>
+            </div>
+          )}
+          {chartStraddlesEdge && !chartOutsideCoverage && (
+            <div
+              data-testid="chart-edge-notice"
+              role="note"
+              className="rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
+            >
+              {CHART_EDGE_NOTICE}
             </div>
           )}
           {chartOutsideCoverage && (
