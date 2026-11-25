@@ -24,8 +24,10 @@ from backend.app.config import (
     MODEL_AVAILABILITY_IDS,
     MODEL_AVAILABILITY_TIMEOUT_SECONDS,
     MODEL_AVAILABILITY_URL,
+    model_metadata,
 )
 from backend.app.services import open_meteo
+from backend.app.services.model_info import last_run_utc
 
 
 @dataclass(frozen=True)
@@ -106,3 +108,30 @@ async def availability_for(model: str, now: float | None = None) -> Availability
 
     _CACHE[model] = (moment, answer)
     return answer
+
+
+def _parse_iso(stamp: str) -> datetime | None:
+    try:
+        return datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+async def refresh_clock(model: str) -> datetime | None:
+    """The newest run the source has published, for the refresh gate (SCRUM-113).
+
+    `available_utc` is the accurate signal. The derived cycle is the fallback, and it is the only
+    clock the composites and GEM have; using it there keeps the gate exactly as truthful as the
+    run line the user is reading. A model with no metadata file and no cycle clock is `None`.
+    """
+    found = await availability_for(model)
+    if found is not None:
+        available = _parse_iso(found.available_utc)
+        if available is not None:
+            return available
+
+    meta = model_metadata(model)
+    if meta is None:
+        return None
+    cycles = [int(c) for c in meta["update_cycles_utc"]]  # type: ignore[arg-type]
+    return last_run_utc(cycles, datetime.now(UTC))

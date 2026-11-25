@@ -26,6 +26,16 @@ class ForecastCache(Protocol):
     def put(self, payload: dict[str, Any], now: float) -> None: ...
 
 
+def is_stale(cached_at: float, run_clock: float | None) -> bool:
+    """True when a cached row predates the newest run the source has published (SCRUM-113).
+
+    An unknown clock (a model with no metadata file, or a metadata outage) is never stale: a
+    refresh is then served from cache exactly as it was before this gate existed, rather than
+    spending calls the server cannot justify.
+    """
+    return run_clock is not None and cached_at < run_clock
+
+
 def _fresh(row, now: float) -> CachedForecast | None:
     if row and row["expires_at"] > now:
         return CachedForecast(payload=json.loads(row["payload_json"]), cached_at=row["cached_at"])

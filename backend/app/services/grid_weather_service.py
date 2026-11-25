@@ -21,6 +21,7 @@ from backend.app.config import (
 from backend.app.database import db_connection
 from backend.app.models import GridWindPoint
 from backend.app.services import open_meteo
+from backend.app.services.model_availability import refresh_clock
 from backend.app.services.time_window import hour_key
 from backend.app.units import as_optional_float, c_to_f, coord_key
 
@@ -31,18 +32,23 @@ async def get_grid_wind(
     points: list[tuple[float, float]],
     model: str = DEFAULT_MODEL,
     at: datetime | None = None,
+    refresh: bool = False,
 ) -> list[GridWindPoint]:
     """Wind speed (knots), direction (degrees) and temperature (°F) for each (lat, lon) point.
 
     `at` is an aware UTC hour (already validated) or None for current conditions. Cache misses
     are fetched in one batched Open-Meteo request.
+
+    `refresh` (SCRUM-113) treats only the rows older than the model's newest published run as
+    misses, so the request asks Open-Meteo for those points alone and the rest stay cached.
     """
     if not points:
         return []
 
     hour = hour_key(at)
     now = time.time()
-    results, missing = _read_cached_points(points, model, hour, now)
+    clock = await refresh_clock(model) if refresh else None
+    results, missing = _read_cached_points(points, model, hour, now, None if clock is None else clock.timestamp())
     if not missing:
         return results
 
@@ -66,8 +72,12 @@ def _read_cached_points(
     model: str,
     hour: str,
     now: float,
+    min_cached_at: float | None = None,
 ) -> tuple[list[GridWindPoint], list[tuple[float, float]]]:
     """Split points into cached results and coordinates that still need fetching.
+
+    `min_cached_at` (SCRUM-113) also rejects rows older than a refresh's run clock, which is how
+    one click refetches only the points the newest run obsoleted.
 
     One statement per request (SCRUM-174) instead of one per point: a full view used to
     run up to 900 SELECTs, which measured 5-6 ms per lookup. The rounded latitudes bound the
@@ -78,14 +88,16 @@ def _read_cached_points(
     keys = {coord_key(lat, lon) for lat, lon in points}
     lat_keys = sorted({lat_key for lat_key, _ in keys})
     placeholders = ",".join("?" for _ in lat_keys)
+    floor = "" if min_cached_at is None else " AND cached_at>=?"
+    floor_values = () if min_cached_at is None else (min_cached_at,)
     with db_connection() as conn:
         rows = conn.execute(
             "SELECT lat_key, lon_key, wind_speed_knots, wind_gust_knots, wind_direction_deg, "  # noqa: S608
             "temperature_f "
             "FROM grid_weather_cache "
             "WHERE model=? AND hour=? AND expires_at>? AND temperature_f IS NOT NULL "
-            f"AND lat_key IN ({placeholders})",  # only generated placeholders, every value is bound
-            (model, hour, now, *lat_keys),
+            f"AND lat_key IN ({placeholders}){floor}",  # only generated placeholders, every value is bound
+            (model, hour, now, *lat_keys, *floor_values),
         ).fetchall()
     cached = {(row["lat_key"], row["lon_key"]): row for row in rows}
 

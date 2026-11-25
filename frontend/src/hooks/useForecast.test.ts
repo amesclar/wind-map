@@ -23,6 +23,8 @@ describe('useAllWeather (SCRUM-92)', () => {
     expect(api.fetchAllWeather).toHaveBeenCalledWith('best_match', 'UTC', {
       signal: expect.any(AbortSignal),
       time: null,
+      // A plain load never asks for a refresh; only a click does (SCRUM-113).
+      refresh: false,
     });
 
     rerender({ model: 'gfs_seamless', tz: 'UTC' });
@@ -30,6 +32,23 @@ describe('useAllWeather (SCRUM-92)', () => {
 
     rerender({ model: 'gfs_seamless', tz: 'Asia/Tokyo' });
     await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(3));
+  });
+
+  it('sends refresh once per click, not on the next hour or model change (SCRUM-113)', async () => {
+    const { rerender } = renderHook(
+      ({ seq, model }: { seq: number; model: string }) => useAllWeather(model, 'UTC', null, seq),
+      { initialProps: { seq: 0, model: 'best_match' } },
+    );
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.fetchAllWeather).mock.calls[0][2]).toMatchObject({ refresh: false });
+
+    rerender({ seq: 1, model: 'best_match' });
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.fetchAllWeather).mock.calls[1][2]).toMatchObject({ refresh: true });
+
+    rerender({ seq: 1, model: 'gfs_seamless' });
+    await waitFor(() => expect(api.fetchAllWeather).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.fetchAllWeather).mock.calls[2][2]).toMatchObject({ refresh: false });
   });
 
   it('requests the selected forecast hour and reloads when it changes (SCRUM-115)', async () => {

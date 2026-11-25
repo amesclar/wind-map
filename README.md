@@ -369,6 +369,8 @@ Cross-origin API access is off by default. If you call the API from another orig
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Provider failures return 502 with a short message; details are in the server log, and a transient 5xx/429 is retried twice before it gets that far.
 
+All four also accept an optional `refresh=true` (SCRUM-113): the forecast and grid caches serve a row as usual unless it predates the model's newest published run, so a click refetches only stale data and a stale tab sending the flag by hand cannot spend a pointless Open-Meteo call. A grid refresh asks upstream for the stale points only. The app's refresh button enables itself exactly when such a newer run exists, and names the next one while it waits.
+
 With `model=nws_ndfd` the forecast comes from NOAA's NDFD grids instead of Open-Meteo. NDFD covers the US only, so a location outside it answers **404** with a fixed message rather than a forecast, and `/api/weather/all` leaves that location out so its marker shows no data. The wind grid, the colour gradient and the currents stay on Open-Meteo whatever model is selected, because NDFD needs one request per point.
 
 The exception is exhausted quota. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
