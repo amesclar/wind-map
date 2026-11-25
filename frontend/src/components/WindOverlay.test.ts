@@ -86,6 +86,15 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 32));
   });
 
+  it('adds crisp outline passes on the light chart base and none on the dark ones (SCRUM-208)', () => {
+    const chart = buildGridBarbIcon(pt(15, 90, 85), false, true, true).options.html as string;
+    expect(chart.match(/data-barb-outline="true"/g) ?? []).toHaveLength(1);
+    expect(chart).toContain('#161b22');
+
+    const darkBase = buildGridBarbIcon(pt(15, 90, 85), false, true, false).options.html as string;
+    expect(darkBase).not.toContain('data-barb-outline');
+  });
+
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {
     const icon = buildGridBarbIcon(pt(15, 90, 85), true);
     const html = icon.options.html as string;

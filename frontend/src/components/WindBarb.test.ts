@@ -176,6 +176,51 @@ describe('generateWindBarbSvg structure', () => {
 });
 
 // ---------------------------------------------------------------------------
+// outlines (SCRUM-208)
+// ---------------------------------------------------------------------------
+
+describe('generateWindBarbSvg outlines', () => {
+  it('draws every outline pass behind the glyph, outermost first', () => {
+    const svg = generateWindBarbSvg({
+      speedKnots: 15,
+      directionDeg: 0,
+      tempF: 55,
+      showLabel: false,
+      outlines: [
+        { color: '#161b22', width: 1.6 },
+        { color: '#ffffff', width: 0.9 },
+      ],
+    });
+    expect(svg.match(/data-barb-outline="true"/g) ?? []).toHaveLength(2);
+    expect(svg.indexOf('#161b22')).toBeLessThan(svg.indexOf('#ffffff'));
+    expect(svg.indexOf('#ffffff')).toBeLessThan(svg.indexOf(getTemperatureColor(55)));
+  });
+
+  it('widens the strokes by twice the rim so the outline shows outside the glyph', () => {
+    const base = { speedKnots: 40, directionDeg: 90, tempF: 55, showLabel: false };
+    const plain = generateWindBarbSvg(base);
+    const outlined = generateWindBarbSvg({ ...base, outlines: [{ color: '#161b22', width: 1 }] });
+
+    expect(plain).not.toContain('data-barb-outline');
+    expect(plain).toContain('stroke-width="2.5"');
+    expect(outlined).toContain('stroke-width="4.5"');
+  });
+
+  it('keeps the calm circles concentric under an outline', () => {
+    const svg = generateWindBarbSvg({
+      speedKnots: 0,
+      directionDeg: 0,
+      tempF: 55,
+      showLabel: false,
+      outlines: [{ color: '#161b22', width: 1 }],
+    });
+    expect(svg).toContain('data-barb-outline="true"');
+    expect(svg).toContain('r="10"');
+    expect(svg).not.toContain('<line');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // colorOverride (SCRUM-89)
 // ---------------------------------------------------------------------------
 
