@@ -7,6 +7,7 @@ import {
   Map,
   Settings,
   MessageSquareText,
+  RefreshCw,
 } from 'lucide-react';
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
@@ -29,6 +30,14 @@ interface NavbarProps {
   /** The server can file feedback in Jira, so the feedback button is shown (SCRUM-179). */
   feedbackEnabled: boolean;
   onOpenFeedback: () => void;
+  /** A newer run is published than the data on screen, so a click is worth a call (SCRUM-113). */
+  canRefresh?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  /** Tooltip: why the button is disabled, or what it will do. */
+  refreshTitle?: string;
+  /** Non-blocking failure of the last click; the old data stays on screen. */
+  refreshError?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,6 +54,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   savingMap,
   feedbackEnabled,
   onOpenFeedback,
+  canRefresh = false,
+  refreshing = false,
+  onRefresh,
+  refreshTitle,
+  refreshError = null,
 }) => {
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -99,6 +113,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Controls: Model, feedback, export, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
+        {refreshError && (
+          <span
+            data-testid="refresh-error"
+            role="status"
+            title={refreshError}
+            className="hidden xl:inline text-[11px] text-amber-300 max-w-[14rem] truncate"
+          >
+            {refreshError}
+          </span>
+        )}
+
+        {/* Refresh (SCRUM-113): its own visibility rule, since the model dropdown hides below lg */}
+        <button
+          onClick={() => onRefresh?.()}
+          disabled={!canRefresh || refreshing}
+          aria-busy={refreshing}
+          aria-label="Refresh data now"
+          title={refreshTitle ?? 'Refresh data now'}
+          data-testid="refresh-data"
+          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`w-4 h-4 text-sky-400${refreshing ? ' animate-spin' : ''}`} />
+        </button>
+
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
           <Layers className="w-3.5 h-3.5 text-gray-400" />

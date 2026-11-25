@@ -149,7 +149,7 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
         model: 'best_match',
         time: null,
       },
-      { signal: expect.any(AbortSignal) },
+      { signal: expect.any(AbortSignal), refresh: false },
     );
 
     // Same bounds: the view did not change, so no second request.
@@ -160,6 +160,25 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     setBounds({ south: 46, north: 50, west: -124, east: -120 });
     fire('moveend');
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+  });
+
+  it('sends refresh once per click, not on the next pan (SCRUM-113)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    const { rerender } = renderHook(
+      ({ seq }: { seq: number }) => useWindGrid(map, 'best_match', true, null, undefined, undefined, undefined, seq),
+      { initialProps: { seq: 0 } },
+    );
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    rerender({ seq: 1 });
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[1][1]).toMatchObject({ refresh: true });
+
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('moveend');
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[2][1]).toMatchObject({ refresh: false });
   });
 
   it('fetches nothing and clears the points while no layer needs the grid', async () => {

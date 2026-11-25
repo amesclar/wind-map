@@ -5,12 +5,13 @@ import { DEFAULT_MODEL } from './constants';
 import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
 import { type Selection, useAllWeather } from './hooks/useForecast';
+import { useDataRefresh } from './hooks/useDataRefresh';
 import { useMapExport } from './hooks/useMapExport';
 import { useModelAvailability } from './hooks/useModelAvailability';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
-import { formatStepLabel } from './utils/forecastWindow';
+import { formatRunTime, formatStepLabel } from './utils/forecastWindow';
 import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
@@ -19,6 +20,8 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
+/** Longest a refresh click keeps the button busy waiting for its responses (SCRUM-113). */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /** Resolve with the user's position, or null if unavailable/denied/timed out. */
 function getCurrentPosition(): Promise<GeolocationPosition | null> {
@@ -52,12 +55,66 @@ export const App: React.FC = () => {
   // The map element, captured when the user saves an image (SCRUM-116).
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
+  // One-shot refresh (SCRUM-113): a click bumps this, and the fetches below send `refresh` once.
+  const [refreshSeq, setRefreshSeq] = useState(0);
+  const allWeather = useAllWeather(selectedModel, timezone, forecastTime, refreshSeq);
 
   const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
   // Publication times of the selected model, when Open-Meteo exposes them (SCRUM-256).
   const modelAvailability = useModelAvailability(selectedModel);
   const validTimeLabel = forecastTime ? formatStepLabel(forecastTime, timezone) : null;
+
+  // The gate reads the newest server `cached_at` among the responses on screen, so it never
+  // trusts the browser's clock about how old the data is (SCRUM-113).
+  const dataAsOf = useMemo(() => {
+    const stamps = Object.values(allWeather.weatherMap).map((w) => w.cached_at * 1000);
+    return stamps.length ? Math.max(...stamps) : null;
+  }, [allWeather.weatherMap]);
+  // The published run is the real clock; the derived cycle is the fallback (SCRUM-256).
+  const refreshRunUtc = modelAvailability?.available_utc ?? selectedModelInfo?.last_run_utc ?? null;
+  const nextRunUtc = modelAvailability?.next_available_utc ?? selectedModelInfo?.next_run_utc ?? null;
+
+  const pendingRefresh = useRef<{ sawLoading: boolean; timer: ReturnType<typeof setTimeout>; resolve: () => void } | null>(
+    null,
+  );
+  const finishRefresh = useCallback(() => {
+    const pending = pendingRefresh.current;
+    if (!pending) return;
+    pendingRefresh.current = null;
+    clearTimeout(pending.timer);
+    pending.resolve();
+  }, []);
+  // Resolves when the refreshed responses have landed, so the button stays busy meanwhile.
+  const handleRefresh = useCallback((): Promise<void> => {
+    if (pendingRefresh.current) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(finishRefresh, REFRESH_TIMEOUT_MS);
+      pendingRefresh.current = { sawLoading: false, timer, resolve };
+      setRefreshSeq((seq) => seq + 1);
+    });
+  }, [finishRefresh]);
+
+  const dataRefresh = useDataRefresh({ dataAsOf, runUtc: refreshRunUtc, onRefresh: handleRefresh });
+
+  useEffect(() => {
+    const pending = pendingRefresh.current;
+    if (!pending) return;
+    if (allWeather.loading) {
+      pending.sawLoading = true;
+      return;
+    }
+    if (pending.sawLoading) finishRefresh();
+  }, [allWeather.loading, finishRefresh]);
+
+  const refreshTitle = dataRefresh.refreshing
+    ? 'Refreshing…'
+    : dataRefresh.canRefresh
+      ? 'Refresh data now'
+      : nextRunUtc
+        ? `Latest run already loaded · next run ~${formatRunTime(nextRunUtc, timezone)}`
+        : 'Latest run already loaded';
+  const refreshError =
+    dataRefresh.error ?? (allWeather.error ? 'Could not refresh from the source; the data on screen is unchanged.' : null);
 
   // Image export, range capture and their dialog state (SCRUM-174: own hook).
   const mapExport = useMapExport({
@@ -205,6 +262,11 @@ export const App: React.FC = () => {
         savingMap={mapExport.savingMap}
         feedbackEnabled={feedbackEnabled}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
+        onRefresh={dataRefresh.refresh}
+        canRefresh={dataRefresh.canRefresh}
+        refreshing={dataRefresh.refreshing}
+        refreshTitle={refreshTitle}
+        refreshError={refreshError}
       />
 
       <main className="flex-1 flex flex-col min-h-0 w-full">
@@ -236,6 +298,7 @@ export const App: React.FC = () => {
             onGridLoaded={mapExport.handleGridLoaded}
             onGridQuotaExhausted={handleGridQuotaExhausted}
             onGridLoadingChange={mapExport.handleGridLoadingChange}
+            refreshSeq={refreshSeq}
           />
         </div>
         <ForecastTimeSelector

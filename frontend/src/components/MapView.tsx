@@ -87,6 +87,8 @@ interface MapViewProps {
   onGridQuotaExhausted?: (resetAt: string | null) => void;
   /** Whether the current view's grid is in flight, so an export can wait for its barbs (SCRUM-242). */
   onGridLoadingChange?: (loading: boolean) => void;
+  /** One-shot refresh trigger for the visible grid (SCRUM-113). */
+  refreshSeq?: number;
 }
 
 interface LocationMarker {
@@ -195,6 +197,7 @@ export const MapView: React.FC<MapViewProps> = ({
   containerRef,
   onGridLoaded,
   onGridQuotaExhausted,
+  refreshSeq,
   onGridLoadingChange,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -242,6 +245,7 @@ export const MapView: React.FC<MapViewProps> = ({
     onGridLoaded,
     onGridQuotaExhausted,
     onGridLoadingChange,
+    refreshSeq,
   );
   // Currents have their own fetch and horizon: the layer follows the same selected hour
   // (SCRUM-99) but not the weather model or the wind layers.

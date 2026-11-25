@@ -66,6 +66,12 @@ TIME_QUERY = Query(
     "Omit for current conditions.",
 )
 
+REFRESH_QUERY = Query(
+    False,
+    description="Refetch only cached rows older than the model's newest published run (SCRUM-113). "
+    "Rows already newer than that run are served from cache, so a repeat click costs no call.",
+)
+
 
 @router.get("", response_model=WeatherForecastResponse)
 async def get_location_weather(
@@ -73,6 +79,7 @@ async def get_location_weather(
     model: str = Depends(model_param),
     timezone: str = Depends(timezone_param),
     time: datetime | None = TIME_QUERY,
+    refresh: bool = REFRESH_QUERY,
 ) -> WeatherForecastResponse:
     at = validate_forecast_time(time, model)
     location = locations_repo.get_location(location_id)
@@ -83,7 +90,7 @@ async def get_location_weather(
         )
 
     try:
-        return await get_location_forecast(location, model=model, timezone=timezone, at=at)
+        return await get_location_forecast(location, model=model, timezone=timezone, at=at, refresh=refresh)
     except nws.NwsCoverageError as exc:
         raise coverage_error() from exc
     except httpx.HTTPError as exc:
@@ -96,12 +103,15 @@ async def get_all_locations_weather(
     model: str = Depends(model_param),
     timezone: str = Depends(timezone_param),
     time: datetime | None = TIME_QUERY,
+    refresh: bool = REFRESH_QUERY,
 ) -> list[WeatherForecastResponse]:
     at = validate_forecast_time(time, model)
     results: list[WeatherForecastResponse] = []
     for location in sorted(locations_repo.list_locations(), key=lambda loc: loc.id):
         try:
-            results.append(await get_location_forecast(location, model=model, timezone=timezone, at=at))
+            results.append(
+                await get_location_forecast(location, model=model, timezone=timezone, at=at, refresh=refresh)
+            )
         except httpx.HTTPError:
             # One failing location must not hide the others; it is logged, not swallowed. An NDFD
             # point outside the US lands here too, so its marker shows "No data" (SCRUM-245).
@@ -117,6 +127,7 @@ async def get_point_weather(
     model: str = Depends(model_param),
     timezone: str = Depends(timezone_param),
     time: datetime | None = TIME_QUERY,
+    refresh: bool = REFRESH_QUERY,
 ) -> WeatherForecastResponse:
     """
     Return a full forecast for an arbitrary lat/lon point (no saved location needed).
@@ -124,7 +135,7 @@ async def get_point_weather(
     """
     at = validate_forecast_time(time, model)
     try:
-        return await get_point_forecast(lat, lon, model=model, timezone=timezone, at=at)
+        return await get_point_forecast(lat, lon, model=model, timezone=timezone, at=at, refresh=refresh)
     except nws.NwsCoverageError as exc:
         raise coverage_error() from exc
     except httpx.HTTPError as exc:

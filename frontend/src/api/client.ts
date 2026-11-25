@@ -55,9 +55,14 @@ export interface RequestOptions {
 export interface ForecastRequestOptions extends RequestOptions {
   /** ISO 8601 hour; omitted means current conditions. */
   time?: string | null;
+  /**
+   * One-shot refresh (SCRUM-113): the server refetches only the rows older than the model's
+   * newest published run, so a pan, zoom, hour or model change never sends it.
+   */
+  refresh?: boolean;
 }
 
-type Params = Record<string, string | number>;
+type Params = Record<string, string | number | boolean>;
 
 function url(path: string, params?: Params): string {
   if (!params) return `${API_BASE}${path}`;
@@ -128,21 +133,21 @@ export function fetchWeather(
   locationId: number,
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse> {
-  return request('/weather', 'Failed to load weather data', {
-    params: { location_id: locationId, model, timezone },
-    signal,
-  });
+  const params: Params = { location_id: locationId, model, timezone };
+  if (refresh) params.refresh = true;
+  return request('/weather', 'Failed to load weather data', { params, signal });
 }
 
 export function fetchAllWeather(
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal, time }: ForecastRequestOptions = {},
+  { signal, time, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse[]> {
   const params: Params = { model, timezone };
   if (time) params.time = time;
+  if (refresh) params.refresh = true;
   return request('/weather/all', 'Failed to load all weather data', { params, signal });
 }
 
@@ -189,11 +194,12 @@ export function fetchWindGrid(
     /** ISO 8601 hour inside the model's horizon; omitted means current (SCRUM-115). */
     time?: string | null;
   },
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<GridWindPoint[]> {
   const { time, ...box } = params;
   const query: Params = { ...box, model: params.model ?? DEFAULT_MODEL };
   if (time) query.time = time;
+  if (refresh) query.refresh = true;
   return request('/weather/grid', 'Failed to fetch wind grid', { params: query, signal });
 }
 
@@ -222,10 +228,9 @@ export function fetchPointWeather(
   lon: number,
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse> {
-  return request('/weather/point', 'Failed to fetch point weather', {
-    params: { lat, lon, model, timezone },
-    signal,
-  });
+  const params: Params = { lat, lon, model, timezone };
+  if (refresh) params.refresh = true;
+  return request('/weather/point', 'Failed to fetch point weather', { params, signal });
 }
