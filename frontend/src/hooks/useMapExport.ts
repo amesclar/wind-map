@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { GridWindPoint, MapTileLayer, UnitSystem, WeatherModelInfo, WindSpeedUnit } from '../types';
-import { attributionText, seamarksShownFor } from '../components/mapTiles';
+import { attributionText, isLightBase, seamarksShownFor } from '../components/mapTiles';
 import type {
   MapExportError,
   MapExportFormat,
@@ -148,7 +148,8 @@ export function useMapExport({
         version: APP_VERSION,
       }),
       barbs: barbLegendEntries(speedUnit),
-      temperatures: temperatureBands(unitSystem, tileLayer === 'paper_chart'),
+      // The legend follows the ramp the barbs are drawn with: both light bases use the darker one.
+      temperatures: temperatureBands(unitSystem, isLightBase(tileLayer)),
       speedUnitLabel: SPEED_UNIT_LABEL[speedUnit],
       temperatureUnitLabel: unitSystem === 'imperial' ? '°F' : '°C',
       // The export shows the same scale as the on-screen strip only when the gradient is on.

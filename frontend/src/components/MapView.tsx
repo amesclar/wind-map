@@ -30,6 +30,7 @@ import {
   CHART_TILE_FAILURE_NOTICE,
   CHART_TILE_FAILURE_THRESHOLD,
   CHART_TILE_FAILURE_WINDOW_MS,
+  isLightBase,
   nonnaLayerConfig,
   NONNA_PANE,
   NOAA_COVERAGE_NOTICE,
@@ -39,6 +40,7 @@ import {
   tileLayerConfig,
 } from './mapTiles';
 import { registerCaptureMap } from '../utils/captureReadiness';
+import { createSeamapLayer, mountSeamapLayer, type SeamapLayer } from './seamapLayer';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
@@ -182,6 +184,9 @@ export const MapView: React.FC<MapViewProps> = ({
   // SCRUM-203: the NOAA paper chart is a base map, not an overlay, and it is clipped to its
   // coverage, so the notice below has to follow pans and zooms.
   const chartBase = tileLayerType === 'paper_chart';
+  // SCRUM-206: Seamap is a light sheet too, so barbs, currents and the gradient get the same
+  // light-base treatment as the paper chart; only the chart's own coverage rules are chart-only.
+  const lightBase = isLightBase(tileLayerType);
   // SCRUM-214: the chart carries its own aids, so the seamark overlay is suppressed on it without
   // changing the stored toggle; it returns as soon as another base is chosen.
   const seamarksShown = seamarksShownFor(tileLayerType, seamarksVisible);
@@ -283,7 +288,9 @@ export const MapView: React.FC<MapViewProps> = ({
 
     if (tileLayerType === 'paper_chart') {
       const substrate = tileLayerConfig('osm_dark');
-      layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
+      if (substrate.kind === 'xyz') {
+        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
+      }
       if (!map.getPane(CHART_PANE)) {
         const pane = map.createPane(CHART_PANE);
         pane.style.zIndex = '205';
@@ -305,6 +312,40 @@ export const MapView: React.FC<MapViewProps> = ({
         chartLayer.on('load', noteBatchLoaded);
         layers.push(chartLayer.addTo(map));
       }
+    } else if (tileLayerType === 'seamap') {
+      // SCRUM-206: a keyless dark substrate under a lazily loaded MapLibre style. The pane is the
+      // chart's (205): above the base tiles, below the depth shading and the seamarks.
+      const substrate = tileLayerConfig('osm_dark');
+      if (substrate.kind === 'xyz') {
+        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
+      }
+      if (!map.getPane(CHART_PANE)) {
+        const pane = map.createPane(CHART_PANE);
+        pane.style.zIndex = '205';
+        pane.style.pointerEvents = 'none';
+      }
+      // The first selection downloads MapLibre; switching away, or a map React StrictMode already
+      // replaced, while it loads must leave no layer behind, so the layer is only mounted on a
+      // map that is still this effect's own.
+      let disposed = false;
+      let seamapLayer: SeamapLayer | null = null;
+      let unregisterVector = () => {};
+      void createSeamapLayer()
+        .then((created) => {
+          if (disposed) return;
+          unregisterVector = mountSeamapLayer(map, created);
+          seamapLayer = created;
+        })
+        .catch((err) => {
+          // The substrate still shows, so the map stays usable; the console names the cause.
+          console.error('The Seamap base style could not be loaded:', err);
+        });
+      return () => {
+        disposed = true;
+        unregisterVector();
+        seamapLayer?.remove();
+        layers.forEach((layer) => layer.remove());
+      };
     } else {
       const base = tileLayerConfig(tileLayerType, cartoApiKey);
       if (base.kind === 'xyz') layers.push(L.tileLayer(base.url, base.options).addTo(map));
@@ -548,7 +589,7 @@ export const MapView: React.FC<MapViewProps> = ({
           points={gridPoints}
           selectedPoint={selectedGridPoint}
           onGridPointSelect={onGridPointSelect}
-          lightBase={chartBase}
+          lightBase={lightBase}
           declutter={chartBase}
           keepOut={chartBase ? chartKeepOut : undefined}
           unitSystem={unitSystem}
@@ -562,7 +603,7 @@ export const MapView: React.FC<MapViewProps> = ({
         points={currentPoints}
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
-        halo={chartBase}
+        halo={lightBase}
       />
       {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (
@@ -571,7 +612,7 @@ export const MapView: React.FC<MapViewProps> = ({
             map={mapInstance}
             points={gridPoints}
             visible
-            opacity={windColorOpacity({ onChart: chartBase, highContrast: windColorHighContrast })}
+            opacity={windColorOpacity({ onChart: lightBase, highContrast: windColorHighContrast })}
           />
           <WindColorLegend speedUnit={speedUnit} />
         </>

@@ -134,7 +134,7 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
     render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
 
     const options = within(screen.getByTestId('map-settings-column-options'));
-    expect(options.getAllByRole('radio')).toHaveLength(4);
+    expect(options.getAllByRole('radio')).toHaveLength(5);
 
     const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
     expect((radio as HTMLInputElement).checked).toBe(false);
@@ -151,6 +151,33 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
     expect(
       (screen.getByTestId('tile-layer-paper-chart').querySelector('input') as HTMLInputElement)
         .checked,
+    ).toBe(true);
+  });
+});
+
+describe('MapSettingsModal Seamap radio (SCRUM-206)', () => {
+  it('offers a fifth, non-default radio with the licence split and the navigation notice', () => {
+    const onChange = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
+
+    const radio = screen.getByTestId('tile-layer-seamap').querySelector('input')!;
+    expect((radio as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(radio);
+    expect(onChange).toHaveBeenCalledWith('seamap');
+
+    const body = screen.getByTestId('map-settings-body');
+    expect(
+      within(body).getByText(/© Open Waters: Seamap · © OpenStreetMap contributors/),
+    ).toBeTruthy();
+    expect(within(body).getByText(/not soundings/)).toBeTruthy();
+    expect(within(body).getByText(/overzoom beyond that/)).toBeTruthy();
+  });
+
+  it('reflects the stored choice', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="seamap" />);
+
+    expect(
+      (screen.getByTestId('tile-layer-seamap').querySelector('input') as HTMLInputElement).checked,
     ).toBe(true);
   });
 });

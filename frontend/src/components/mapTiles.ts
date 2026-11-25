@@ -6,10 +6,14 @@ const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright
 const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-/** One layer from the table. `kind` lets the mount code tell a WMS from an XYZ template. */
+/**
+ * One layer from the table. `kind` lets the mount code tell a WMS from an XYZ template and from the
+ * vector style, which MapLibre renders instead of Leaflet.
+ */
 export type TileLayerConfig =
   | { kind: 'xyz'; url: string; options: L.TileLayerOptions }
-  | { kind: 'wms'; url: string; options: L.WMSOptions };
+  | { kind: 'wms'; url: string; options: L.WMSOptions }
+  | { kind: 'vector'; url: string; attribution: string; maxZoom: number };
 
 /**
  * NOAA Chart Display (SCRUM-203). The only candidate that rendered a real paper chart, and it is
@@ -57,6 +61,19 @@ export const CHART_TILE_FAILURE_WINDOW_MS = 10_000;
 export const CHART_BOUNDS = { south: -85, west: -180, north: CHART_COVERAGE_MAX_LAT, east: -60 };
 
 /**
+ * Open Waters: Seamap as a base style (SCRUM-206). Kept as an option rather than the chart
+ * substitute (SCRUM-200): vector navigation aids and depth shading, no soundings, and tiles that
+ * stop at z14. MapLibre overzooms them past that, which keeps vector labels crisp where a raster
+ * base would blur, so the layer is not cut in at the tile ceiling.
+ */
+export const SEAMAP_STYLE_URL = 'https://tiles.openwaters.io/seamap/style.json';
+export const SEAMAP_ATTRIBUTION_TEXT = '© Open Waters: Seamap · © OpenStreetMap contributors';
+export const SEAMAP_NOTICE = 'Not for navigation';
+export const SEAMAP_MAX_NATIVE_ZOOM = 14;
+/** The chart pane: above the base tiles (200), below the depth shading (208) and aids (210). */
+export const SEAMAP_PANE = CHART_PANE;
+
+/**
  * The clip at 49.6 N is a data limit, not a rendering fault, so the edge is drawn as a chart-ink
  * dashed rule in its own pane: above the chart (205) and below the depth shading (208). SCRUM-215.
  */
@@ -85,9 +102,28 @@ export function chartLayerConfig(): TileLayerConfig {
   };
 }
 
+/** The vector style for the fifth base radio; the URL goes to MapLibre, not a Leaflet tile layer. */
+export function seamapLayerConfig(): TileLayerConfig {
+  return {
+    kind: 'vector',
+    url: SEAMAP_STYLE_URL,
+    attribution: `&copy; <a href="https://openwaters.io/">Open Waters: Seamap</a> &middot; ${OSM_ATTRIBUTION}`,
+    maxZoom: SEAMAP_MAX_NATIVE_ZOOM,
+  };
+}
+
+/**
+ * Bases drawn on a light sheet. They get the darker temperature ramp and the darker barb ring, and
+ * the gradient is attenuated so their own symbols stay readable (SCRUM-203, SCRUM-206).
+ */
+export function isLightBase(layer: MapTileLayer): boolean {
+  return layer === 'paper_chart' || layer === 'seamap';
+}
+
 /** Plain-text attribution for the exported image (SCRUM-116); every provider requires it. */
 export function attributionText(layer: MapTileLayer): string {
   if (layer === 'paper_chart') return `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`;
+  if (layer === 'seamap') return `${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`;
   return layer === 'carto_dark' ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors';
 }
 
@@ -122,7 +158,7 @@ export const SEAMARK_HIDDEN_ON_CHART =
  * with `access-control-allow-origin: *`, so `maxZoom` matches the base layers and `crossOrigin`
  * keeps the tiles usable in the canvas export. Nearly empty tiles are normal outside Europe.
  */
-export function seamarkLayerConfig(): TileLayerConfig {
+export function seamarkLayerConfig(): Extract<TileLayerConfig, { kind: 'xyz' }> {
   return {
     kind: 'xyz',
     url: 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
@@ -192,7 +228,23 @@ export function nonnaLayerConfig(): TileLayerConfig {
   };
 }
 
-/** URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set. */
+/**
+ * URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set.
+ * The overloads keep the shape for a known layer, so callers do not have to re-narrow the union.
+ */
+export function tileLayerConfig(
+  layer: 'paper_chart',
+  cartoApiKey?: string,
+): Extract<TileLayerConfig, { kind: 'wms' }>;
+export function tileLayerConfig(
+  layer: 'seamap',
+  cartoApiKey?: string,
+): Extract<TileLayerConfig, { kind: 'vector' }>;
+export function tileLayerConfig(
+  layer: 'carto_dark' | 'osm_dark' | 'osm_standard',
+  cartoApiKey?: string,
+): Extract<TileLayerConfig, { kind: 'xyz' }>;
+export function tileLayerConfig(layer: MapTileLayer, cartoApiKey?: string): TileLayerConfig;
 export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLayerConfig {
   switch (layer) {
     case 'carto_dark': {
@@ -220,5 +272,7 @@ export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLaye
       };
     case 'paper_chart':
       return chartLayerConfig();
+    case 'seamap':
+      return seamapLayerConfig();
   }
 }
