@@ -21,6 +21,7 @@ import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
 import { seamarkLayerConfig, SEAMARK_PANE, tileLayerConfig } from './mapTiles';
+import { registerCaptureMap } from '../utils/captureReadiness';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
@@ -184,8 +185,12 @@ export const MapView: React.FC<MapViewProps> = ({
 
     mapInstanceRef.current = map;
     setMapInstance(map);
+    // The export waits on this map's tile layers, including the window before new tiles exist
+    // (SCRUM-204): a capture right after a layer is enabled must not miss it.
+    const unregisterCapture = registerCaptureMap(map);
 
     return () => {
+      unregisterCapture();
       map.remove();
       mapInstanceRef.current = null;
       setMapInstance(null);
