@@ -12,7 +12,9 @@
 - `derive_extremes` compares each sample with its neighbours (high: above previous and at least
   the following; low: below previous and at most the following), then `_refine` uses the parabola
   through the three samples: `offset = 0.5*(y0-y2)/(y0-2y1+y2)`, height
-  `y1 - 0.25*(y0-y2)*offset`, time rounded to the minute. Edges are not extrapolated.
+  `y1 - 0.25*(y0-y2)*offset`, time rounded to the minute. It returns the last extreme and the
+  first two after it (`last_extreme`, `next_extreme`, `next_extreme_after`, SCRUM-250). Edges are
+  not extrapolated.
 - `routers/tides.py` validates the hour with `validate_current_time`, reuses `quota_exhausted`
   from the currents router, and maps `httpx.HTTPError` to 502.
 - `database.py`: `TIDE_CACHE_DDL` added to `CACHE_TABLE_DDL`, `SCHEMA_VERSION = 8`.
@@ -22,7 +24,8 @@
 - `types.ts`: `TideSample`, `TideExtreme`, `TidePointResponse`.
 - `api/client.ts`: `fetchPointTide(lat, lon, hour)`.
 - `utils/tideBlock.ts`: `loadPointTide` (promise cache, max 100 entries, failures evicted),
-  `formatTideHeight`, `formatTideTime`, `buildTideBlockHtml`.
+  `formatTideHeight`, `formatTideTime`, `buildTideBlockHtml` (current, last, next and following
+  rows; the fourth is omitted when the API has no second future extreme).
 - `MapView` adds `[data-tide-slot]` (lat/lon only) to `buildLocationPopup`, and an effect bound to
   `mapInstance`, `unitSystem`, `validTime` and `validTimeLabel` that listens for `popupopen`, reads
   the slot and fills it. `WindOverlay.buildGridPointPopup` gets the same slot.

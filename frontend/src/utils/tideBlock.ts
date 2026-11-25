@@ -97,6 +97,7 @@ export function buildTideBlockHtml(
     ].join(''),
     extremeRow(tide.last_extreme, 'last', unitSystem),
     extremeRow(tide.next_extreme, 'next', unitSystem),
+    extremeRow(tide.next_extreme_after, 'next', unitSystem),
   ].join('');
   return `
     <div style="margin-top: 6px; font-size: 11px; color: #cbd5e1;">

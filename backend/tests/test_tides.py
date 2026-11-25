@@ -56,29 +56,42 @@ def test_window_covers_previous_selected_and_following_day():
 
 
 def test_extreme_between_samples_is_refined_to_the_minute():
-    last, following = derive_extremes(samples(sine_heights()), START + timedelta(hours=9))
+    last, following, after = derive_extremes(samples(sine_heights()), START + timedelta(hours=9))
     assert last is not None
     # The true high sits midway between the 08:00 and 09:00 samples.
     assert last.type == "high"
     assert last.time == "2026-11-24T08:30"
     assert last.height_m == pytest.approx(1.0, abs=0.01)
     assert following is not None and following.type == "low"
+    assert after is not None and after.type == "high"
+    assert after.time == "2026-11-24T20:30"
 
 
 def test_last_and_next_extremes_bracket_the_selected_hour():
-    last, following = derive_extremes(samples(sine_heights()), START + timedelta(hours=14))
+    last, following, after = derive_extremes(samples(sine_heights()), START + timedelta(hours=14))
     assert last is not None and last.type == "high"
     assert last.time == "2026-11-24T08:30"
     assert following is not None and following.type == "low"
     assert following.time == "2026-11-24T14:30"
     assert following.height_m < last.height_m
+    assert after is not None and after.type == "high"
+    assert after.time == "2026-11-24T20:30"
 
 
 def test_flat_or_single_slope_series_has_no_extremes():
     flat = derive_extremes(samples([1.0] * 72), HOUR)
-    assert flat == (None, None)
+    assert flat == (None, None, None)
     rising = derive_extremes(samples([float(step) for step in range(72)]), HOUR)
-    assert rising == (None, None)
+    assert rising == (None, None, None)
+
+
+def test_no_extreme_after_the_next_one_leaves_that_reading_empty():
+    # One peak at 70:00, with the earlier hours deliberately flat.
+    heights = [0.0] * 69 + [1.0, 2.0, 1.0]
+    last, following, after = derive_extremes(samples(heights), START + timedelta(hours=69))
+    assert last is None
+    assert following is not None and following.type == "high"
+    assert after is None
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +112,7 @@ async def test_point_tide_returns_series_and_extremes(open_meteo):
     assert tide.points[0].time == "2026-11-24T00:00"
     assert tide.last_extreme is not None
     assert tide.next_extreme is not None
+    assert tide.next_extreme_after is not None
     assert open_meteo.last_params["hourly"] == "sea_level_height_msl"
     assert open_meteo.last_params["start_date"] == "2026-11-24"
     assert open_meteo.last_params["end_date"] == "2026-11-26"
@@ -169,6 +183,8 @@ def test_endpoint_returns_tide(client, open_meteo):
     assert len(body["points"]) == 72
     assert body["last_extreme"]["type"] in {"high", "low"}
     assert body["next_extreme"]["type"] in {"high", "low"}
+    assert body["next_extreme_after"]["type"] in {"high", "low"}
+    assert body["next_extreme_after"]["type"] != body["next_extreme"]["type"]
     assert open_meteo.calls[0]["url"] == OPEN_METEO_MARINE_URL
 
 
@@ -189,6 +205,7 @@ def test_endpoint_over_land_returns_no_points(client, open_meteo):
     assert response.status_code == 200
     assert response.json()["points"] == []
     assert response.json()["last_extreme"] is None
+    assert response.json()["next_extreme_after"] is None
 
 
 def test_endpoint_rejects_a_past_hour(client):

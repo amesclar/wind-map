@@ -158,6 +158,8 @@ class TidePointResponse(BaseModel):
     points: list[TideSample]
     last_extreme: TideExtreme | None = None
     next_extreme: TideExtreme | None = None
+    # The extreme after the next one, so a pop-up can show a fourth reading (SCRUM-250).
+    next_extreme_after: TideExtreme | None = None
 
 
 class WeatherModelInfo(BaseModel):
