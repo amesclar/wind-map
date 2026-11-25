@@ -200,7 +200,7 @@ def test_location_weather_upstream_failure_is_502_without_internal_detail(client
     open_meteo.fail(upstream_error())
     resp = client.get(f"/api/weather?location_id={loc_id}")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -208,7 +208,7 @@ def test_point_weather_upstream_failure_is_502_without_internal_detail(client, o
     open_meteo.fail(upstream_error())
     resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch point weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch point weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -254,7 +254,10 @@ def test_unknown_model_is_rejected_without_calling_open_meteo(client, open_meteo
 
 def test_every_listed_model_is_accepted(client, open_meteo):
     open_meteo.respond(forecast_payload())
-    for model in [m["id"] for m in client.get("/api/weather/models").json()]:
+    # NDFD is served by its own provider, so it answers from recorded payloads in
+    # test_nws_prototype.py rather than from this Open-Meteo stub (SCRUM-245 prototype).
+    models = [m["id"] for m in client.get("/api/weather/models").json() if m["id"] != "nws_ndfd"]
+    for model in models:
         assert client.get(f"/api/weather/point?lat=48&lon=-122&model={model}").status_code == 200
 
 

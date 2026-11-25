@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from backend.app import locations_repo
 from backend.app.dependencies import model_param, timezone_param
 from backend.app.models import WeatherForecastResponse, WeatherModelInfo
+from backend.app.services import nws
 from backend.app.services.model_info import model_infos
 from backend.app.services.time_window import validate_forecast_time
 from backend.app.services.weather_service import get_location_forecast, get_point_forecast
@@ -19,8 +20,16 @@ router = APIRouter(prefix="/api/weather", tags=["weather"])
 
 
 def upstream_error(message: str) -> HTTPException:
-    """502 for Open-Meteo failures. The message is fixed; details go to the log only."""
+    """502 for provider failures. The message is fixed; details go to the log only."""
     return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
+
+
+def coverage_error() -> HTTPException:
+    """404 when the selected provider has no data for the location (NDFD is US only)."""
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="NWS NDFD covers the United States only; choose another model for this location",
+    )
 
 
 @router.get("/models", response_model=list[WeatherModelInfo])
@@ -53,9 +62,11 @@ async def get_location_weather(
 
     try:
         return await get_location_forecast(location, model=model, timezone=timezone, at=at)
+    except nws.NwsCoverageError as exc:
+        raise coverage_error() from exc
     except httpx.HTTPError as exc:
-        logger.exception("Open-Meteo forecast request failed for location %s", location_id)
-        raise upstream_error("Failed to fetch weather forecast from Open-Meteo") from exc
+        logger.exception("Weather forecast request failed for location %s", location_id)
+        raise upstream_error("Failed to fetch weather forecast") from exc
 
 
 @router.get("/all", response_model=list[WeatherForecastResponse])
@@ -70,8 +81,9 @@ async def get_all_locations_weather(
         try:
             results.append(await get_location_forecast(location, model=model, timezone=timezone, at=at))
         except httpx.HTTPError:
-            # One failing location must not hide the others; it is logged, not swallowed.
-            logger.exception("Open-Meteo forecast request failed for location %s; skipping", location.id)
+            # One failing location must not hide the others; it is logged, not swallowed. An NDFD
+            # point outside the US lands here too, so its marker shows "No data" (SCRUM-245).
+            logger.exception("Forecast request failed for location %s; skipping", location.id)
             continue
     return results
 
@@ -91,6 +103,8 @@ async def get_point_weather(
     at = validate_forecast_time(time, model)
     try:
         return await get_point_forecast(lat, lon, model=model, timezone=timezone, at=at)
+    except nws.NwsCoverageError as exc:
+        raise coverage_error() from exc
     except httpx.HTTPError as exc:
-        logger.exception("Open-Meteo point forecast request failed for %s,%s", lat, lon)
-        raise upstream_error("Failed to fetch point weather forecast from Open-Meteo") from exc
+        logger.exception("Point forecast request failed for %s,%s", lat, lon)
+        raise upstream_error("Failed to fetch point weather forecast") from exc
