@@ -106,5 +106,7 @@ async def get_point_weather(
     except nws.NwsCoverageError as exc:
         raise coverage_error() from exc
     except httpx.HTTPError as exc:
-        logger.exception("Point forecast request failed for %s,%s", lat, lon)
+        # The exception type, never logger.exception: httpx's message carries the request URL, and
+        # the point with it (SCRUM-253).
+        logger.error("Point forecast request failed: %s", type(exc).__name__)
         raise upstream_error("Failed to fetch point weather forecast") from exc

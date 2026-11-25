@@ -96,10 +96,12 @@ async def get_current_point(
     try:
         points = await get_point_currents(lat, lon)
     except QuotaExceededError as exc:
-        logger.warning("Open-Meteo quota exhausted (current point %s,%s); reset at %s", lat, lon, exc.reset_at)
+        logger.warning("Open-Meteo quota exhausted for the current point; reset at %s", exc.reset_at)
         raise quota_exhausted(exc) from exc
     except httpx.HTTPError as exc:
-        logger.exception("Open-Meteo marine request failed for %s,%s", lat, lon)
+        # The exception type, never logger.exception: httpx's message carries the request URL, and
+        # the point with it (SCRUM-253).
+        logger.error("Open-Meteo marine request failed for the current point: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch ocean current data from Open-Meteo",

@@ -8,7 +8,7 @@ import pytest
 from backend.app.models import CurrentSeriesPoint
 from backend.app.services.currents_service import get_grid_currents, get_point_currents
 from backend.app.services.open_meteo import QuotaExceededError
-from factories import upstream_error
+from factories import upstream_error, upstream_status_error
 
 BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
 HOUR = datetime(2026, 11, 25, 12, tzinfo=UTC)
@@ -503,3 +503,32 @@ def test_point_endpoint_rejects_invalid_coordinates(client, open_meteo):
 
     assert resp.status_code == 422
     assert open_meteo.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_point_endpoint_upstream_failure_logs_no_coordinates(client, open_meteo, caplog):
+    open_meteo.fail(upstream_status_error("https://marine-api.open-meteo.com/v1/marine?latitude=47.9&longitude=-124.6"))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.currents"):
+        resp = client.get("/api/currents/point", params={"lat": 47.9, "lon": -124.6})
+
+    assert resp.status_code == 502
+    assert "HTTPStatusError" in caplog.text
+    assert "47.9" not in caplog.text
+    assert "-124.6" not in caplog.text
+
+
+def test_point_endpoint_quota_logs_the_reset_time_but_not_the_point(client, open_meteo, caplog):
+    open_meteo.fail(QuotaExceededError("Open-Meteo request limit reached", reset_at=None))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.currents"):
+        resp = client.get("/api/currents/point", params={"lat": 47.9, "lon": -124.6})
+
+    assert resp.status_code == 503
+    assert "quota exhausted" in caplog.text
+    assert "47.9" not in caplog.text
+    assert "-124.6" not in caplog.text
