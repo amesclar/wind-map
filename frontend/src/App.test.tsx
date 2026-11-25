@@ -351,7 +351,7 @@ describe('App map integration (SCRUM-126)', () => {
     expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
     expect(content.header.lines[1]).toContain('Open-Meteo');
     expect(content.footer).toContain('Wind Map v');
-    expect(content.barbs).toHaveLength(4);
+    expect(content.barbs.map((entry) => entry.knots)).toEqual([0, 5, 10, 15, 20, 50]);
     expect(content.temperatures.length).toBeGreaterThan(0);
     expect(content.windColorScale).toBeUndefined(); // the gradient is off by default
     // The dialog closes once the file is handed to the browser.

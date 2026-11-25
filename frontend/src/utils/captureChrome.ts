@@ -152,14 +152,21 @@ export function drawLegend(
     ? `Wind barbs (${content.speedUnitLabel}) · colour = temperature (${content.temperatureUnitLabel})`
     : `Wind barbs (${content.speedUnitLabel})`;
   ctx.fillText(barbTitle, pad, top + 12 * unit);
-  const barbsWidth = Math.max(width * 0.52, 240 * unit);
-  const slot = barbsWidth / content.barbs.length;
+  // Six examples (SCRUM-240) leave far less room per entry than four did. Measure the captions
+  // first and take any narrow-width squeeze from the glyph and its gap, never from the caption.
+  const glyphRoom = 26 * unit;
+  const gap = 6 * unit;
+  const captionWidths = content.barbs.map((entry) => ctx.measureText(entry.caption).width);
+  const captionsWidth = captionWidths.reduce((sum, w) => sum + w, 0);
+  const perEntry = (width - pad * 2 - captionsWidth) / content.barbs.length;
+  const glyphSize = Math.max(12 * unit, Math.min(glyphRoom, perEntry - gap));
+  let x = pad;
   content.barbs.forEach((entry, index) => {
-    const cx = pad + slot * index + 14 * unit;
-    drawBarb(ctx, cx, top + 30 * unit, 26 * unit, entry.knots);
+    drawBarb(ctx, x + glyphSize / 2, top + 30 * unit, glyphSize, entry.knots);
     ctx.fillStyle = TEXT;
     ctx.font = `normal ${8.5 * unit}px sans-serif`;
-    ctx.fillText(entry.caption, cx + 18 * unit, top + 34 * unit);
+    ctx.fillText(entry.caption, x + glyphSize + gap / 2, top + 34 * unit);
+    x += glyphSize + gap + captionWidths[index];
   });
 
   if (scale) {
