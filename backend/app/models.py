@@ -1,5 +1,7 @@
 """Pydantic models and schemas for API requests and responses."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -125,6 +127,37 @@ class CurrentPointResponse(BaseModel):
     longitude: float
     horizon_hours: int
     points: list[CurrentSeriesPoint]
+
+
+class TideSample(BaseModel):
+    """One hourly sea-level sample (SCRUM-195)."""
+
+    # UTC minute stamp, e.g. 2026-11-25T12:00.
+    time: str
+    # Metres above global mean sea level.
+    height_m: float
+
+
+class TideExtreme(BaseModel):
+    """A high or low tide with its refined time and height (SCRUM-195)."""
+
+    type: Literal["high", "low"]
+    time: str
+    height_m: float
+
+
+class TidePointResponse(BaseModel):
+    """GET /api/tides/point payload; `points` is empty over land."""
+
+    latitude: float
+    longitude: float
+    # The reference the heights use: global mean sea level, not a chart datum.
+    datum: str
+    unit: str
+    hour: str
+    points: list[TideSample]
+    last_extreme: TideExtreme | None = None
+    next_extreme: TideExtreme | None = None
 
 
 class WeatherModelInfo(BaseModel):

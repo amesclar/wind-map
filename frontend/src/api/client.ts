@@ -7,6 +7,7 @@ import {
   GridWindPoint,
   NewLocation,
   SavedLocation,
+  TidePointResponse,
   WeatherForecastResponse,
   WeatherModelInfo,
 } from '../types';
@@ -99,6 +100,18 @@ export function addLocation(data: NewLocation): Promise<SavedLocation> {
 
 export function deleteLocation(id: number): Promise<void> {
   return request(`/locations/${id}`, 'Failed to delete location', { init: { method: 'DELETE' } });
+}
+
+/** Sea level and the nearest high/low at one point (SCRUM-195). `time` is an ISO hour or null. */
+export function fetchPointTide(
+  latitude: number,
+  longitude: number,
+  time: string | null,
+  { signal }: RequestOptions = {},
+): Promise<TidePointResponse> {
+  const params: Params = { lat: latitude, lon: longitude };
+  if (time) params.hour = time;
+  return request('/tides/point', 'Failed to load tide data', { params, signal });
 }
 
 export function fetchModels(): Promise<WeatherModelInfo[]> {

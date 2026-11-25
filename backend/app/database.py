@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 #   4 → 5 (SCRUM-210): the wind grid cache keeps the gust too, so barb pop-ups show it.
 #   5 → 6 (SCRUM-238): the currents cache keeps the model cell each value came from.
 #   6 → 7 (SCRUM-238): cached current cells are re-checked against elevation, so land rows go.
-SCHEMA_VERSION = 7
+#   7 → 8 (SCRUM-195): sea-level cache for tide pop-ups, keyed by point and hour.
+SCHEMA_VERSION = 8
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -109,11 +110,27 @@ CREATE TABLE IF NOT EXISTS grid_currents_cache (
 );
 """
 
+# Sea level for a point, keyed by rounded coordinates and forecast hour (SCRUM-195). A row with a
+# NULL height records that the point was checked and has no water there (inland or outside the
+# SMOC domain), so an inland pop-up is not refetched every time.
+TIDE_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS tide_point_cache (
+    lat_key   REAL NOT NULL,
+    lon_key   REAL NOT NULL,
+    hour      TEXT NOT NULL,
+    cached_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    height_m  REAL,
+    PRIMARY KEY (lat_key, lon_key, hour)
+);
+"""
+
 CACHE_TABLE_DDL = {
     "weather_cache": WEATHER_CACHE_DDL,
     "point_weather_cache": POINT_CACHE_DDL,
     "grid_weather_cache": GRID_CACHE_DDL,
     "grid_currents_cache": GRID_CURRENTS_CACHE_DDL,
+    "tide_point_cache": TIDE_CACHE_DDL,
 }
 CACHE_TABLES = tuple(CACHE_TABLE_DDL)
 
