@@ -65,6 +65,13 @@
 
 - **Report** the estimate in the summary when you create a ticket.
 
+## Epic for a Split With No Fitting Parent (SCRUM-247)
+- **When:** Any time a ticket is split into two or more tickets — by estimate, by phase (a spike and the build it unblocks) or by area — and no existing epic describes the resulting work.
+- **Create the epic:** one `createJiraIssue` with `issueType: "Epic"`, unpointed, titled for the outcome rather than for one of its parts (e.g. `Epic: second forecast provider — NOAA NWS NDFD`). Its description lists every child with its estimate, the scope boundary and what is out of scope.
+- **Parent every result:** set the `parent` field on each ticket the split produced, the spike included. Boards and filters read `parent`, so a `Relates` link between the pieces of one split does not replace it.
+- **A fitting epic wins:** if an existing epic already covers the work, put the children under it and create nothing new. Do not force the pieces into an unrelated epic just to avoid making one.
+- **Report** the epic, its children and their estimates in the summary.
+
 ## Jira Dependency Links (SCRUM-118)
 - **Make dependencies explicit:** When a ticket cannot start or finish before another one, create a Jira issue link in addition to mentioning it in the description. Text alone is not enough, because Jira boards and filters only see links.
 - **Blocks:** Use link type `Blocks` when one ticket must be done first. The blocker is the `inwardIssue` and the blocked ticket is the `outwardIssue` (`createJiraIssueLink`, run through `executeWrite`; use `discover` if the tool is not loaded). The blocked ticket then shows "is blocked by" the blocker.
