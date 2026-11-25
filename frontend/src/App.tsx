@@ -11,7 +11,8 @@ import { useModelAvailability } from './hooks/useModelAvailability';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
-import { formatRunTime, formatStepLabel } from './utils/forecastWindow';
+import { formatStepLabel } from './utils/forecastWindow';
+import { buildRefreshHint } from './utils/refreshHint';
 import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
@@ -106,13 +107,14 @@ export const App: React.FC = () => {
     if (pending.sawLoading) finishRefresh();
   }, [allWeather.loading, finishRefresh]);
 
-  const refreshTitle = dataRefresh.refreshing
-    ? 'Refreshing…'
-    : dataRefresh.canRefresh
-      ? 'Refresh data now'
-      : nextRunUtc
-        ? `Latest run already loaded · next run ~${formatRunTime(nextRunUtc, timezone)}`
-        : 'Latest run already loaded';
+  // The disabled button's hint (SCRUM-257): four truthful states, and never a run time it lacks.
+  const refreshHint = buildRefreshHint({
+    refreshing: dataRefresh.refreshing,
+    canRefresh: dataRefresh.canRefresh,
+    dataAsOf,
+    nextRunUtc,
+    timezone,
+  });
   const refreshError =
     dataRefresh.error ?? (allWeather.error ? 'Could not refresh from the source; the data on screen is unchanged.' : null);
 
@@ -265,7 +267,7 @@ export const App: React.FC = () => {
         onRefresh={dataRefresh.refresh}
         canRefresh={dataRefresh.canRefresh}
         refreshing={dataRefresh.refreshing}
-        refreshTitle={refreshTitle}
+        refreshHint={refreshHint}
         refreshError={refreshError}
       />
 
