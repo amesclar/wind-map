@@ -110,13 +110,13 @@ water and cream land; the dark temperature chip shall be kept.
 disappears on white water.
 5.3 WHEN the chart base is mounted THEN current chevrons shall draw a light under-stroke behind the
 tier stroke; tier colours, opacities and widths shall not change, so the chevron key stays in sync.
-5.4 WHEN the chart base or the Seamap style is mounted THEN the wind colour gradient shall draw at a
-lower opacity than on the dark bases, so the chart's own symbology stays readable; the export
-captures the same canvas and therefore the same value. Measured (SCRUM-200): the gradient is the
-element that buries the chart, not the barbs — with it off the chart at full strength is the most
-legible state in the review (mean luma 0.88, 94 % light pixels), and at 0.55 it bleaches the paper's
-own symbols. Map Settings shall recommend turning the gradient off with either light style, without
-overriding the user's toggle.
+5.4 WHEN the chart base is mounted THEN the wind colour gradient shall draw at a lower opacity than
+on the dark bases, so the chart's own symbology stays readable; the export captures the same
+canvas and therefore the same value. Measured (SCRUM-200): the gradient is the element that buries
+the chart, not the barbs — with it off the chart at full strength is the most legible state in the
+review (mean luma 0.88, 94 % light pixels), and at 0.55 it bleaches the paper's own symbols. Map
+Settings shall recommend turning the gradient off, without overriding the user's toggle. The
+constant is exported so SCRUM-206's Seamap style reuses it rather than duplicating the value.
 5.5 THEN the legends, pop-ups, Leaflet zoom control and attribution shall keep their current dark
 styling; no light theme shall be introduced.
 5.6 THEN saved-location markers and their pop-ups shall stay legible over the chart, using the same
@@ -139,27 +139,17 @@ the light map.
 7.1 THEN `requirements.md` at the repository root shall record the fourth base map, the setting, the
 coverage rule, the export attribution and the contrast decisions, in the same pull request.
 
-### 8. Seamap as a fifth base style (SCRUM-200 amendment, 2026-11-25)
+### 8. Deferred: the Seamap base style
 
-8.1 WHEN the base map is chosen THEN `MapTileLayer` shall also accept `seamap`, rendered as vector
-tiles through MapLibre, because the product keeps Seamap for its rendering of navigation aids.
-8.2 THEN `maplibre-gl` and `@maplibre/maplibre-gl-leaflet` shall be loaded lazily, only when the
-style is first selected, so the initial bundle does not grow by the measured 309 kB gzip.
-8.3 THEN the layer shall use `maxNativeZoom: 14`, upscaling beyond it rather than blanking, and
-shall draw in a pane below the seamarks with `interactive: false`.
-8.4 THEN the credit `(c) Open Waters: Seamap, (c) OpenStreetMap contributors` shall appear in the
-radio and in the export footer.
-8.5 THEN the export shall capture the GL canvas, which needs `preserveDrawingBuffer: true` and a
-capture filter that keeps the GL container instead of treating it as a tile.
-8.6 THEN the style shall draw with the wind gradient attenuated as in 5.4, and Map Settings shall
-say the style is a navigation-aid rendering rather than a chart, with no depth soundings.
-8.7 THEN the licence position shall be recorded in the radio: CC-BY 4.0 tiles, ODbL for the
-OSM-derived layers, attribution required either way.
+The Seamap vector style is **SCRUM-206** (5 points), raised on 2026-11-25 when this ticket was cut
+back to the 8-point chart base. It reuses the exported light-base gradient constant and nothing
+else: this ticket ships without MapLibre, without a fifth radio and without a new runtime
+dependency.
 
 ## Acceptance criteria
 
-- A fourth and fifth radio exist, neither is the default, both survive a reload, and each of the
-  five values renders its own base layer with no duplicate layer left behind.
+- A fourth radio exists, is not the default, survives a reload, and each of the four values renders
+  its own base layer with no duplicate layer left behind.
 - Barbs, chevrons, markers, pop-ups, legends and controls are legible over the chart at z10-z18 in
   U.S. waters, with screenshots as evidence.
 - Outside chart coverage (Vancouver, inland, offshore) or below z12 the mode shows the ordinary
@@ -167,21 +157,17 @@ OSM-derived layers, attribution required either way.
   outside the clip.
 - An export with the chart base contains the chart tiles and `© NOAA Office of Coast Survey · Not
   for navigation` in its footer, in PNG and in PDF.
-- Users who never select either light style see no change, including their stored base map; the app
-  loads no MapLibre code until Seamap is selected.
+- Users who never select the mode see no change, including their stored base map, and the app's
+  bundle and dependencies are unchanged.
 - `requirements.md` is updated in the same pull request, and the frontend lint, typecheck, coverage
   and build checks pass with the backend untouched.
 
 ## Estimate
 
-**13 points as now scoped, which is above the 8-point ceiling and should be split.**
+**8 points.** A base-map value through settings, the tile table, the WMS mount with its clip and
+zoom floor, the radio, attribution and export, plus a contrast pass over barbs, chevrons, markers,
+both legends, controls and the export chrome, with visual verification inside and outside the clip.
 
-- Chart base map, its clip, contrast pass and export credit: **8 points** (a base-map value through
-  settings, the tile table, the WMS mount and its bounds, the radio, attribution and export, plus the
-  contrast pass over barbs, chevrons, markers, both legends, controls and the export chrome, with
-  visual verification inside and outside the clip).
-- Seamap base style (section 8): **5 points** (a second base-map value, a lazily loaded MapLibre
-  layer, `maxNativeZoom` upscaling, the GL capture path, attribution, tests and a visual pass).
-
-Recommended split: keep SCRUM-203 for the chart base at 8 and raise the Seamap style as its own
-5-point ticket, since the two share only the radio group and the gradient attenuation.
+The Seamap style that briefly sat in this scope is **SCRUM-206** at 5 points, so the ceiling holds:
+8 plus 5 rather than 13 in one ticket. The two share only the radio group and the exported gradient
+constant.

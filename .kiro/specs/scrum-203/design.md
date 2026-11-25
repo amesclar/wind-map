@@ -205,38 +205,12 @@ No new plumbing: `useMapExport` already passes `attributionText(tileLayer)` into
 skips the filter, and `waitForTiles` covers their load. The export chrome stays dark (6.4): the
 frame is drawn outside the map area and a light frame would be a second, unrelated theme.
 
-### Seamap base style (SCRUM-200 amendment)
+### Deferred: the Seamap base style
 
-A fifth `MapTileLayer` value, `seamap`, mounted through MapLibre:
-
-```ts
-const { default: maplibregl } = await import('maplibre-gl');
-await import('@maplibre/maplibre-gl-leaflet');
-const layer = (L as unknown as { maplibreGL: (o: unknown) => L.Layer }).maplibreGL({
-  style: 'https://tiles.openwaters.io/seamap/style.json',
-  pane: CHART_PANE,          // above the base, below the seamarks
-  interactive: false,        // clicks reach the map
-  attributionControl: false,
-  maxZoom: 19,
-});
-```
-
-- **Lazy**: the import sits behind the first selection of the style, so the 309 kB gzip arrives then
-  and the initial bundle is untouched. `MapTileLayer` stays a string union, so settings and the radio
-  group need no new shape.
-- **Zoom**: Seamap's tiles stop at 14. `L.maplibreGL` has no `maxNativeZoom`, so the layer keeps a
-  `maxZoom` of 19 and the map's own zoom is what the user sees; the style upscales the z14 tiles. If
-  upscaling looks worse than a plain base in the review, the fallback is to keep `osm_dark` under it
-  and cut Seamap in at z14 and below — recorded as the check in task 15.
-- **Export**: SCRUM-204 solved the GL capture, but two things are still needed here: the context must
-  be created with `preserveDrawingBuffer: true` (the plugin passes `canvasContextAttributes`), and
-  `captureDom.includeInCapture` must keep the GL container, since it is not an `img.leaflet-tile` and
-  its canvas would otherwise be skipped or awaited forever.
-- **Attribution**: `attributionText('seamap')` returns `© Open Waters: Seamap · © OpenStreetMap
-  contributors`; the radio carries the same plus the licence split (CC-BY 4.0 tiles, ODbL for the
-  OSM-derived layers) and says it shows navigation aids, not soundings.
-- **Contrast**: the pale style is the least legible of the light bases under the gradient, so 5.4's
-  attenuation applies to it identically, and Map Settings recommends the gradient off.
+`seamap` (MapLibre vector tiles, lazy import, the z14 ceiling, the GL capture path) is
+**SCRUM-206**. Its design notes from SCRUM-200 live there and this spec deliberately does not
+depend on it. The one shared item is the light-base gradient constant in 5.4, which SCRUM-206
+reuses rather than duplicating.
 
 ## Correctness properties
 
@@ -257,8 +231,7 @@ const layer = (L as unknown as { maplibreGL: (o: unknown) => L.Layer }).maplibre
    the chart carries `bounds`/`minZoom` from the exported constants (2.4, 2.7).
 10. The coverage chip is present exactly when the chart is selected and not painting, and absent
     otherwise (4.2, 4.4).
-11. `attributionText` covers all five values, and `seamap` names both Seamap and OpenStreetMap (6.1, 8.4).
-12. Selecting `seamap` imports MapLibre; no import happens for the other four values (8.2).
+11. `attributionText` covers all four values, and the three legacy strings are unchanged (6.1).
 
 ## Risks
 
@@ -280,10 +253,11 @@ const layer = (L as unknown as { maplibreGL: (o: unknown) => L.Layer }).maplibre
 | Overlay or base map | Base map | Both NOAA services are 0 % transparent and ignore `TRANSPARENT`; at 0.7 the frame is neither (0.69 luma, 1 % light) |
 | CHS NONNA under the chart | No | NONNA is transparent but is a B.C. z8-z12 overview; the chart is opaque and has no B.C. coverage, so there is nothing to put it under. It gets its own B.C. overlay ticket |
 | Seamark toggle while a chart is on | Stays independent | It is the only aid source in B.C.; the chart's own layer 6 duplicates it in U.S. water, which is a wording note, not a suppression |
-| Vector (Seamap) | Rejected | +309 kB gzip in a 382 kB app, maxzoom 14, licence unresolved |
+| Vector (Seamap) | Kept as an option, now SCRUM-206 | Product decision; measured +309 kB gzip, maxzoom 14, licence split CC-BY 4.0 / ODbL |
 
 ## Out of scope
 
 The overlay recommended by the evaluation (its own ticket), CHS ENC or any CHS purchase, NONNA
-contours (its own B.C. ticket), a light theme for the app, self-hosted tiles, a backend proxy or
-cache, and any change to the three dark/standard base maps and their rendering.
+contours (its own B.C. ticket), the Seamap vector style (**SCRUM-206**), a light theme for the app,
+self-hosted tiles, a backend proxy or cache, and any change to the three dark/standard base maps and
+their rendering.
