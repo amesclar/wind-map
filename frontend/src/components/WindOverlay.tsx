@@ -108,6 +108,9 @@ export function buildGridPointPopup(
   timeLabel: string | null = null,
 ): string {
   const speed = formatKnotsInUnit(pt.wind_speed_knots, speedUnit);
+  // Gusts come with the grid point (SCRUM-210); older cached frames may not have one.
+  const gust =
+    typeof pt.wind_gust_knots === 'number' ? formatKnotsInUnit(pt.wind_gust_knots, speedUnit) : null;
   const temperature =
     typeof pt.temperature_f === 'number' ? formatTemperatureFromF(pt.temperature_f, unitSystem) : '--';
   const direction =
@@ -122,6 +125,7 @@ export function buildGridPointPopup(
       <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">${pt.latitude.toFixed(2)}°, ${pt.longitude.toFixed(2)}°</div>
       <div style="display: flex; gap: 8px; font-weight: 600;">
         <span style="color: #38bdf8;">💨 ${speed}</span>
+        ${gust ? `<span style="color: #fb923c;">⚡ G: ${gust}</span>` : ''}
         <span style="color: #4ade80;">🌡️ ${temperature}</span>
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px; display: flex; align-items: center; gap: 4px;">🧭 ${direction}</div>

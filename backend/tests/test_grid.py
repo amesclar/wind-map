@@ -60,6 +60,45 @@ async def test_fetch_single_point_dict_response(open_meteo):
 
 
 @pytest.mark.asyncio
+async def test_points_carry_the_gust(open_meteo):
+    """Barb pop-ups show gusts, so every grid point has to carry one (SCRUM-210)."""
+    open_meteo.respond(grid_payload(grid_item(15.0, 220.0, gust=24.5)))
+
+    result = await get_grid_wind([(48.29, -122.60)], "best_match")
+
+    assert result[0].wind_gust_knots == 24.5
+
+
+@pytest.mark.asyncio
+async def test_missing_gust_stays_null(open_meteo):
+    """An absent gust is unknown, not calm: the pop-up leaves the field out."""
+    open_meteo.respond(grid_payload(grid_item(15.0, 220.0, gust=None)))
+
+    result = await get_grid_wind([(48.29, -122.60)], "best_match")
+
+    assert result[0].wind_gust_knots is None
+
+
+@pytest.mark.asyncio
+async def test_cached_points_keep_the_gust(open_meteo):
+    insert_grid_row(48.29, -122.60, speed=7.0, gust=13.5)
+
+    result = await get_grid_wind([(48.29, -122.60)], "best_match")
+
+    assert open_meteo.call_count == 0
+    assert result[0].wind_gust_knots == 13.5
+
+
+@pytest.mark.asyncio
+async def test_forecast_hour_points_carry_the_gust(open_meteo):
+    open_meteo.respond(grid_payload(grid_hourly_item("2026-11-25T12:00", speed=12.0, gust=27.5)))
+
+    result = await get_grid_wind([(48.0, -122.0)], "best_match", datetime(2026, 11, 25, 12, tzinfo=UTC))
+
+    assert result[0].wind_gust_knots == 27.5
+
+
+@pytest.mark.asyncio
 async def test_fetch_multiple_points_array_response(open_meteo):
     """Open-Meteo returns a JSON array for multiple points."""
     pts = [(48.0, -122.0), (47.0, -121.0), (46.0, -120.0)]

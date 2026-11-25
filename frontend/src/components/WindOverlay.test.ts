@@ -132,6 +132,23 @@ describe('buildGridPointPopup (SCRUM-126)', () => {
     expect(el.textContent).not.toContain('°F');
   });
 
+  it('shows the gust in the chosen speed unit when the point carries one (SCRUM-210)', () => {
+    const imperial = parse(
+      buildGridPointPopup({ ...point, wind_gust_knots: 21.4 }, 'imperial', 'knots', 'deg'),
+    );
+    expect(imperial.textContent).toContain('⚡ G: 21.4 kt');
+
+    const metric = parse(
+      buildGridPointPopup({ ...point, wind_gust_knots: 21.4 }, 'metric', 'kmh', 'cardinal'),
+    );
+    expect(metric.textContent).toContain('⚡ G: 39.6 km/h');
+  });
+
+  it('leaves the gust out when the point has none', () => {
+    const el = parse(buildGridPointPopup({ ...point, wind_gust_knots: null }, 'imperial', 'knots'));
+    expect(el.textContent).not.toContain('⚡');
+  });
+
   it('draws the barb when barb display is chosen, and shows -- without a temperature', () => {
     const el = parse(buildGridPointPopup({ ...point, temperature_f: null }, 'imperial', 'knots'));
     expect(el.querySelector('svg')).not.toBeNull();
