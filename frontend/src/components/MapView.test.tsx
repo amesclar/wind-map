@@ -1,6 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
+import {
+  WIND_COLOR_OPACITY,
+  WIND_COLOR_OPACITY_ON_CHART,
+  WIND_COLOR_PANE,
+} from './WindColorOverlay';
 import { makeLocation } from '../test/fixtures';
 import leaflet, {
   createdMarkers,
@@ -192,6 +197,27 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
     expect(screen.queryByTestId('wind-color-legend')).toBeNull();
     await new Promise((r) => setTimeout(r, 0));
     expect(api.fetchWindGrid).not.toHaveBeenCalled();
+  });
+
+  it('draws the chart’s lighter gradient on any base when high contrast is on (SCRUM-213)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+    ]);
+    // jsdom has no canvas backend; the opacity is written on each paint, so give it a 2D context.
+    const context = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ clearRect: vi.fn(), fillRect: vi.fn() } as unknown as CanvasRenderingContext2D);
+    const { rerender } = render(<MapView {...baseProps} locations={[]} windColorOverlayVisible />);
+
+    const canvas = () =>
+      currentMap().panes[WIND_COLOR_PANE].querySelector('canvas') as HTMLCanvasElement;
+    await waitFor(() => expect(canvas().style.opacity).toBe(String(WIND_COLOR_OPACITY)));
+
+    rerender(
+      <MapView {...baseProps} locations={[]} windColorOverlayVisible windColorHighContrast />,
+    );
+    expect(canvas().style.opacity).toBe(String(WIND_COLOR_OPACITY_ON_CHART));
+    context.mockRestore();
   });
 
   it('keeps the crisp outline on the barbs while the gradient is on', async () => {

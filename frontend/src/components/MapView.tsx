@@ -10,7 +10,7 @@ import {
 } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
 import { BARB_OUTLINES, WindOverlay } from './WindOverlay';
-import { WIND_COLOR_OPACITY, WIND_COLOR_OPACITY_ON_CHART, WindColorOverlay } from './WindColorOverlay';
+import { windColorOpacity, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
 import { CurrentLegend } from './CurrentLegend';
@@ -52,6 +52,8 @@ interface MapViewProps {
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
+  /** Draws the gradient at the chart's lighter strength on every base (SCRUM-213). */
+  windColorHighContrast?: boolean;
   /** Nautical seamark overlay (SCRUM-175); off unless turned on. */
   seamarksVisible?: boolean;
   /** CHS NONNA bathymetry for B.C. waters (SCRUM-205); off unless turned on. */
@@ -155,6 +157,7 @@ export const MapView: React.FC<MapViewProps> = ({
   selectedModel,
   windOverlayVisible,
   windColorOverlayVisible,
+  windColorHighContrast = false,
   waterCurrentsVisible = false,
   seamarksVisible = false,
   bcDepthVisible = false,
@@ -564,7 +567,7 @@ export const MapView: React.FC<MapViewProps> = ({
             map={mapInstance}
             points={gridPoints}
             visible
-            opacity={chartBase ? WIND_COLOR_OPACITY_ON_CHART : WIND_COLOR_OPACITY}
+            opacity={windColorOpacity({ onChart: chartBase, highContrast: windColorHighContrast })}
           />
           <WindColorLegend speedUnit={speedUnit} />
         </>

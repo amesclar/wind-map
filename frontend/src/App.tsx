@@ -209,6 +209,7 @@ export const App: React.FC = () => {
             selectedModel={selectedModel}
             windOverlayVisible={mapSettings.windOverlayVisible}
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+            windColorHighContrast={mapSettings.windColorHighContrast}
             waterCurrentsVisible={mapSettings.waterCurrentsVisible}
             seamarksVisible={mapSettings.seamarksVisible}
             bcDepthVisible={mapSettings.bcDepthVisible}
@@ -253,6 +254,8 @@ export const App: React.FC = () => {
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
         windColorOverlayVisible={mapSettings.windColorOverlayVisible}
         onToggleWindColorOverlay={mapSettings.setWindColorOverlayVisible}
+        windColorHighContrast={mapSettings.windColorHighContrast}
+        onToggleWindColorHighContrast={mapSettings.setWindColorHighContrast}
         waterCurrentsVisible={mapSettings.waterCurrentsVisible}
         onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
         seamarksVisible={mapSettings.seamarksVisible}

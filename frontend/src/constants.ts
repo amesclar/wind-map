@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   cartoApiKey: 'carto_api_key',
   windOverlayVisible: 'wind_overlay_visible',
   windColorOverlayVisible: 'wind_color_overlay_visible',
+  windColorHighContrast: 'wind_color_high_contrast',
   waterCurrentsVisible: 'water_currents_visible',
   seamarks: 'map_seamarks_visible',
   bcDepth: 'nonna_bc_visible',
