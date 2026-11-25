@@ -18,7 +18,7 @@ import {
   PDF_PAGE_BOX,
   saveMapPdf,
 } from './pdfExport';
-import type { CaptureContent } from './captureChrome';
+import { FOOTER_PX, HEADER_PX, LEGEND_PX, type CaptureContent } from './captureChrome';
 
 function fakeContext() {
   return {
@@ -116,7 +116,7 @@ describe('saveMapPdf (SCRUM-117)', () => {
     expect(dataUrl).toBe('data:image/jpeg;base64,AAAA');
     expect(format).toBe('JPEG');
     // The canvas is 1000 x (600 + the 2x chrome), so the page height is the limiting side.
-    expect(width / height).toBeCloseTo(1000 / (600 + (74 + 78 + 30) * 2), 5);
+    expect(width / height).toBeCloseTo(1000 / (600 + (HEADER_PX + LEGEND_PX + FOOTER_PX) * 2), 5);
     expect(x).toBeGreaterThanOrEqual(PDF_MARGIN_PT);
     expect(y).toBeGreaterThanOrEqual(PDF_MARGIN_PT);
     expect(x + width).toBeLessThanOrEqual(PDF_PAGE_BOX.a4.height);
