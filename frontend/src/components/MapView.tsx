@@ -46,6 +46,8 @@ import { formatDirection, formatSpeed, formatTemperature } from '../utils/units'
 interface MapViewProps {
   locations: SavedLocation[];
   selectedLocation: SavedLocation | null;
+  /** Where to look at startup without selecting it (SCRUM-248); flies, opens no pop-up. */
+  focusLocation?: SavedLocation | null;
   onSelectLocation: (loc: SavedLocation) => void;
   weatherMap: Record<number, WeatherForecastResponse>;
   tileLayerType: MapTileLayer;
@@ -167,6 +169,7 @@ export function buildLocationPopup(
 export const MapView: React.FC<MapViewProps> = ({
   locations,
   selectedLocation,
+  focusLocation = null,
   onSelectLocation,
   weatherMap,
   tileLayerType,
@@ -524,21 +527,23 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Fly to selected location
+  // Fly to the selection, or to the startup focus (SCRUM-248): the focus only moves the map, so
+  // the app opens on the current location with no marker highlighted and no details pop-up.
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !selectedLocation) return;
+    const target = selectedLocation ?? focusLocation;
+    if (!map || !target) return;
 
     // The chart does not draw below its floor, so the initial flight has to land where it does
     // (SCRUM-203); every other base keeps the original zoom.
     const zoom = chartBaseRef.current ? CHART_MIN_ZOOM : 9;
-    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], zoom, {
+    map.flyTo([target.latitude, target.longitude], zoom, {
       duration: 1.2,
       easeLinearity: 0.25,
     });
 
-    markersRef.current.get(selectedLocation.id)?.marker.openPopup();
-  }, [selectedLocation, chartBaseRef]);
+    if (selectedLocation) markersRef.current.get(selectedLocation.id)?.marker.openPopup();
+  }, [selectedLocation, focusLocation, chartBaseRef]);
 
   // Hand the node to both the internal ref (used to create the map) and the export's ref.
   const setContainer = (node: HTMLDivElement | null) => {

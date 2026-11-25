@@ -8,6 +8,8 @@ provide dropdown for weather model options with Open-Meteo as the default option
 
 the default location should be the user's current location. if not able to determine current location, default to Oak Harbor, Washington, are 48.2939° N, 122.6064° W
 
+The app opens centred on the current location, or on the first saved location when geolocation is unavailable, with **no** details pop-up and no highlighted marker: a location pop-up appears only when the user clicks a barb, clicks a saved-location marker, chooses a location in the saved-locations list or adds one from the search box (SCRUM-248). Deleting the selected location clears the selection instead of selecting the first remaining one.
+
 the application should be able to show multiple locations at once, each marked with an icon, and the user should be able to click on an icon to see the weather predictions for that location
 
 the web ui should have a text box allowing users to add locations - the locations should be verified and converted to lat/long before adding to location database

@@ -42,6 +42,10 @@ export const App: React.FC = () => {
   // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
   const [selection, setSelection] = useState<Selection | null>(null);
 
+  // Where the map looks at startup, separate from what is selected (SCRUM-248): the app opens
+  // centred on the current location, but no marker is highlighted and no pop-up opens.
+  const [focus, setFocus] = useState<SavedLocation | null>(null);
+
   // Selected forecast hour (null = now). Memory only: the app opens at "now" (SCRUM-127).
   const [forecastTime, setForecastTime] = useState<string | null>(null);
 
@@ -88,6 +92,8 @@ export const App: React.FC = () => {
   );
 
   const selectSaved = useCallback((location: SavedLocation) => {
+    // A user selection owns the map from now on, so the startup focus is no longer needed.
+    setFocus(null);
     setSelection({ kind: 'saved', location });
   }, []);
 
@@ -107,8 +113,10 @@ export const App: React.FC = () => {
         const fallback = saved[0] ?? null;
         const position = await getCurrentPosition();
         if (cancelled) return;
+        // Startup only focuses the map: selecting here would open a details pop-up the user
+        // never asked for (SCRUM-248).
         if (!position) {
-          if (fallback) setSelection({ kind: 'saved', location: fallback });
+          if (fallback) setFocus(fallback);
           return;
         }
         try {
@@ -116,9 +124,9 @@ export const App: React.FC = () => {
             { name: 'My Current Location', latitude: position.coords.latitude, longitude: position.coords.longitude },
             'first',
           );
-          if (!cancelled) setSelection({ kind: 'saved', location: here });
+          if (!cancelled) setFocus(here);
         } catch {
-          if (!cancelled && fallback) setSelection({ kind: 'saved', location: fallback });
+          if (!cancelled && fallback) setFocus(fallback);
         }
       } catch (err) {
         console.error('Initialization error:', err);
@@ -154,19 +162,21 @@ export const App: React.FC = () => {
   const handleDeleteLocation = useCallback(
     async (id: number) => {
       try {
-        const remaining = await removeLocation(id);
+        await removeLocation(id);
         allWeather.remove(id);
-        if (selectedLocation?.id === id) {
-          setSelection(remaining[0] ? { kind: 'saved', location: remaining[0] } : null);
-        }
+        // Deleting is a removal, never a selection: the highlight goes and no other
+        // location's pop-up opens (SCRUM-248).
+        if (selectedLocation?.id === id) setSelection(null);
+        if (focus?.id === id) setFocus(null);
       } catch (err) {
         console.error('Failed to delete location:', err);
       }
     },
-    [removeLocation, allWeather, selectedLocation?.id],
+    [removeLocation, allWeather, selectedLocation?.id, focus?.id],
   );
 
   const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
+    setFocus(null);
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
   }, []);
 
@@ -202,6 +212,7 @@ export const App: React.FC = () => {
           <MapView
             locations={locations}
             selectedLocation={selectedLocation}
+            focusLocation={focus}
             onSelectLocation={selectSaved}
             weatherMap={allWeather.weatherMap}
             tileLayerType={mapSettings.tileLayer}
