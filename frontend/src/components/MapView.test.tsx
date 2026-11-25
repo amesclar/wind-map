@@ -79,6 +79,29 @@ describe('MapView popups (SCRUM-92)', () => {
   });
 });
 
+describe('MapView startup focus (SCRUM-248)', () => {
+  const focus = makeLocation({ id: 7, name: 'My Current Location', latitude: 48.1, longitude: -122.4 });
+
+  it('flies to the focus without selecting the marker or opening its pop-up', () => {
+    render(<MapView {...baseProps} locations={[focus]} focusLocation={focus} />);
+
+    const marker = markerAt(focus.latitude, focus.longitude)!;
+    expect(currentMap().flyTo).toHaveBeenCalledWith([focus.latitude, focus.longitude], 9, expect.any(Object));
+    expect(marker.openPopup).not.toHaveBeenCalled();
+    expect((marker.icon as { html?: string }).html ?? '').not.toContain('scale-110');
+  });
+
+  it('flies to a selected location and opens its pop-up', () => {
+    const location = makeLocation();
+    render(<MapView {...baseProps} locations={[location]} selectedLocation={location} />);
+
+    const marker = markerAt(location.latitude, location.longitude)!;
+    expect(currentMap().flyTo).toHaveBeenCalledWith([location.latitude, location.longitude], 9, expect.any(Object));
+    expect(marker.openPopup).toHaveBeenCalledTimes(1);
+    expect((marker.icon as { html?: string }).html ?? '').toContain('scale-110');
+  });
+});
+
 describe('MapView shared wind grid (SCRUM-122)', () => {
   it('fetches once per view change while the barbs are shown', async () => {
     vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
