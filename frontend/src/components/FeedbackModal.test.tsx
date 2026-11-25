@@ -24,6 +24,15 @@ function fill({ type = 'bug', subject = 'Map blank', comments = 'It will not loa
 
 const send = () => fireEvent.click(screen.getByRole('button', { name: /^(Send|Retry)$/ }));
 
+function png(name = 'shot.png', size = 1024): File {
+  const file = new File([new Uint8Array(8)], name, { type: 'image/png' });
+  Object.defineProperty(file, 'size', { value: size });
+  return file;
+}
+
+const attach = (...files: File[]) =>
+  fireEvent.change(screen.getByTestId('feedback-file-input'), { target: { files } });
+
 describe('FeedbackModal (SCRUM-179)', () => {
   beforeEach(() => submit.mockReset());
 
@@ -187,5 +196,95 @@ describe('FeedbackModal (SCRUM-179)', () => {
     fill();
     send();
     expect((await screen.findByRole('alert')).textContent).toMatch(/could not be sent/);
+  });
+
+  describe('attachments (SCRUM-219)', () => {
+    it('adds a picked file with its size and the running total', () => {
+      renderModal();
+      attach(png('shot.png', 24_576));
+
+      expect(screen.getByTestId('attachment-name').textContent).toBe('shot.png');
+      expect(screen.getByText('24.0 KB')).toBeTruthy();
+      expect(screen.getByTestId('attachment-total').textContent).toContain('of 12 MB');
+    });
+
+    it('accepts a dropped file and highlights the zone while dragging', () => {
+      renderModal();
+      const zone = screen.getByTestId('feedback-drop-zone');
+
+      fireEvent.dragOver(zone);
+      expect(zone.className).toContain('border-sky-400');
+
+      fireEvent.drop(zone, { dataTransfer: { files: [png('dropped.png')] } });
+      expect(zone.className).not.toContain('border-sky-400');
+      expect(screen.getByTestId('attachment-name').textContent).toBe('dropped.png');
+    });
+
+    it('removes a file from the list', () => {
+      renderModal();
+      attach(png());
+      fireEvent.click(screen.getByRole('button', { name: 'Remove shot.png' }));
+      expect(screen.queryByTestId('attachment-list')).toBeNull();
+    });
+
+    it('refuses a fourth file, an oversize file and a wrong type', () => {
+      renderModal();
+      attach(png('a.png'), png('b.png'), png('c.png'));
+      attach(png('d.png'));
+      expect(screen.getByTestId('attachment-error').textContent).toBe('You can attach up to 3 files.');
+      expect(screen.getAllByTestId('attachment-name')).toHaveLength(3);
+
+      attach(new File(['MZ'], 'tool.exe', { type: 'application/x-msdownload' }));
+      expect(screen.getByTestId('attachment-error').textContent).toMatch(/attach an image, a PDF or a plain-text file/);
+
+      attach(png('huge.png', 5 * 1024 * 1024));
+      expect(screen.getByTestId('attachment-error').textContent).toBe('huge.png: each file can be at most 4 MB.');
+      expect(screen.getAllByTestId('attachment-name')).toHaveLength(3);
+    });
+
+    it('sends the files with the payload and clears them only after the key is shown', async () => {
+      submit.mockResolvedValue({ issue_key: 'SCRUM-500', issue_url: '' });
+      renderModal();
+      fill();
+      const file = png('shot.png');
+      attach(file);
+      send();
+
+      await screen.findByText('SCRUM-500');
+      expect(submit.mock.calls[0][0].files).toHaveLength(1);
+      expect(submit.mock.calls[0][0].files?.[0].name).toBe('shot.png');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(screen.queryByTestId('attachment-list')).toBeNull();
+    });
+
+    it('keeps the files after a failure so a retry carries them too', async () => {
+      submit.mockRejectedValueOnce(new ApiError('Failed', 502));
+      renderModal();
+      fill();
+      attach(png());
+      send();
+
+      await screen.findByRole('alert');
+      expect(screen.getByTestId('attachment-name').textContent).toBe('shot.png');
+
+      submit.mockResolvedValueOnce({ issue_key: 'SCRUM-501', issue_url: '' });
+      send();
+      await screen.findByText('SCRUM-501');
+      expect(submit.mock.calls[1][0].files).toHaveLength(1);
+    });
+
+    it('warns in plain language when the issue was filed without its files', async () => {
+      submit.mockResolvedValue({ issue_key: 'SCRUM-502', issue_url: '', attachments_failed: true });
+      renderModal();
+      fill();
+      attach(png());
+      send();
+
+      await screen.findByText('SCRUM-502');
+      expect(screen.getByTestId('attachments-warning').textContent).toBe(
+        "Your files could not be attached. You don't need to send the feedback again.",
+      );
+    });
   });
 });

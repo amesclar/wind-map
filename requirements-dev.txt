@@ -44,6 +44,7 @@ pytest==9.2.0             # via -r requirements-dev.in, pytest-asyncio, pytest-c
 pytest-asyncio==1.5.0     # via -r requirements-dev.in
 pytest-cov==7.1.0         # via -r requirements-dev.in
 python-dotenv==1.2.4      # via -c requirements.txt, uvicorn
+python-multipart==0.0.34  # via -c requirements.txt, -r requirements.in
 pyyaml==6.0.3             # via -c requirements.txt, uvicorn
 requests==2.34.2          # via cachecontrol, pip-audit
 rich==15.0.0              # via pip-audit
