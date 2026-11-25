@@ -14,6 +14,8 @@ interface WindOverlayProps {
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Dark halo so temperature colors stay readable over the gradient (SCRUM-123). */
   halo?: boolean;
+  /** Paper chart base (SCRUM-203): the CSS halo gains a light inner glow. */
+  lightBase?: boolean;
   /** Units and direction display for the barb pop-up (SCRUM-126), the user's settings. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
@@ -53,13 +55,20 @@ export function generateGridBarbSvg(
   });
 }
 
-export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean, halo = false): L.DivIcon {
+export function buildGridBarbIcon(
+  pt: GridWindPoint,
+  isSelected: boolean,
+  halo = false,
+  lightBase = false,
+): L.DivIcon {
   const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
   const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
-  // Selected barb gets a white highlight ring.
-  const ringStyle = isSelected
-    ? 'border-radius:50%;box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);'
-    : '';
+  // Selected barb gets a highlight ring: white on the dark bases, inverted on the light chart
+  // sheet where white would disappear (SCRUM-203).
+  const ring = lightBase
+    ? 'box-shadow:0 0 0 2px #161b22,0 0 0 3px rgba(255,255,255,0.85);background:rgba(22,27,34,0.12);'
+    : 'box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);';
+  const ringStyle = isSelected ? `border-radius:50%;${ring}` : '';
   return L.divIcon({
     className: 'wind-grid-barb-marker',
     html: `<div data-wind-barb data-selected="${isSelected}" class="${halo ? 'wind-barb-halo' : ''}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
@@ -109,6 +118,7 @@ export function WindOverlay({
   selectedPoint,
   onGridPointSelect,
   halo = false,
+  lightBase = false,
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
@@ -119,6 +129,7 @@ export function WindOverlay({
   const onSelectRef = useLatest(onGridPointSelect);
   const selectedRef = useLatest(selectedPoint);
   const haloRef = useLatest(halo);
+  const lightBaseRef = useLatest(lightBase);
 
   // Draw one barb marker per grid point; replaced whenever the points change.
   useEffect(() => {
@@ -129,6 +140,7 @@ export function WindOverlay({
           point,
           isSamePoint(selectedRef.current, point.latitude, point.longitude),
           haloRef.current,
+          lightBaseRef.current,
         ),
         interactive: true,
       }).addTo(map);
@@ -142,16 +154,21 @@ export function WindOverlay({
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, haloRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
+  }, [map, points, selectedRef, haloRef, lightBaseRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {
     entriesRef.current.forEach(({ point, marker }) => {
       marker.setIcon(
-        buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude), halo),
+        buildGridBarbIcon(
+          point,
+          isSamePoint(selectedPoint, point.latitude, point.longitude),
+          halo,
+          lightBase,
+        ),
       );
     });
-  }, [selectedPoint, halo]);
+  }, [selectedPoint, halo, lightBase]);
 
   return null;
 }
