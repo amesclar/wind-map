@@ -285,6 +285,39 @@ describe('MapView barb pop-ups (SCRUM-126)', () => {
   });
 });
 
+describe('MapView chart declutter (SCRUM-211)', () => {
+  const barbs = () =>
+    createdMarkers.filter((marker) =>
+      ((marker.icon as { html?: string }).html ?? '').includes('data-wind-barb'),
+    );
+
+  it('drops grid barbs under a saved-location marker so its labelled barb reads', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48.5, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+      { latitude: 48, longitude: -121, wind_speed_knots: 20, wind_direction_deg: 90, temperature_f: 50 },
+    ]);
+    const location = makeLocation({ id: 3, latitude: 48.5, longitude: -122 });
+    render(
+      <MapView {...baseProps} locations={[location]} tileLayerType="paper_chart" windOverlayVisible />,
+    );
+
+    await waitFor(() => expect(barbs()).toHaveLength(1));
+    expect(barbs()[0].latlng).toEqual([48, -121]);
+    expect(markerAt(48.5, -122)).toBeDefined(); // the location marker itself stays
+  });
+
+  it('draws every grid barb on the other bases, keep-outs and thinning included', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48.5, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+      { latitude: 48, longitude: -121, wind_speed_knots: 20, wind_direction_deg: 90, temperature_f: 50 },
+    ]);
+    const location = makeLocation({ id: 3, latitude: 48.5, longitude: -122 });
+    render(<MapView {...baseProps} locations={[location]} windOverlayVisible />);
+
+    await waitFor(() => expect(barbs()).toHaveLength(2));
+  });
+});
+
 describe('MapView paper chart base (SCRUM-203)', () => {
   const chartLayer = () => createdTileLayers.find((layer) => layer.kind === 'wms')!;
 

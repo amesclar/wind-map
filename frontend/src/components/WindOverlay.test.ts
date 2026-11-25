@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BARB_KEEP_OUT_RADIUS_PX,
   BARB_OUTLINES,
   buildGridBarbIcon,
   buildGridPointPopup,
   generateGridBarbSvg,
+  declutterGridPoints,
   GRID_BARB_FALLBACK_COLOR,
 } from './WindOverlay';
 import { generateWindBarbSvg, getTemperatureColor } from './WindBarb';
@@ -102,6 +104,69 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).toContain('data-selected="true"');
     expect(html).toContain('box-shadow:0 0 0 2px #ffffff');
     expect(html).toContain(generateGridBarbSvg(15, 90, 85, 48, BARB_OUTLINES));
+  });
+});
+
+describe('declutterGridPoints (SCRUM-211)', () => {
+  const gridPoint = (latitude: number, longitude: number) => ({
+    latitude,
+    longitude,
+    wind_speed_knots: 10,
+    wind_direction_deg: 90,
+    temperature_f: 60,
+  });
+  const grid = (rows: number, cols: number) =>
+    Array.from({ length: rows }, (_, row) =>
+      Array.from({ length: cols }, (_, col) => gridPoint(50 - row, -125 + col)),
+    ).flat();
+  // 80 px per degree: the grid's own step on screen, so one cell is one barb spacing.
+  const project = (point: { latitude: number; longitude: number }) => ({
+    x: (point.longitude + 125) * 80,
+    y: (50 - point.latitude) * 80,
+  });
+
+  it('returns the same array untouched when there is nothing to declutter', () => {
+    const points = grid(2, 2);
+    expect(declutterGridPoints(points, project)).toBe(points);
+    expect(declutterGridPoints(points, project, { keepOut: [] })).toBe(points);
+  });
+
+  it('halves the grid on a checkerboard when thinning', () => {
+    const kept = declutterGridPoints(grid(4, 4), project, { thin: true });
+    const cells = new Set(kept.map((point) => `${50 - point.latitude}:${point.longitude + 125}`));
+
+    expect(kept).toHaveLength(8);
+    expect(cells.has('0:0')).toBe(true);
+    expect(cells.has('0:1')).toBe(false); // every other column is gone
+    expect(cells.has('1:0')).toBe(false); // and so is every other row
+    expect(cells.has('1:1')).toBe(true);
+    expect(cells.has('3:3')).toBe(true);
+  });
+
+  it('drops the barbs a saved-location marker would cover', () => {
+    const kept = declutterGridPoints(
+      [gridPoint(49, -124), gridPoint(49, -123.9), gridPoint(49.5, -124)],
+      project,
+      { keepOut: [{ latitude: 49, longitude: -124 }] },
+    );
+
+    // 8 px away is under the marker; 40 px away is clear of its 30 px keep-out.
+    expect(kept).toEqual([gridPoint(49.5, -124)]);
+  });
+
+  it('keeps the radius in pixels, so the same view always keeps the same barbs', () => {
+    const near = { latitude: 49, longitude: -124 };
+    expect(BARB_KEEP_OUT_RADIUS_PX).toBe(30);
+    expect(declutterGridPoints([gridPoint(49, -124)], project, { keepOut: [near] })).toEqual([]);
+  });
+
+  it('applies the checkerboard and the keep-outs together', () => {
+    const kept = declutterGridPoints(grid(4, 4), project, {
+      thin: true,
+      keepOut: [{ latitude: 50, longitude: -125 }], // drops the 0:0 barb that thinning keeps
+    });
+
+    expect(kept).toHaveLength(7);
   });
 });
 

@@ -5,6 +5,7 @@ import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
 import { escapeHtml } from '../utils/html';
+import { CHART_MIN_ZOOM } from './mapTiles';
 
 interface WindOverlayProps {
   map: L.Map | null;
@@ -14,6 +15,10 @@ interface WindOverlayProps {
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Paper chart base (SCRUM-203): SVG outline passes replace the CSS glow (SCRUM-208). */
   lightBase?: boolean;
+  /** Paper chart declutter (SCRUM-211): thin the grid at the chart's zoom and clear saved locations. */
+  declutter?: boolean;
+  /** Positions a grid barb must not cover; their own marker draws a labelled barb (SCRUM-211). */
+  keepOut?: ReadonlyArray<{ latitude: number; longitude: number }>;
   /** Units and direction display for the barb pop-up (SCRUM-126), the user's settings. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
@@ -37,6 +42,50 @@ export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
  * gradient. Real geometry instead of a blurred `drop-shadow` keeps the edge sharp at 40 px.
  */
 export const BARB_OUTLINES: WindBarbOutline[] = [{ color: '#161b22', width: 0.9 }];
+
+/** A grid barb this close to a saved location is dropped in its favour (SCRUM-211). */
+export const BARB_KEEP_OUT_RADIUS_PX = 30;
+const NO_KEEP_OUT: ReadonlyArray<{ latitude: number; longitude: number }> = [];
+
+/**
+ * Declutter the chart's grid (SCRUM-211). At the chart's native zoom the 80 px grid crowds the
+ * soundings, so every second point is dropped on a checkerboard, and any point within
+ * `BARB_KEEP_OUT_RADIUS_PX` of a saved location goes, because that marker draws its own labelled
+ * barb. Pure and pixel-based, so it is testable without a map; other bases pass no options and get
+ * the array back untouched.
+ */
+export function declutterGridPoints(
+  points: GridWindPoint[],
+  project: (point: { latitude: number; longitude: number }) => { x: number; y: number },
+  {
+    thin = false,
+    keepOut = NO_KEEP_OUT,
+  }: { thin?: boolean; keepOut?: ReadonlyArray<{ latitude: number; longitude: number }> } = {},
+): GridWindPoint[] {
+  if (!thin && keepOut.length === 0) return points;
+  // Row/column rather than array index, so a checkerboard stays a checkerboard whatever order the
+  // grid response arrives in.
+  const rows = new Map(
+    [...new Set(points.map((point) => point.latitude))]
+      .sort((a, b) => b - a)
+      .map((latitude, index) => [latitude, index]),
+  );
+  const cols = new Map(
+    [...new Set(points.map((point) => point.longitude))]
+      .sort((a, b) => a - b)
+      .map((longitude, index) => [longitude, index]),
+  );
+  const keepOutPixels = keepOut.map(project);
+  return points.filter((point) => {
+    if (thin && ((rows.get(point.latitude) ?? 0) + (cols.get(point.longitude) ?? 0)) % 2 !== 0) {
+      return false;
+    }
+    const { x, y } = project(point);
+    return keepOutPixels.every(
+      (corner) => Math.hypot(corner.x - x, corner.y - y) >= BARB_KEEP_OUT_RADIUS_PX,
+    );
+  });
+}
 // Only about 40 % of the 50-unit viewBox is ink (staff y 25 → 6, feathers to x 37), so the drawn
 // glyph is far smaller than the box: 40 px here is a ~10 × 15 px barb. 40 still leaves the grid
 // barbs apart at z12 (SCRUM-209).
@@ -138,6 +187,8 @@ export function WindOverlay({
   selectedPoint,
   onGridPointSelect,
   lightBase = false,
+  declutter = false,
+  keepOut = NO_KEEP_OUT,
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
@@ -152,7 +203,16 @@ export function WindOverlay({
   // Draw one barb marker per grid point; replaced whenever the points change.
   useEffect(() => {
     if (!map) return;
-    const entries = points.map((point) => {
+    const project = (point: { latitude: number; longitude: number }) => {
+      const pixel = map.latLngToContainerPoint([point.latitude, point.longitude]);
+      return { x: pixel.x, y: pixel.y };
+    };
+    // The chart is dense at its native resolution; deeper views spread out on their own (SCRUM-211).
+    const shown = declutterGridPoints(points, project, {
+      thin: declutter && map.getZoom() <= CHART_MIN_ZOOM,
+      keepOut,
+    });
+    const entries = shown.map((point) => {
       const marker = L.marker([point.latitude, point.longitude], {
         icon: buildGridBarbIcon(
           point,
@@ -171,7 +231,19 @@ export function WindOverlay({
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, lightBaseRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
+  }, [
+    map,
+    points,
+    selectedRef,
+    lightBaseRef,
+    onSelectRef,
+    unitSystem,
+    speedUnit,
+    dirDisplay,
+    timeLabel,
+    declutter,
+    keepOut,
+  ]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {

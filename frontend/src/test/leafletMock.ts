@@ -64,6 +64,7 @@ export interface MockMap {
   createPane: ReturnType<typeof vi.fn>;
   getPane: ReturnType<typeof vi.fn>;
   containerPointToLatLng: ReturnType<typeof vi.fn>;
+  latLngToContainerPoint: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   flyTo: ReturnType<typeof vi.fn>;
@@ -146,6 +147,10 @@ function makeMap(container?: HTMLElement): MockMap {
   map.containerPointToLatLng = vi.fn(([x, y]: [number, number]) => ({
     lat: map.bounds.north - (y / map.size.y) * (map.bounds.north - map.bounds.south),
     lng: map.bounds.west + (x / map.size.x) * (map.bounds.east - map.bounds.west),
+  }));
+  map.latLngToContainerPoint = vi.fn(([lat, lng]: [number, number]) => ({
+    x: ((lng - map.bounds.west) / (map.bounds.east - map.bounds.west)) * map.size.x,
+    y: ((map.bounds.north - lat) / (map.bounds.north - map.bounds.south)) * map.size.y,
   }));
   map.on = vi.fn((event: string, fn: Handler) => {
     (map.handlers[event] ??= []).push(fn);
