@@ -247,6 +247,32 @@ describe('captureMapCanvas (SCRUM-116)', () => {
     for (const entry of barbs) expect(texts).toContain(entry.caption);
   });
 
+  it('draws the barb row and the footer line larger (SCRUM-258)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+    const fonts: string[] = [];
+    let font = '';
+    Object.defineProperty(ctx, 'font', {
+      configurable: true,
+      get: () => font,
+      set: (value: string) => {
+        font = value;
+        fonts.push(value);
+      },
+    });
+
+    await captureMapCanvas(element, content, { domToCanvas, tileTimeoutMs: 0 });
+
+    // Barb title and six captions, plus the two header lines, at 10 CSS px; footer at 10.5 CSS
+    // px. The context is 2x, so the font strings carry the doubled sizes.
+    expect(fonts.filter((value) => value === 'normal 20px sans-serif')).toHaveLength(9);
+    expect(fonts).toContain('normal 21px sans-serif');
+
+    // The footer baseline sits inside the taller 34 px band.
+    const footerCall = ctx.fillText.mock.calls.find((call) => call[0] === content.footer)!;
+    expect(footerCall[2]).toBe(600 + (HEADER_PX + LEGEND_PX) * 2 + 21 * 2);
+  });
+
   it('keeps the barb and temperature rows when the gradient is off (SCRUM-165)', async () => {
     const element = document.createElement('div');
     const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
