@@ -9,7 +9,7 @@ import {
   WindSpeedUnit,
 } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
-import { WindOverlay } from './WindOverlay';
+import { BARB_OUTLINES, WindOverlay } from './WindOverlay';
 import { WIND_COLOR_OPACITY, WIND_COLOR_OPACITY_ON_CHART, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
@@ -85,13 +85,12 @@ const SELECTED_LOCATION_BARB_SIZE = 52;
 const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 
 /**
- * Saved-location marker: a labelled wind barb, larger and glowing when selected. `halo` adds the
- * barb halo, which the paper chart base turns into a two-tone glow (SCRUM-203).
+ * Saved-location marker: a labelled wind barb, larger and glowing when selected. It carries the same
+ * crisp outline as the grid barbs (SCRUM-218), so one look covers every base map.
  */
 export function buildLocationIcon(
   weather: WeatherForecastResponse | undefined,
   isSelected: boolean,
-  halo = false,
 ): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
@@ -101,12 +100,12 @@ export function buildLocationIcon(
     tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
     size,
     showLabel: true,
+    outlines: BARB_OUTLINES,
   });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
-  const haloClass = halo ? 'wind-barb-halo ' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
-    html: `<div class="${haloClass}relative cursor-pointer transition-transform duration-200 ${glow}">${svg}</div>`,
+    html: `<div class="relative cursor-pointer transition-transform duration-200 ${glow}">${svg}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -379,7 +378,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
     locations.forEach((loc) => {
       const weather = weatherMap[loc.id];
-      const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id, chartBase);
+      const icon = buildLocationIcon(weather, selectedLocation?.id === loc.id);
       const popup = buildLocationPopup(loc, weather, unitSystem, speedUnit, validTimeLabel);
       const existing = markers.get(loc.id);
       if (existing) {
@@ -488,7 +487,6 @@ export const MapView: React.FC<MapViewProps> = ({
           points={gridPoints}
           selectedPoint={selectedGridPoint}
           onGridPointSelect={onGridPointSelect}
-          halo={windColorOverlayVisible || chartBase}
           lightBase={chartBase}
           unitSystem={unitSystem}
           speedUnit={speedUnit}

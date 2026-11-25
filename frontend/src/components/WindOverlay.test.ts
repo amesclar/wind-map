@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BARB_OUTLINES,
   buildGridBarbIcon,
   buildGridPointPopup,
   generateGridBarbSvg,
@@ -77,22 +78,20 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).toContain(getTemperatureColor(85));
   });
 
-  it('adds the dark halo class only when asked (SCRUM-123)', () => {
-    const plain = buildGridBarbIcon(pt(15, 90, 85), false).options.html as string;
-    expect(plain).not.toContain('wind-barb-halo');
-
-    const haloed = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
-    expect(haloed).toContain('wind-barb-halo');
-    expect(haloed).toContain(generateGridBarbSvg(15, 90, 85, 40));
+  it('draws the crisp outline on every base, with no CSS halo left (SCRUM-218)', () => {
+    const html = buildGridBarbIcon(pt(15, 90, 85), false).options.html as string;
+    expect(html.match(/data-barb-outline="true"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('#161b22');
+    expect(html).not.toContain('wind-barb-halo');
+    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 40, BARB_OUTLINES));
   });
 
-  it('adds crisp outline passes on the light chart base and none on the dark ones (SCRUM-208)', () => {
-    const chart = buildGridBarbIcon(pt(15, 90, 85), false, true, true).options.html as string;
+  it('keeps the chart rim and inverts only the selected ring on the light base (SCRUM-208)', () => {
+    const chart = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
     expect(chart.match(/data-barb-outline="true"/g) ?? []).toHaveLength(1);
-    expect(chart).toContain('#161b22');
 
-    const darkBase = buildGridBarbIcon(pt(15, 90, 85), false, true, false).options.html as string;
-    expect(darkBase).not.toContain('data-barb-outline');
+    const darkBase = buildGridBarbIcon(pt(15, 90, 85), false, false).options.html as string;
+    expect(darkBase.match(/data-barb-outline="true"/g) ?? []).toHaveLength(1);
   });
 
   it('builds a larger selected icon with a white highlight ring and the same barb', () => {
@@ -102,7 +101,7 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(icon.options.iconAnchor).toEqual([24, 24]);
     expect(html).toContain('data-selected="true"');
     expect(html).toContain('box-shadow:0 0 0 2px #ffffff');
-    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 48));
+    expect(html).toContain(generateGridBarbSvg(15, 90, 85, 48, BARB_OUTLINES));
   });
 });
 

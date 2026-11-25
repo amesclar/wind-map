@@ -191,7 +191,7 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
     expect(api.fetchWindGrid).not.toHaveBeenCalled();
   });
 
-  it('gives the barbs a dark halo while the gradient is on', async () => {
+  it('keeps the crisp outline on the barbs while the gradient is on', async () => {
     vi.mocked(api.fetchWindGrid).mockResolvedValue([
       {
         latitude: 48,
@@ -205,7 +205,8 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
 
     await waitFor(() => expect(createdMarkers).toHaveLength(1));
     const html = (createdMarkers[0].icon as { html: string }).html;
-    expect(html).toContain('wind-barb-halo');
+    expect(html).toContain('data-barb-outline="true"');
+    expect(html).not.toContain('wind-barb-halo');
   });
 });
 
@@ -389,7 +390,7 @@ describe('MapView paper chart base (SCRUM-203)', () => {
 
     await waitFor(() => expect(createdMarkers).toHaveLength(1));
     const html = (createdMarkers[0].icon as { html: string }).html;
-    expect(html).toContain('wind-barb-halo');
+    expect(html).toContain('data-barb-outline="true"');
     // White would disappear on white water: the chart base draws the ring dark (SCRUM-203).
     expect(html).toContain('box-shadow:0 0 0 2px #161b22');
   });
