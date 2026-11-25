@@ -49,7 +49,9 @@ class WeatherForecastPoint(BaseModel):
     wind_gust_ms: float | None
     wind_direction_deg: float | None
     wind_direction_cardinal: str | None
-    humidity: float
+    # Null when the provider has no value for the hour: NDFD's humidity grid can gap, and 0 %
+    # would read as a real measurement (SCRUM-106). Nothing renders it today.
+    humidity: float | None = None
     weather_code: int
 
 

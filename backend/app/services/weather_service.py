@@ -1,9 +1,12 @@
-"""Forecast service (SCRUM-92): cache lookup → Open-Meteo fetch → parse → cache store.
+"""Forecast service (SCRUM-92): cache lookup → provider fetch → parse → cache store.
 
 Each step is its own function or class:
-- `fetch_forecast`         HTTP only (services/open_meteo.py)
-- `parse_forecast`         pure parsing (services/forecast_parser.py)
+- `fetch_forecast`         HTTP only (services/open_meteo.py, services/nws.py)
+- `parse_provider_forecast`  pure parsing (services/forecast_parser.py, services/nws_parser.py)
 - `SavedLocationCache` / `PointCache`  caching (services/forecast_cache.py)
+
+Open-Meteo is the provider for every model but NDFD, which is dispatched by model id (SCRUM-106).
+Both providers share this cache: a warm (location, model, timezone, hour) costs no upstream call.
 """
 
 import math
@@ -17,13 +20,15 @@ from backend.app.config import (
     DEFAULT_MODEL,
     DEFAULT_TIMEZONE,
     FORECAST_DAYS,
+    NWS_MODEL,
     OPEN_METEO_FORECAST_URL,
     model_horizon_days,
 )
 from backend.app.models import POINT_LOCATION_ID, LocationResponse, WeatherForecastResponse
-from backend.app.services import open_meteo
+from backend.app.services import nws, open_meteo
 from backend.app.services.forecast_cache import ForecastCache, PointCache, SavedLocationCache
 from backend.app.services.forecast_parser import FORECAST_VARIABLES, parse_forecast
+from backend.app.services.nws_parser import parse_nws_forecast
 from backend.app.services.time_window import hour_key
 
 
@@ -39,7 +44,14 @@ async def fetch_forecast(
     timezone: str,
     days: int = FORECAST_DAYS,
 ) -> dict[str, Any]:
-    """Raw Open-Meteo forecast (current + hourly). Raises httpx.HTTPError."""
+    """Raw provider forecast (current + hourly). Raises httpx.HTTPError.
+
+    NDFD returns one gridpoint document per point instead of a request with parameters; the
+    parser turns its periods into the same slices (SCRUM-106).
+    """
+    if model == NWS_MODEL:
+        return await nws.fetch_gridpoints(latitude, longitude)
+
     variables = ",".join(FORECAST_VARIABLES)
     params = {
         **open_meteo.forecast_params(model),
@@ -51,6 +63,18 @@ async def fetch_forecast(
         "forecast_days": days,
     }
     return await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params)
+
+
+def parse_provider_forecast(
+    raw: dict[str, Any],
+    model: str,
+    at: datetime | None = None,
+    timezone: str = DEFAULT_TIMEZONE,
+) -> Any:
+    """The parser for the provider that served `raw` (SCRUM-106)."""
+    if model == NWS_MODEL:
+        return parse_nws_forecast(raw, at=at, timezone=timezone)
+    return parse_forecast(raw, at=at, timezone=timezone)
 
 
 def forecast_days_for(at: datetime, model: str, now: datetime | None = None) -> int:
@@ -88,7 +112,7 @@ async def _get_forecast(
         FORECAST_DAYS if at is None else forecast_days_for(at, model),
     )
     try:
-        parsed = parse_forecast(raw, at=at, timezone=timezone)
+        parsed = parse_provider_forecast(raw, model, at=at, timezone=timezone)
     except ValueError as exc:  # response did not cover the requested hour
         raise httpx.HTTPError(str(exc)) from exc
     payload = {

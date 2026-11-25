@@ -83,6 +83,21 @@ OPEN_METEO_ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 # A current cell whose centre is above this elevation is land, not water (SCRUM-238).
 LAND_ELEVATION_THRESHOLD_M = 0.5
 
+# NOAA NWS NDFD (SCRUM-245 spike prototype, built for real in SCRUM-106): a second provider for
+# saved-location and ad-hoc point forecasts. It cannot serve the wind grid — one request per
+# point — so the grid, the gradient and the currents stay on Open-Meteo.
+NWS_BASE_URL = "https://api.weather.gov"
+NWS_MODEL = "nws_ndfd"
+NWS_TIMEOUT_SECONDS = 15.0
+# Same attempt budget as the Open-Meteo client (SCRUM-106): one retry pair covers a 503 blip.
+NWS_RETRIES = 2
+# NWS asks every client to identify itself and answers 403 to an empty User-Agent (measured
+# 2026-11-25), so one is always sent. Set NWS_USER_AGENT to an app name plus a contact address.
+NWS_USER_AGENT = os.getenv("NWS_USER_AGENT", "").strip() or "wind-map (NWS NDFD prototype)"
+# Models served by a provider other than Open-Meteo. The wind grid asks Open-Meteo for its default
+# instead of sending an id Open-Meteo does not know.
+PROVIDER_ONLY_MODELS = frozenset({NWS_MODEL})
+
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
 OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 400 points)
@@ -103,6 +118,7 @@ AVAILABLE_MODELS = [
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
     {"id": "gem_seamless", "name": "CMC GEM Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
+    {"id": NWS_MODEL, "name": "NOAA NWS NDFD"},
 ]
 MODEL_IDS = frozenset(m["id"] for m in AVAILABLE_MODELS)
 # Retired model ids are answered as their replacement for one release (SCRUM-226), so a cached
@@ -140,6 +156,10 @@ MODEL_METADATA: dict[str, dict[str, object]] = {
     "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
     # https://open-meteo.com/en/docs/dwd-api — ICON global, 6-hourly, 7.5 days.
     "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
+    # NDFD grids are re-issued hourly (measured `updateTime` 19:51 UTC at SEW, 19:15 UTC at KEY on
+    # 2026-11-25) rather than on fixed cycles, and reach 7.5 to 8 days; 7 days is safe for every
+    # office and covers the app's 48-hour window twice over (SCRUM-245).
+    "nws_ndfd": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
 }
 if set(MODEL_METADATA) != MODEL_IDS:
     raise ValueError("MODEL_METADATA must describe every entry in AVAILABLE_MODELS")

@@ -33,7 +33,8 @@ export interface WeatherForecastPoint {
   wind_gust_ms: number | null;
   wind_direction_deg: number | null;
   wind_direction_cardinal: string | null;
-  humidity: number;
+  /** null when the provider has no value for the hour (NDFD can gap); not rendered today. */
+  humidity: number | null;
   weather_code: number;
 }
 

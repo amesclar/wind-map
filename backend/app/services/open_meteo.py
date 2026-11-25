@@ -11,7 +11,12 @@ from typing import Any
 
 import httpx
 
-from backend.app.config import DEFAULT_MODEL, OPEN_METEO_RETRIES, OPEN_METEO_TIMEOUT_SECONDS
+from backend.app.config import (
+    DEFAULT_MODEL,
+    OPEN_METEO_RETRIES,
+    OPEN_METEO_TIMEOUT_SECONDS,
+    PROVIDER_ONLY_MODELS,
+)
 
 # Open-Meteo throttles with 429 and occasionally returns a transient gateway error. Retrying those
 # briefly (SCRUM-166) keeps a range export from turning a momentary limit into a failed hour.
@@ -84,9 +89,13 @@ def retry_delay(response: httpx.Response, attempt: int) -> float:
 
 def forecast_params(model: str) -> dict[str, Any]:
     """Parameters every forecast request shares: speeds in knots, plus `models` unless
-    Open-Meteo should choose (best_match)."""
+    Open-Meteo should choose (best_match).
+
+    A provider-only model (NDFD) has no Open-Meteo id, so the wind grid keeps asking for the
+    default rather than failing on a model Open-Meteo does not know (SCRUM-245 prototype).
+    """
     params: dict[str, Any] = {"wind_speed_unit": "kn"}
-    if model and model != DEFAULT_MODEL:
+    if model and model != DEFAULT_MODEL and model not in PROVIDER_ONLY_MODELS:
         params["models"] = model
     return params
 

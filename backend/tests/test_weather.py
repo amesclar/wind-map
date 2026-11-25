@@ -45,6 +45,19 @@ def test_build_weather_point():
     assert pt.wind_gust_mph == round(22.0 * 1.15078, 1)
 
 
+def test_build_weather_point_keeps_missing_humidity_missing():
+    """A provider without a humidity value reports null, not 0 % (SCRUM-106)."""
+    pt = build_weather_point(
+        time_str="2026-11-12T12:00",
+        temp_c=10.0,
+        humidity=None,
+        wind_knots=10.0,
+        wind_deg=180.0,
+        weather_code=0,
+    )
+    assert pt.humidity is None
+
+
 def test_weather_forecast_and_cache(client, open_meteo):
     loc_id = client.get("/api/locations").json()[0]["id"]
     open_meteo.respond(forecast_payload())
@@ -200,7 +213,7 @@ def test_location_weather_upstream_failure_is_502_without_internal_detail(client
     open_meteo.fail(upstream_error())
     resp = client.get(f"/api/weather?location_id={loc_id}")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -208,7 +221,7 @@ def test_point_weather_upstream_failure_is_502_without_internal_detail(client, o
     open_meteo.fail(upstream_error())
     resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch point weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch point weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -254,7 +267,10 @@ def test_unknown_model_is_rejected_without_calling_open_meteo(client, open_meteo
 
 def test_every_listed_model_is_accepted(client, open_meteo):
     open_meteo.respond(forecast_payload())
-    for model in [m["id"] for m in client.get("/api/weather/models").json()]:
+    # NDFD is served by its own provider, so it answers from recorded payloads in
+    # test_nws_prototype.py rather than from this Open-Meteo stub (SCRUM-245 prototype).
+    models = [m["id"] for m in client.get("/api/weather/models").json() if m["id"] != "nws_ndfd"]
+    for model in models:
         assert client.get(f"/api/weather/point?lat=48&lon=-122&model={model}").status_code == 200
 
 
