@@ -68,6 +68,7 @@ def test_weather_models_list(client):
     assert "ecmwf_ifs04" not in model_ids
     assert "ecmwf_aifs025_single" in model_ids
     assert "gfs_seamless" in model_ids
+    assert "gem_seamless" in model_ids
     assert "icon_seamless" in model_ids
     ecmwf = next(m for m in models if m["id"] == "ecmwf_ifs")
     assert ecmwf["name"] == "ECMWF IFS HRES 9 km"
@@ -76,6 +77,10 @@ def test_weather_models_list(client):
     assert aifs["name"] == "ECMWF AIFS (AI)"
     assert aifs["horizon_hours"] == 360
     assert aifs["update_hours"] == 6
+    gem = next(m for m in models if m["id"] == "gem_seamless")
+    assert gem["name"] == "CMC GEM Seamless"
+    assert gem["horizon_hours"] == 240
+    assert gem["update_hours"] == 6
 
 
 def test_aifs_model_is_accepted_and_forwarded(client, open_meteo):

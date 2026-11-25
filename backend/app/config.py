@@ -101,6 +101,7 @@ AVAILABLE_MODELS = [
     {"id": "ecmwf_ifs", "name": "ECMWF IFS HRES 9 km"},
     {"id": "ecmwf_aifs025_single", "name": "ECMWF AIFS (AI)"},
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
+    {"id": "gem_seamless", "name": "CMC GEM Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
 ]
 MODEL_IDS = frozenset(m["id"] for m in AVAILABLE_MODELS)
@@ -132,6 +133,9 @@ MODEL_METADATA: dict[str, dict[str, object]] = {
     # Open-Meteo interpolates to hourly, and no wind gusts at all.
     "ecmwf_aifs025_single": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
+    # GEM seamless (SCRUM-228) blends the 12-hourly global GEM with the 6-hourly regional RDPS and
+    # HRDPS runs. Open-Meteo caps this model's API at 10 days, not the 16 the static table claimed.
+    "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
     "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
 }
 if set(MODEL_METADATA) != MODEL_IDS:

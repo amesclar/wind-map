@@ -13,5 +13,5 @@
 | ECMWF IFS (HRES 9 km) | Global | Every 6 hours | 00, 06, 12, 18 UTC (Note: Open-Data 0.25° has a ~2 hr dissemination lag). | 15 days |
 | ECMWF AIFS (AI) | Global | Every 6 hours | 00, 06, 12, 18 UTC, 6-hourly time steps. | 15 days |
 | DWD ICON Global | Global | Every 6 hours | 11 km grid, 7.5-day horizon. | 7.5 days |
-| CMC GEM | Global / Canada | Every 6 hours | 00, 06, 12, 18 UTC (Regional 2.5 km & Global). | 16 days |
+| CMC GEM | Global / Canada | Every 6 hours | 00, 06, 12, 18 UTC (Regional 2.5 km & Global). | 10 days |
 | Open-Meteo Marine (Waves) | Global / Coastal | Every 6 hours | Wave height, period, and direction. | — |
