@@ -75,6 +75,18 @@ def test_missing_or_short_variable_series_stay_null():
     assert parsed.points[1].wind_speed_knots == 15.0  # other values unaffected
 
 
+def test_aifs_payload_without_gusts_keeps_the_gust_null():
+    """AIFS returns wind but no gusts (SCRUM-227): the gust is absence, not 0 kn."""
+    raw = forecast_payload(time="2026-11-12T12:15", wind_gusts_10m=None)
+    raw["hourly"]["wind_gusts_10m"] = [None] * len(raw["hourly"]["time"])
+
+    parsed = parse_forecast(raw)
+
+    assert parsed.current.wind_gust_knots is None
+    assert all(point.wind_gust_knots is None for point in parsed.points)
+    assert parsed.points[1].wind_speed_knots == 15.0  # the wind itself is still there
+
+
 def test_missing_current_wind_fields_are_not_zero():
     raw = forecast_payload(
         wind_speed_10m=None,
