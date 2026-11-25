@@ -116,13 +116,41 @@ export function useWindGrid(
       }
     };
 
+    // Leaflet auto-pans a marker pop-up that would overflow the viewport. That pan fires
+    // `moveend`, and refetching here would replace `points`, rebuild every marker and close
+    // the pop-up the pan was making room for (SCRUM-251). The pop-up's own pan is skipped; the
+    // next real pan or zoom refreshes as usual. A drag clears the flag too, in case an
+    // `autopanstart` never produces its `moveend`.
+    let autoPanning = false;
+    const onAutoPanStart = () => {
+      autoPanning = true;
+    };
+    const onDragStart = () => {
+      autoPanning = false;
+    };
+    const onMoveEnd = () => {
+      if (autoPanning) {
+        autoPanning = false;
+        return;
+      }
+      refresh();
+    };
+    const onZoomEnd = () => {
+      autoPanning = false;
+      refresh();
+    };
+
     refresh();
-    map.on('moveend', refresh);
-    map.on('zoomend', refresh);
+    map.on('autopanstart', onAutoPanStart);
+    map.on('dragstart', onDragStart);
+    map.on('moveend', onMoveEnd);
+    map.on('zoomend', onZoomEnd);
     return () => {
       disposed = true;
-      map.off('moveend', refresh);
-      map.off('zoomend', refresh);
+      map.off('autopanstart', onAutoPanStart);
+      map.off('dragstart', onDragStart);
+      map.off('moveend', onMoveEnd);
+      map.off('zoomend', onZoomEnd);
       controller?.abort();
     };
   }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted]);
