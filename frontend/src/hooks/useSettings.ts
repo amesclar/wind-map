@@ -12,6 +12,7 @@ const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
 const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
+const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
 
 /** Tile layer, CARTO API key and wind overlay visibility, persisted to localStorage. */
 export function useMapSettings() {
@@ -43,6 +44,11 @@ export function useMapSettings() {
   const [waterCurrentsVisible, setWaterCurrentsVisible] = useLocalStorageState(
     STORAGE_KEYS.waterCurrentsVisible,
     parseCurrents,
+  );
+  // Nautical seamark overlay (SCRUM-175): a community tile server, so off unless asked for.
+  const [seamarksVisible, setSeamarksVisible] = useLocalStorageState(
+    STORAGE_KEYS.seamarks,
+    parseSeamarks,
   );
 
   /** Saving a key switches to the CARTO layer; clearing it keeps the current layer. */
@@ -77,6 +83,8 @@ export function useMapSettings() {
     setWindColorOverlayVisible,
     waterCurrentsVisible,
     setWaterCurrentsVisible,
+    seamarksVisible,
+    setSeamarksVisible,
     applyServerConfig,
   };
 }

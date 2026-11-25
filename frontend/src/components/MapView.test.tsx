@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapView } from './MapView';
 import { makeLocation } from '../test/fixtures';
-import { createdMarkers, currentMap, markerAt, resetLeafletMock } from '../test/leafletMock';
+import leaflet, { createdMarkers, currentMap, markerAt, resetLeafletMock } from '../test/leafletMock';
 import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
@@ -78,6 +78,36 @@ describe('MapView shared wind grid (SCRUM-122)', () => {
 
     await new Promise((r) => setTimeout(r, 0));
     expect(api.fetchWindGrid).not.toHaveBeenCalled();
+  });
+});
+
+describe('MapView seamark overlay (SCRUM-175)', () => {
+  const seamarkCalls = () =>
+    leaflet.tileLayer.mock.calls.filter(
+      ([, options]) => (options as { pane?: string } | undefined)?.pane === 'seamarkPane',
+    );
+
+  it('adds the OpenSeaMap layer into its own pane while the overlay is on, and removes it', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    const { rerender } = render(<MapView {...baseProps} locations={[]} seamarksVisible />);
+
+    await waitFor(() => expect(seamarkCalls()).toHaveLength(1));
+    expect(currentMap().createPane).toHaveBeenCalledWith('seamarkPane');
+    expect(seamarkCalls()[0][0]).toContain('tiles.openseamap.org/seamark');
+    const layer = leaflet.tileLayer.mock.results[
+      leaflet.tileLayer.mock.calls.indexOf(seamarkCalls()[0])
+    ].value as { remove: ReturnType<typeof vi.fn> };
+
+    rerender(<MapView {...baseProps} locations={[]} seamarksVisible={false} />);
+    await waitFor(() => expect(layer.remove).toHaveBeenCalled());
+  });
+
+  it('adds no seamark layer when the overlay is off', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    render(<MapView {...baseProps} locations={[]} />);
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seamarkCalls()).toHaveLength(0);
   });
 });
 

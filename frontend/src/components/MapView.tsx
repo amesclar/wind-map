@@ -20,7 +20,7 @@ import { escapeHtml } from '../utils/html';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
-import { tileLayerConfig } from './mapTiles';
+import { seamarkLayerConfig, SEAMARK_PANE, tileLayerConfig } from './mapTiles';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 
 interface MapViewProps {
@@ -34,6 +34,8 @@ interface MapViewProps {
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
+  /** Nautical seamark overlay (SCRUM-175); off unless turned on. */
+  seamarksVisible?: boolean;
   /** Ocean-current chevrons (SCRUM-99); off unless turned on. */
   waterCurrentsVisible?: boolean;
   selectedGridPoint: SelectedGridPoint | null;
@@ -127,6 +129,7 @@ export const MapView: React.FC<MapViewProps> = ({
   windOverlayVisible,
   windColorOverlayVisible,
   waterCurrentsVisible = false,
+  seamarksVisible = false,
   selectedGridPoint,
   onGridPointSelect,
   unitSystem = 'imperial',
@@ -204,6 +207,26 @@ export const MapView: React.FC<MapViewProps> = ({
       if (tileLayerRef.current === layer) tileLayerRef.current = null;
     };
   }, [tileLayerType, cartoApiKey]);
+
+  // Nautical seamark overlay (SCRUM-175): its own pane, so the base map, the seamarks and the
+  // wind layers stack in a fixed order however they are toggled.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !seamarksVisible) return;
+    if (!map.getPane(SEAMARK_PANE)) {
+      const pane = map.createPane(SEAMARK_PANE);
+      pane.style.zIndex = '210';
+      // Tiles only paint here: clicks must still reach the map and the barbs.
+      pane.style.pointerEvents = 'none';
+    }
+    const { url, options } = seamarkLayerConfig();
+    const layer = L.tileLayer(url, options).addTo(map);
+    return () => {
+      layer.remove();
+    };
+    // The map is created by the effect above, before this one runs, so the ref is current; adding
+    // the map instance as a dependency would add the layer twice on the first render.
+  }, [seamarksVisible]);
 
   // Saved-location markers, updated in place by location id (SCRUM-92): only added or
   // removed locations create or remove markers; the rest get a new icon and popup.

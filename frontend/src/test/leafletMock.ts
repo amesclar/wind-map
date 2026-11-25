@@ -42,6 +42,7 @@ export interface MockMap {
   getSize: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
   createPane: ReturnType<typeof vi.fn>;
+  getPane: ReturnType<typeof vi.fn>;
   containerPointToLatLng: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
@@ -109,6 +110,7 @@ function makeMap(container?: HTMLElement): MockMap {
   // Panes are detached divs: jsdom has no layout, and the gradient layer only needs a
   // parent it can remove on unmount (SCRUM-123).
   map.createPane = vi.fn(() => document.createElement('div'));
+  map.getPane = vi.fn(() => null);
   map.containerPointToLatLng = vi.fn(([x, y]: [number, number]) => ({
     lat: map.bounds.north - (y / map.size.y) * (map.bounds.north - map.bounds.south),
     lng: map.bounds.west + (x / map.size.x) * (map.bounds.east - map.bounds.west),
@@ -127,13 +129,19 @@ function makeMap(container?: HTMLElement): MockMap {
   return map;
 }
 
-const layer = () => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn() });
+// URL and options are kept so tests can check which layer a call asked for (SCRUM-175).
+const layer = (url?: string, options?: Record<string, unknown>) => ({
+  url,
+  options,
+  addTo: vi.fn().mockReturnThis(),
+  remove: vi.fn(),
+});
 
 const leaflet = {
   map: vi.fn((container?: HTMLElement) => makeMap(container)),
   marker: vi.fn((latlng: [number, number], options?: Record<string, unknown>) => makeMarker(latlng, options)),
   divIcon: vi.fn((options: Record<string, unknown>) => ({ ...options })),
-  tileLayer: vi.fn(layer),
+  tileLayer: vi.fn((url?: string, options?: Record<string, unknown>) => layer(url, options)),
   control: { zoom: vi.fn(() => ({ addTo: vi.fn() })) },
 };
 
