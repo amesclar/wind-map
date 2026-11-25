@@ -42,9 +42,16 @@ async def _get_json(url: str) -> Any:
         while True:
             response = await client.get(url)
             if response.status_code == 404:
-                raise NwsCoverageError(f"NWS has no grid for {url}")
+                # No coordinates in the message: they come from the request, and CodeQL treats
+                # request parameters as private data wherever they are written out.
+                raise NwsCoverageError("NWS has no grid for this point")
             if response.status_code in RETRYABLE_STATUS and attempt < NWS_RETRIES:
-                logger.warning("NWS answered %s for %s; retrying", response.status_code, url)
+                logger.warning(
+                    "NWS answered %s; retrying (attempt %d of %d)",
+                    response.status_code,
+                    attempt + 1,
+                    NWS_RETRIES,
+                )
                 await asyncio.sleep(retry_delay(response, attempt))
                 attempt += 1
                 continue
