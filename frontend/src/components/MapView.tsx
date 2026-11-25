@@ -18,6 +18,7 @@ import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
 import { buildTideBlockHtml, loadPointTide } from '../utils/tideBlock';
+import { POPUP_OPTIONS, placePopupInView } from '../utils/popupPlacement';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
@@ -283,7 +284,12 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!mapInstance) return;
     let cancelled = false;
     const onPopupOpen = (event: L.PopupEvent) => {
-      const slot = event.popup.getElement()?.querySelector<HTMLElement>('[data-tide-slot]');
+      const element = event.popup.getElement();
+      // Keep the whole card inside the panel even when the marker sits at an edge (SCRUM-252).
+      placePopupInView(mapInstance, element);
+      // Leaflet animates its own auto-pan after this event; settle the card once it stops.
+      mapInstance.once('moveend', () => placePopupInView(mapInstance, element));
+      const slot = element?.querySelector<HTMLElement>('[data-tide-slot]');
       if (!slot) return;
       const lat = Number(slot.dataset.tideLat);
       const lon = Number(slot.dataset.tideLon);
@@ -292,6 +298,8 @@ export const MapView: React.FC<MapViewProps> = ({
         .then((tide) => {
           if (!cancelled) {
             slot.innerHTML = buildTideBlockHtml(tide, unitSystem, validTime === null, validTimeLabel);
+            // The tide block can make the card taller than the space the pan left it.
+            placePopupInView(mapInstance, element);
           }
         })
         .catch(() => {
@@ -532,7 +540,7 @@ export const MapView: React.FC<MapViewProps> = ({
         location: loc,
         marker: L.marker([loc.latitude, loc.longitude], { icon }).addTo(map),
       };
-      entry.marker.bindPopup(popup);
+      entry.marker.bindPopup(popup, POPUP_OPTIONS);
       // Reads the entry and handler at click time, so neither goes stale.
       entry.marker.on('click', () => onSelectLocationRef.current(entry.location));
       markers.set(loc.id, entry);
