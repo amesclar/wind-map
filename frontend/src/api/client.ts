@@ -1,6 +1,7 @@
 import {
   AppConfig,
   CurrentGridResponse,
+  ModelAvailability,
   FeedbackPayload,
   FeedbackResult,
   GeocodeResult,
@@ -116,6 +117,11 @@ export function fetchPointTide(
 
 export function fetchModels(): Promise<WeatherModelInfo[]> {
   return request('/weather/models', 'Failed to load weather models');
+}
+
+/** Publication times of the model's newest run (SCRUM-256); null fields when it has none. */
+export function fetchModelAvailability(model: string): Promise<ModelAvailability> {
+  return request(`/weather/models/${encodeURIComponent(model)}/availability`, 'Failed to load model availability');
 }
 
 export function fetchWeather(
