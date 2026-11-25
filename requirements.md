@@ -203,16 +203,16 @@ Litestream keeps SQLite as the only store and continuously replicates `/app/data
 # cloud infrastructure (SCRUM-135)
 stage 2 created the Google Cloud resources the deployment needs in project `wind-app-515017` (region `us-west1`), reproducibly from `scripts/gcp-provision.sh`
 + The Litestream replica is the private bucket `gs://wind-map-litestream-wind-app-515017`: uniform bucket-level access, public access prevention enforced, and a lifecycle rule that aborts unfinished uploads after 7 days.
-+ Secret Manager holds `APP_PASSWORD` (the shared web password, generated once and never printed by the script) and, only when a value is supplied, `CARTO_API_KEY`.
++ Secret Manager holds `APP_PASSWORD` (the shared web password, generated once and never printed by the script) and, only when a value is supplied, `CARTO_API_KEY` and `JIRA_API_TOKEN`.
 + The runtime identity is `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with `roles/storage.objectAdmin` on that bucket and `roles/secretmanager.secretAccessor` on the secrets; no service account key is created.
 + The script is idempotent: it leaves existing resources and the stored password alone, and verifies the service account by impersonation (write, read and delete a probe object, then read `APP_PASSWORD`). For that check only, it grants the operator's account `roles/iam.serviceAccountTokenCreator` on the runner, which the deployed container does not use.
-+ Cloud Run receives `--service-account=wind-map-runner@...`, `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017` and `APP_PASSWORD` from Secret Manager (SCRUM-136).
++ Cloud Run receives `--service-account=wind-map-runner@...`, `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `JIRA_BASE_URL` and `JIRA_EMAIL`, plus `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN` from Secret Manager (SCRUM-136, SCRUM-190).
 
 # deployment (SCRUM-136)
 the app runs publicly on Google Cloud Run (project `wind-app-515017`, region `us-west1`, service `wind-map`) as one instance behind the shared password
 + The image is built for `linux/amd64` by Cloud Build (`cloudbuild.yaml`; local Docker is arm64) and pushed to `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map`, tagged with `VERSION-<hash>` and `latest`. The service is live at https://wind-map-qhtz2eay6a-uw.a.run.app.
 + Cloud Run serves port 5005 with 512 MiB, `--max-instances=1`, `--min-instances=0`, `--no-cpu-throttling` and `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM.
-+ The service runs as the `wind-map-runner` service account with `LITESTREAM_BUCKET` and `APP_PASSWORD` from Secret Manager; `CARTO_API_KEY` is added the same way when a key exists, and the map otherwise uses the OpenStreetMap tiles.
++ The service runs as the `wind-map-runner` service account with `LITESTREAM_BUCKET` and all three secrets from Secret Manager; the map falls back to the OpenStreetMap tiles when no `CARTO_API_KEY` exists, and the feedback button stays hidden unless the Jira trio is complete.
 + On a fresh instance the entrypoint restores the database from GCS; when no replica exists yet it creates the schema before Litestream starts, so the first deployment replicates from a valid database instead of waiting for one.
 + The single-instance cap and always-allocated CPU keep Litestream the only writer; replacing the instance with a new revision therefore restores the saved locations from the replica, which is the persistence check.
 + Rollback is a traffic switch to the previous revision (`gcloud run services update-traffic --to-revisions=...`) or a redeploy of the previous image tag; `--to-latest` returns to the newest revision.
@@ -223,6 +223,7 @@ merging into `develop` deploys the app, so a normal change needs no manual Cloud
 + Authentication is keyless: GitHub's OIDC token is exchanged through the Workload Identity pool `github`, whose provider accepts only repository `amesclar/wind-map`; no service account key is stored in GitHub or the repository.
 + The deploy identity is `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com`, with `roles/artifactregistry.writer` on the `wind-map` repository, `roles/run.admin` on the project and `roles/iam.serviceAccountUser` on `wind-map-runner`; it cannot read `APP_PASSWORD` or write the replica bucket, so the runtime identity stays separate.
 + It runs on every push to `develop`, can be started on demand (`workflow_dispatch`), and runs one deployment at a time.
++ The deploy step names every runtime secret in one `--set-secrets` flag (SCRUM-190): `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN`, plus `JIRA_BASE_URL` and `JIRA_EMAIL` in `--set-env-vars`. Naming only some of them detached the rest on every merge, which is how the CARTO key and the Jira token kept disappearing. A referenced secret that does not exist fails the deploy, so `scripts/gcp-provision.sh` runs first.
 + `cloudbuild.yaml` and the manual commands remain documented as the emergency fallback.
 
 # versioning (SCRUM-91)

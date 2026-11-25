@@ -16,6 +16,7 @@ SERVICE_ACCOUNT="${RUN_SERVICE_ACCOUNT:-wind-map-runner@${PROJECT}.iam.gservicea
 SERVICE_ACCOUNT_ID="${SERVICE_ACCOUNT%%@*}"
 PASSWORD_SECRET="APP_PASSWORD"
 CARTO_SECRET="CARTO_API_KEY"
+JIRA_SECRET="JIRA_API_TOKEN"
 
 if ! command -v gcloud >/dev/null 2>&1; then
   echo "gcp-provision: gcloud is not installed" >&2
@@ -81,6 +82,23 @@ else
   echo "    skipped: no CARTO_API_KEY supplied, the app keeps using the OpenStreetMap tiles"
 fi
 
+echo "==> Secret $JIRA_SECRET (optional)"
+if [ -n "${JIRA_API_TOKEN:-}" ]; then
+  if gcloud secrets describe "$JIRA_SECRET" --project="$PROJECT" >/dev/null 2>&1; then
+    printf '%s' "$JIRA_API_TOKEN" | gcloud secrets versions add "$JIRA_SECRET" \
+      --project="$PROJECT" --data-file=- --quiet >/dev/null
+    echo "    exists; added the supplied value as a new version"
+  else
+    printf '%s' "$JIRA_API_TOKEN" | gcloud secrets create "$JIRA_SECRET" \
+      --project="$PROJECT" --replication-policy="automatic" --data-file=- --quiet >/dev/null
+    echo "    created"
+  fi
+elif gcloud secrets describe "$JIRA_SECRET" --project="$PROJECT" >/dev/null 2>&1; then
+  echo "    exists; unchanged (no JIRA_API_TOKEN supplied)"
+else
+  echo "    skipped: no JIRA_API_TOKEN supplied, in-app feedback stays off"
+fi
+
 echo "==> Service account $SERVICE_ACCOUNT"
 if gcloud iam service-accounts describe "$SERVICE_ACCOUNT" --project="$PROJECT" >/dev/null 2>&1; then
   echo "    exists"
@@ -94,7 +112,7 @@ echo "==> IAM"
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --project="$PROJECT" \
   --member="serviceAccount:$SERVICE_ACCOUNT" --role="roles/storage.objectAdmin" --quiet >/dev/null
 echo "    roles/storage.objectAdmin on gs://$BUCKET"
-for secret in "$PASSWORD_SECRET" "$CARTO_SECRET"; do
+for secret in "$PASSWORD_SECRET" "$CARTO_SECRET" "$JIRA_SECRET"; do
   if gcloud secrets describe "$secret" --project="$PROJECT" >/dev/null 2>&1; then
     gcloud secrets add-iam-policy-binding "$secret" --project="$PROJECT" \
       --member="serviceAccount:$SERVICE_ACCOUNT" \
@@ -159,7 +177,8 @@ gcloud secrets versions access latest --secret="$PASSWORD_SECRET" --project="$PR
 echo "    secrets: read $PASSWORD_SECRET"
 
 echo
-echo "Cloud Run (SCRUM-136) needs:"
+echo "Cloud Run (SCRUM-136, SCRUM-190) needs:"
 echo "  --service-account=$SERVICE_ACCOUNT"
 echo "  --set-env-vars=LITESTREAM_BUCKET=$BUCKET"
-echo "  --set-secrets=APP_PASSWORD=${PASSWORD_SECRET}:latest"
+echo "  --set-secrets=APP_PASSWORD=${PASSWORD_SECRET}:latest,CARTO_API_KEY=${CARTO_SECRET}:latest,JIRA_API_TOKEN=${JIRA_SECRET}:latest"
+echo "  (in-app feedback also needs JIRA_BASE_URL and JIRA_EMAIL; the workflow sets all of it)"
