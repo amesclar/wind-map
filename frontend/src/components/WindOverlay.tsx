@@ -39,8 +39,11 @@ export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
  * a two-rim halo look washed out. Real geometry instead of a blurred CSS glow keeps the edge sharp.
  */
 export const CHART_BARB_OUTLINES: WindBarbOutline[] = [{ color: '#161b22', width: 0.9 }];
-const BARB_SIZE = 32;
-const SELECTED_BARB_SIZE = 40;
+// Only about 40 % of the 50-unit viewBox is ink (staff y 25 → 6, feathers to x 37), so the drawn
+// glyph is far smaller than the box: 40 px here is a ~10 × 15 px barb. 40 still leaves the grid
+// barbs apart at z12 (SCRUM-209).
+const BARB_SIZE = 40;
+const SELECTED_BARB_SIZE = 48;
 
 /**
  * SVG for a grid barb — the same drawing and temperature colors the drawer uses.
