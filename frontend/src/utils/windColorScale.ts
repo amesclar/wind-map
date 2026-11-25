@@ -143,9 +143,10 @@ export interface WindGrid {
 
 const uniqueSorted = (values: number[]): number[] => [...new Set(values)].sort((a, b) => a - b);
 
-/** Build the regular grid from API points; null unless it is at least 2 by 2. */
+/** Build the regular grid from API points; null unless it is at least 2 by 2. A missing speed
+ * (SCRUM-225) leaves its cell null, so interpolation never paints across the gap. */
 export function buildWindGrid(
-  points: ReadonlyArray<{ latitude: number; longitude: number; wind_speed_knots: number }>,
+  points: ReadonlyArray<{ latitude: number; longitude: number; wind_speed_knots: number | null }>,
 ): WindGrid | null {
   if (points.length < 4) return null;
   const lats = uniqueSorted(points.map((p) => p.latitude));

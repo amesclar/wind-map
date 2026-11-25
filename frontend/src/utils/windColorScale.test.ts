@@ -89,7 +89,7 @@ describe('buildWindColorScale (SCRUM-165)', () => {
   });
 });
 
-const gridPoint = (lat: number, lon: number, wind_speed_knots: number) => ({
+const gridPoint = (lat: number, lon: number, wind_speed_knots: number | null) => ({
   latitude: lat,
   longitude: lon,
   wind_speed_knots,
@@ -127,10 +127,10 @@ describe('interpolateWindSpeed (SCRUM-123)', () => {
     expect(interpolateWindSpeed(null, 48, -122)).toBeNull();
   });
 
-  it('returns nothing when a surrounding point has no value', () => {
+  it('returns nothing when a surrounding point has no value (SCRUM-225)', () => {
     const sparse = buildWindGrid([
       gridPoint(47, -123, 10),
-      gridPoint(47, -121, Number.NaN),
+      gridPoint(47, -121, null),
       gridPoint(49, -123, 30),
       gridPoint(49, -121, 40),
     ]);

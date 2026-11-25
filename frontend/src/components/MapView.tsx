@@ -9,7 +9,7 @@ import {
   WindSpeedUnit,
 } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
-import { BARB_OUTLINES, WindOverlay } from './WindOverlay';
+import { BARB_OUTLINES, hasWindData, WindOverlay } from './WindOverlay';
 import { windColorOpacity, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
@@ -51,6 +51,8 @@ interface MapViewProps {
   tileLayerType: MapTileLayer;
   cartoApiKey: string;
   selectedModel: string;
+  /** Display name of the selected model, for notices (SCRUM-225). */
+  modelName?: string;
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
@@ -93,6 +95,12 @@ const SELECTED_LOCATION_BARB_SIZE = 52;
 // Drawn until a location's forecast has loaded.
 const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 
+/** Marker for a location the model has no wind for (SCRUM-225): a neutral no-data glyph,
+ * never a calm barb that claims the wind is 0 kn. */
+function noWindBarbSvg(size: number): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 50 50" role="img" aria-label="No wind data" focusable="false"><title>No wind data</title><circle cx="25" cy="25" r="9" fill="none" stroke="#9ca3af" stroke-width="2.5"/><line x1="18.6" y1="18.6" x2="31.4" y2="31.4" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+}
+
 /**
  * Saved-location marker: a labelled wind barb, larger and glowing when selected. It carries the same
  * crisp outline as the grid barbs (SCRUM-218), so one look covers every base map.
@@ -103,14 +111,19 @@ export function buildLocationIcon(
 ): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
-  const svg = generateWindBarbSvg({
-    speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
-    directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
-    tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
-    size,
-    showLabel: true,
-    outlines: BARB_OUTLINES,
-  });
+  const noData =
+    current !== undefined &&
+    (typeof current.wind_speed_knots !== 'number' || typeof current.wind_direction_deg !== 'number');
+  const svg = noData
+    ? noWindBarbSvg(size)
+    : generateWindBarbSvg({
+        speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
+        directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
+        tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
+        size,
+        showLabel: true,
+        outlines: BARB_OUTLINES,
+      });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
@@ -159,6 +172,7 @@ export const MapView: React.FC<MapViewProps> = ({
   tileLayerType,
   cartoApiKey,
   selectedModel,
+  modelName,
   windOverlayVisible,
   windColorOverlayVisible,
   windColorHighContrast = false,
@@ -532,6 +546,13 @@ export const MapView: React.FC<MapViewProps> = ({
     if (containerRef) containerRef.current = node;
   };
 
+  // Nothing drawable in the whole view (SCRUM-225): say so instead of showing an empty
+  // "calm" map. Only when a wind layer is on, because otherwise absence is expected.
+  const gridHasNoData =
+    (windOverlayVisible || windColorOverlayVisible) &&
+    gridPoints.length > 0 &&
+    gridPoints.every((pt) => !hasWindData(pt));
+
   return (
     <div className={`w-full h-full relative isolate${chartBase ? ' chart-base' : ''}`}>
       <div
@@ -539,6 +560,15 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
+      {gridHasNoData && (
+        <div
+          data-testid="no-wind-data-notice"
+          role="note"
+          className="absolute left-1/2 top-20 z-[750] -translate-x-1/2 rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
+        >
+          No data from {modelName ?? selectedModel} for this area
+        </div>
+      )}
       {chartBase && (chartOutsideCoverage || chartTilesFailed || chartStraddlesEdge) && (
         <div className="absolute right-3 top-24 z-[750] flex max-w-[260px] flex-col items-end gap-2">
           {chartTilesFailed && (

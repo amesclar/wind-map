@@ -207,6 +207,7 @@ export const App: React.FC = () => {
             tileLayerType={mapSettings.tileLayer}
             cartoApiKey={mapSettings.cartoApiKey}
             selectedModel={selectedModel}
+            modelName={selectedModelInfo?.name ?? selectedModel}
             windOverlayVisible={mapSettings.windOverlayVisible}
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
             windColorHighContrast={mapSettings.windColorHighContrast}

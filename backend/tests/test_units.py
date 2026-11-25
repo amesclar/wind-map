@@ -12,14 +12,15 @@ def test_as_float_treats_none_as_default():
     assert as_float(3) == 3.0
 
 
-@pytest.mark.parametrize("c, f", [(0, 32.0), (100, 212.0), (12.3, 54.1), (-40, -40.0), (None, 32.0)])
+@pytest.mark.parametrize("c, f", [(0, 32.0), (100, 212.0), (12.3, 54.1), (-40, -40.0), (None, None)])
 def test_c_to_f(c, f):
     assert c_to_f(c) == f
 
 
 def test_knots_to_units():
     assert knots_to_units(10) == {"knots": 10.0, "kmh": 18.5, "mph": 11.5, "ms": 5.1}
-    assert knots_to_units(None) == {"knots": 0.0, "kmh": 0.0, "mph": 0.0, "ms": 0.0}
+    # A missing speed stays missing in every unit (SCRUM-225): 0 would claim calm.
+    assert knots_to_units(None) == {"knots": None, "kmh": None, "mph": None, "ms": None}
 
 
 @pytest.mark.parametrize(
