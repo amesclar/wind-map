@@ -21,11 +21,21 @@ decisions it inherits (NONNA under the chart, seamark independence).
 | Offshore 200 nm z8 | same | 200, 13.5 KB, 94 % white water |
 | `TRANSPARENT=true` vs `false` | Oak Harbor z12 | **byte-identical** — the service ignores the flag |
 | `LAYERS=1..12` / `LAYERS=2` / `LAYERS=0` | Oak Harbor z12 | 15.9 KB / 9.5 KB / 1.4 KB |
+| NOAA ENC Online, same points | `LAYERS=0,1,2,3,6` | also **0 %** transparent, `TRANSPARENT` byte-identical |
+| CHS NONNA (B.C. candidate) | `nonna:NONNA 10` | 23-81 % transparent — the only service here that can overlay |
 
 Palette: land paper `#f4e8c1`, water `#ffffff`, shallow water `#afcde1`, grey `#616866`,
 magenta `#db4996`. Every tile is fully opaque (alpha 255 everywhere), `access-control-allow-origin`
 echoes the request origin, `cache-control: public, must-revalidate, max-age=0`, about 0.5-0.6 s per
 tile. The WMS `LAYERS` names are numbers; 0 is the service's own display-information layer.
+
+Layer set and contrast evidence added by SCRUM-200 (Spike 5, 2026-11-25): the recommended layer
+set is `0,1,2,3,6`, because layer 8 (data-quality polygons, 28.1 KB of a 112 KB tile) is the largest
+unwanted contributor and layers 4, 5, 7 and 9-12 were blank at these views. Rendered at 0.7 opacity
+over a dark base the chart measures mean luma 0.69 and 1 % light pixels — neither base map nor
+chart — while at full strength it is 0.81 / 91 %, and 0.88 / 94 % with the gradient off. So the mode
+must be a base map at full strength, and the wind gradient, not the barbs, is the element that
+buries it.
 
 ## Requirements
 
@@ -44,9 +54,9 @@ behaviour.
 ### 2. Tile service and mounting
 
 2.1 WHEN `tileLayerConfig('paper_chart')` is called THEN it shall return a WMS 1.1.1 request to the
-NOAA Chart Display service with `LAYERS=1,2,3,4,5,6,7,8,9,10,11,12` (layer 0, the display-information
-layer, is excluded), `format=image/png`, `SRS=EPSG:3857`, `crossOrigin: true`, `maxZoom: 19` and the
-NOAA credit.
+NOAA Chart Display service with `LAYERS=0,1,2,3,6` (chart information, features, soundings,
+obstructions and aids to navigation, without the data-quality polygons of layer 8), `format=image/png`,
+`SRS=EPSG:3857`, `crossOrigin: true`, `maxZoom: 19` and the NOAA credit.
 2.2 THEN the config shall declare itself a WMS config, so `MapView` mounts it with
 `L.tileLayer.wms`, while the three existing values keep using `L.tileLayer`.
 2.3 THEN the chart layer shall never carry the `.osm-dark-tiles` class, and that filter shall never
@@ -91,7 +101,9 @@ disappears on white water.
 tier stroke; tier colours, opacities and widths shall not change, so the chevron key stays in sync.
 5.4 WHEN the chart base is mounted THEN the wind colour gradient shall draw at a lower opacity than
 on the dark bases, so the chart's own symbology stays readable; the export captures the same
-canvas and therefore the same value.
+canvas and therefore the same value. Measured (SCRUM-200): the gradient is the element that buries
+the chart, not the barbs — with it off the chart at full strength is the most legible state in the
+review (mean luma 0.88, 94 % light pixels), and at 0.55 it bleaches the paper's own symbols.
 5.5 THEN the legends, pop-ups, Leaflet zoom control and attribution shall keep their current dark
 styling; no light theme shall be introduced.
 5.6 THEN saved-location markers and their pop-ups shall stay legible over the chart, using the same

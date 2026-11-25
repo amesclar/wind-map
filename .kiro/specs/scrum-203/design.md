@@ -35,7 +35,7 @@ New constants:
 ```ts
 export const NOAA_CHART_URL =
   'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer';
-export const NOAA_CHART_LAYERS = '1,2,3,4,5,6,7,8,9,10,11,12';
+export const NOAA_CHART_LAYERS = '0,1,2,3,6';
 export const NOAA_ATTRIBUTION = '&copy; <a href="https://nauticalcharts.noaa.gov/">NOAA Office of Coast Survey</a>';
 export const NOAA_ATTRIBUTION_TEXT = '© NOAA Office of Coast Survey';
 export const NOAA_NOTICE = 'Not for navigation';
@@ -66,10 +66,12 @@ export const CHART_TILE_CLASS = 'noaa-chart-tiles';
 `attributionText` gains one branch: `paper_chart` → `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`.
 The existing three strings are untouched.
 
-Why layer 0 is excluded: it is the service's own display-information layer (1.4 KB alone over Oak
-Harbor), which would repeat chart-legend text in every tile. Layers 1-12 are the chart itself.
-`TRANSPARENT` is not sent as a control: measured byte-identical output for `true` and `false`, so
-the comment records that the tiles are opaque rather than implying a flag works.
+Why this set: SCRUM-202 measured each layer alone at Oak Harbor z12. Layer 8 (data quality) is
+28.1 KB of a 112 KB tile and is not wanted, layers 4, 5, 7 and 9-12 were blank at the control views,
+and 0/1/2/3/6 carry the chart information, features, soundings, obstructions and aids to navigation.
+`TRANSPARENT` is not sent as a control: measured byte-identical output for `true` and `false` — and
+0 % transparent pixels — so the comment records that the tiles are opaque rather than implying a
+flag works.
 
 ### Mount (`frontend/src/components/MapView.tsx`)
 
@@ -147,7 +149,9 @@ the exported wash matches the screen — the property SCRUM-165 established for 
 
 0.35 rather than 0.55: at 0.55 the wash covered the chart's magenta and shallow-water blues, which
 is the whole point of the mode; at 0.35 the speed field still reads as a field while the chart's
-own symbols survive.
+own symbols survive. SCRUM-200's rendered comparison backs this: with the gradient off the chart at
+full strength is the cleanest state in the review, and every gradient-on state bleaches the paper.
+0.35 is the compromise that keeps the user's toggle working instead of overriding it.
 
 ### Settings (`frontend/src/components/MapSettingsModal.tsx`)
 
@@ -203,6 +207,15 @@ frame is drawn outside the map area and a light frame would be a second, unrelat
   independent, which is the current behaviour.
 - **WMS tile size.** 256 px tiles at z18 over dense water are large (61 KB at z14 San Francisco);
   no cache-busting, no proxy, so no change to the backend.
+
+## Inherited decisions (SCRUM-200, 2026-11-25)
+
+| Decision | Outcome | Basis |
+| :--- | :--- | :--- |
+| Overlay or base map | Base map | Both NOAA services are 0 % transparent and ignore `TRANSPARENT`; at 0.7 the frame is neither (0.69 luma, 1 % light) |
+| CHS NONNA under the chart | No | NONNA is transparent but is a B.C. z8-z12 overview; the chart is opaque and has no B.C. coverage, so there is nothing to put it under. It gets its own B.C. overlay ticket |
+| Seamark toggle while a chart is on | Stays independent | It is the only aid source in B.C.; the chart's own layer 6 duplicates it in U.S. water, which is a wording note, not a suppression |
+| Vector (Seamap) | Rejected | +309 kB gzip in a 382 kB app, maxzoom 14, licence unresolved |
 
 ## Out of scope
 
