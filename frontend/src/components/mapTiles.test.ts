@@ -51,6 +51,7 @@ describe('seamarkLayerConfig (SCRUM-175)', () => {
 describe('paper chart tile config (SCRUM-203)', () => {
   it('asks for the NOAA chart as WMS 1.1.1 in EPSG:3857, never through the dark filter', () => {
     const chart = tileLayerConfig('paper_chart');
+    if (chart.kind !== 'wms') throw new Error('the paper chart must be a WMS layer');
 
     expect(chart.kind).toBe('wms');
     expect(chart.url).toContain('NOAAChartDisplay');
