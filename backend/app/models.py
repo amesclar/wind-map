@@ -87,7 +87,11 @@ class GridWindPoint(BaseModel):
 
 
 class CurrentPoint(BaseModel):
-    """A single ocean-current observation for the map layer (SCRUM-96)."""
+    """A single ocean-current observation for the map layer (SCRUM-96).
+
+    The coordinates are the Marine model cell the value came from (SCRUM-238), not the map
+    point that was requested: Open-Meteo snaps each request to its nearest sea cell.
+    """
 
     latitude: float
     longitude: float

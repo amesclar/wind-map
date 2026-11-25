@@ -210,6 +210,22 @@ describe('MapSettingsModal wind color gradient toggle (SCRUM-124)', () => {
   });
 });
 
+describe('MapSettingsModal water currents note (SCRUM-238)', () => {
+  it('explains the model resolution under the water currents toggle', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const note = screen.getByTestId('currents-resolution-note');
+    expect(note.textContent).toContain('6 to 9 km');
+    expect(note.textContent).toContain('Port Susan');
+  });
+
+  it('stays visible when the layer is on', () => {
+    render(<MapSettingsModal {...BASE_PROPS} waterCurrentsVisible />);
+
+    expect(screen.getByTestId('currents-resolution-note')).toBeTruthy();
+  });
+});
+
 describe('MapSettingsModal water currents toggle (SCRUM-100)', () => {
   it('is off by default and reflects the current state', () => {
     const { rerender } = render(<MapSettingsModal {...BASE_PROPS} />);

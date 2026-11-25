@@ -425,6 +425,10 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     />
                   </button>
                 </div>
+                <p data-testid="currents-resolution-note" className="mt-2 text-[11px] text-gray-500">
+                  Currents come from a model with cells of about 6 to 9 km, so narrow waters such as
+                  Port Susan may show no current.
+                </p>
               </div>
 
               {/* Nautical Seamarks Toggle (SCRUM-175) */}

@@ -125,6 +125,27 @@ def test_init_db_creates_every_table_and_sets_schema_version():
     with db_connection() as conn:
         assert {"locations", *CACHE_TABLES} <= _tables(conn)
         assert "temperature_f" in _columns(conn, "grid_weather_cache")
+        assert {"cell_lat", "cell_lon"} <= _columns(conn, "grid_currents_cache")
+        assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_schema_v6_recreates_the_currents_cache_with_cell_coordinates():
+    """The currents cache gains the model cell each value came from (SCRUM-238)."""
+    with db_connection() as conn:
+        conn.execute("DROP TABLE grid_currents_cache;")
+        conn.execute(
+            "CREATE TABLE grid_currents_cache ("
+            "lat_key REAL NOT NULL, lon_key REAL NOT NULL, "
+            "hour TEXT NOT NULL DEFAULT 'current', cached_at REAL NOT NULL, "
+            "expires_at REAL NOT NULL, velocity_knots REAL, direction_deg REAL, "
+            "PRIMARY KEY (lat_key, lon_key, hour));"
+        )
+        conn.execute("PRAGMA user_version = 5;")
+
+    init_db()
+
+    with db_connection() as conn:
+        assert {"cell_lat", "cell_lon"} <= _columns(conn, "grid_currents_cache")
         assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
 
 

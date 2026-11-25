@@ -126,6 +126,7 @@ export interface GridWindPoint {
 
 /** One point of GET /api/currents/grid (SCRUM-96). */
 export interface CurrentPoint {
+  /** The Marine model cell the value came from, not the requested map point (SCRUM-238). */
   latitude: number;
   longitude: number;
   /** Speed in knots, and the direction the water flows **towards** in degrees. */
