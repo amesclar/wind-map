@@ -249,12 +249,12 @@ the app runs publicly on Google Cloud Run (project `wind-app-515017`, region `us
 + The single-instance cap and always-allocated CPU keep Litestream the only writer; replacing the instance with a new revision therefore restores the saved locations from the replica, which is the persistence check.
 + Rollback is a traffic switch to the previous revision (`gcloud run services update-traffic --to-revisions=...`) or a redeploy of the previous image tag; `--to-latest` returns to the newest revision.
 
-# automatic deployment (SCRUM-189)
-merging into `develop` deploys the app, so a normal change needs no manual Cloud Build or `gcloud run`
-+ `.github/workflows/deploy-cloud-run.yml` builds the image for `linux/amd64` with the merge commit, pushes `VERSION-<merge-sha>` and `latest` to Artifact Registry, runs `gcloud run deploy` with the settings above and fails the run when `/api/health` does not report `status: ok`.
+# deployment trigger (SCRUM-189, SCRUM-223)
+the app reaches Google Cloud only from `master` (a release merge) or when the user asks for a feature to be tested on the public URL
++ `.github/workflows/deploy-cloud-run.yml` builds the image for `linux/amd64` with the commit, pushes `VERSION-<merge-sha>` and `latest` to Artifact Registry, runs `gcloud run deploy` with the settings above and fails the run when `/api/health` does not report `status: ok`.
 + Authentication is keyless: GitHub's OIDC token is exchanged through the Workload Identity pool `github`, whose provider accepts only repository `amesclar/wind-map`; no service account key is stored in GitHub or the repository.
 + The deploy identity is `wind-map-deployer@wind-app-515017.iam.gserviceaccount.com`, with `roles/artifactregistry.writer` on the `wind-map` repository, `roles/run.admin` on the project and `roles/iam.serviceAccountUser` on `wind-map-runner`; it cannot read `APP_PASSWORD` or write the replica bucket, so the runtime identity stays separate.
-+ It runs on every push to `develop`, can be started on demand (`workflow_dispatch`), and runs one deployment at a time.
++ It runs on a push to `master` (the release merge) and on demand (`workflow_dispatch`, where the Actions tab chooses the branch), one deployment at a time. A `develop` merge never reaches Google Cloud: it rebuilds the local container instead, so an unreleased branch cannot replace the public service by accident. A feature the user wants to try publicly is deployed by choosing its branch in the Actions tab, and its `VERSION-<sha>` tag keeps that build identifiable until the next release replaces it.
 + The deploy step names every runtime secret in one `--set-secrets` flag (SCRUM-190): `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN`, plus `JIRA_BASE_URL` and `JIRA_EMAIL` in `--set-env-vars`. Naming only some of them detached the rest on every merge, which is how the CARTO key and the Jira token kept disappearing. A referenced secret that does not exist fails the deploy, so `scripts/gcp-provision.sh` runs first.
 + `cloudbuild.yaml` and the manual commands remain documented as the emergency fallback.
 

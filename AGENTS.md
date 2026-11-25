@@ -92,6 +92,11 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - The script builds the `wind-map` image, restarts the `wind-map` container with the `wind_data` volume on port 5005, and waits for `GET /api/health` to respond.
 - **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
 
+## Google Cloud Deploys Are Deliberate (SCRUM-223)
+- **Default:** Google Cloud is touched only when `develop` is merged into `master` for a release. A `develop` or feature-branch merge rebuilds the local container and stops there.
+- **Exception:** a feature the user asks to test publicly may be deployed from the branch they name, through Actions → Deploy to Cloud Run (`workflow_dispatch`). Never deploy a branch the user did not name.
+- **Never** add an automatic deploy trigger for `develop` or a feature branch, and report every Google Cloud deploy with its branch and image tag. Mechanics: `release-versioning.md`.
+
 ---
 <!-- from .kiro/steering/documentation.md -->
 
