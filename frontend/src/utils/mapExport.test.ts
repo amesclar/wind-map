@@ -11,7 +11,7 @@ import {
   sanitizeExportFileName,
   temperatureBands,
 } from './mapExport';
-import { getTemperatureColor } from '../components/WindBarb';
+import { CHART_TEMPERATURE_BANDS, getTemperatureColor } from '../components/WindBarb';
 
 const CAPTURED = new Date('2026-11-23T04:05:00Z');
 
@@ -292,5 +292,14 @@ describe('legend contents (SCRUM-116)', () => {
     const metric = temperatureBands('metric');
     expect(metric[0].caption).toBe('≤ 0°C');
     expect(metric[3].caption).toBe('20°C–27°C');
+  });
+
+  it('follows the darker ramp on the paper chart, where the barbs draw with it (SCRUM-216)', () => {
+    const chart = temperatureBands('imperial', true);
+    expect(chart.map((band) => band.color)).toEqual(
+      CHART_TEMPERATURE_BANDS.map((band) => band.color),
+    );
+    // Captions are unchanged: the palette differs, the temperature bands do not.
+    expect(chart[0].caption).toBe(temperatureBands('imperial')[0].caption);
   });
 });

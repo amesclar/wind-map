@@ -8,7 +8,7 @@ import {
   declutterGridPoints,
   GRID_BARB_FALLBACK_COLOR,
 } from './WindOverlay';
-import { generateWindBarbSvg, getTemperatureColor } from './WindBarb';
+import { generateWindBarbSvg, getChartTemperatureColor, getTemperatureColor } from './WindBarb';
 
 const parse = (html: string) => {
   const div = document.createElement('div');
@@ -86,6 +86,19 @@ describe('buildGridBarbIcon (SCRUM-89)', () => {
     expect(html).toContain('#161b22');
     expect(html).not.toContain('wind-barb-halo');
     expect(html).toContain(generateGridBarbSvg(15, 90, 85, 40, BARB_OUTLINES));
+  });
+
+  it('draws the darker chart ramp on the chart only (SCRUM-216)', () => {
+    const chartHtml = buildGridBarbIcon(pt(15, 90, 85), false, true).options.html as string;
+    expect(chartHtml).toContain(getChartTemperatureColor(85));
+    expect(chartHtml).not.toContain(getTemperatureColor(85));
+
+    const darkHtml = buildGridBarbIcon(pt(15, 90, 85), false).options.html as string;
+    expect(darkHtml).toContain(getTemperatureColor(85));
+    expect(darkHtml).not.toContain(getChartTemperatureColor(85));
+
+    // The pop-up barb is an illustration, so it keeps the standard table (SCRUM-126).
+    expect(buildGridPointPopup(pt(15, 90, 85))).toContain(getTemperatureColor(85));
   });
 
   it('keeps the chart rim and inverts only the selected ring on the light base (SCRUM-208)', () => {
