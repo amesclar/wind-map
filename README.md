@@ -343,6 +343,8 @@ To upgrade everything to the latest allowed versions, add `--upgrade` to both `p
 
 Cross-origin API access is off by default. If you call the API from another origin, set `CORS_ORIGINS` (comma-separated), e.g. `CORS_ORIGINS=http://localhost:3000`.
 
+`NWS_USER_AGENT` identifies the app to NOAA's NDFD API (`api.weather.gov`, the *NOAA NWS NDFD* model). NWS asks every client to send an application name and a contact address and answers `403` to an empty User-Agent, so set it to something like `NWS_USER_AGENT="wind-map/0.11 (you@example.com)"`. When it is unset the app sends `wind-map (+https://github.com/amesclar/wind-map)` and logs a warning at startup naming the variable, so a missing contact shows up in `docker logs` instead of in NOAA's traffic.
+
 ---
 
 ## REST API Reference
