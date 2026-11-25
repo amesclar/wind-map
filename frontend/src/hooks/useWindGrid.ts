@@ -4,16 +4,20 @@ import { fetchWindGrid, parseQuotaExhausted } from '../api/client';
 import type { GridWindPoint } from '../types';
 
 /**
- * About one barb per 80px; the backend caps each axis at 30.
+ * About one barb per 80px; the backend caps each axis at 20 (SCRUM-194).
  *
  * The same grid feeds every layer that draws it (the barbs now, the color gradient in
  * SCRUM-123), so density is one shared decision rather than a per-layer detail. It is
  * not raised further: data resolution is limited by the weather model (about 1 to 11 km),
  * so a finer grid repeats values instead of adding detail, and the smoothness comes from
  * client-side interpolation. Revisit only if verification shows blockiness at zoom 8-12.
+ *
+ * The 20-per-axis cap comes from Open-Meteo's budget, not from density (SCRUM-194): it charges one
+ * call per point against 600 per minute, so 20 x 20 = 400 points per view leaves room for a pan in
+ * the same window, while 30 x 30 = 900 could never fit.
  */
 export const BARB_SPACING_PX = 80;
-export const MAX_GRID_DIM = 30;
+export const MAX_GRID_DIM = 20;
 
 export function gridDimensions(size: { x: number; y: number }): { cols: number; rows: number } {
   const dim = (px: number) => Math.min(Math.max(2, Math.round(px / BARB_SPACING_PX)), MAX_GRID_DIM);
