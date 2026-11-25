@@ -92,8 +92,24 @@ NWS_TIMEOUT_SECONDS = 15.0
 # Same attempt budget as the Open-Meteo client (SCRUM-106): one retry pair covers a 503 blip.
 NWS_RETRIES = 2
 # NWS asks every client to identify itself and answers 403 to an empty User-Agent (measured
-# 2026-11-25), so one is always sent. Set NWS_USER_AGENT to an app name plus a contact address.
-NWS_USER_AGENT = os.getenv("NWS_USER_AGENT", "").strip() or "wind-map (NWS NDFD prototype)"
+# 2026-11-25), so one is always sent. Set NWS_USER_AGENT to an app name plus a contact address;
+# the default names the app and links the repository, which is the contact NOAA gets when nobody
+# configured one (the startup log says so).
+NWS_DEFAULT_USER_AGENT = "wind-map (+https://github.com/amesclar/wind-map)"
+
+
+def nws_user_agent(value: str | None = None) -> str:
+    """The User-Agent for api.weather.gov: NWS_USER_AGENT when set, else the default."""
+    agent = (os.getenv("NWS_USER_AGENT", "") if value is None else value).strip()
+    return agent or NWS_DEFAULT_USER_AGENT
+
+
+def nws_user_agent_is_custom() -> bool:
+    """True when NWS_USER_AGENT was set, so the startup log can stay quiet (SCRUM-255)."""
+    return bool(os.getenv("NWS_USER_AGENT", "").strip())
+
+
+NWS_USER_AGENT = nws_user_agent()
 # Models served by a provider other than Open-Meteo. The wind grid asks Open-Meteo for its default
 # instead of sending an id Open-Meteo does not know.
 PROVIDER_ONLY_MODELS = frozenset({NWS_MODEL})

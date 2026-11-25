@@ -6,13 +6,17 @@ which is also how the two NDFD requests (`/points`, then `/gridpoints`) are serv
 """
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
+from backend.app import config
 from backend.app.database import db_connection
+from backend.app.main import app
 from backend.app.services import open_meteo
 from backend.app.services.nws_parser import parse_nws_forecast
 from factories import http_response
@@ -232,3 +236,38 @@ def test_wind_grid_never_sends_the_ndfd_id_to_open_meteo():
     """NDFD cannot serve the grid, so the grid keeps asking Open-Meteo for its default."""
     assert "models" not in open_meteo.forecast_params("nws_ndfd")
     assert open_meteo.forecast_params("gfs_seamless")["models"] == "gfs_seamless"
+
+
+# ---------------------------------------------------------------------------
+# User-Agent (SCRUM-255)
+# ---------------------------------------------------------------------------
+
+
+def test_user_agent_default_names_the_app_and_a_contact():
+    agent = config.nws_user_agent("")
+
+    assert "prototype" not in agent.lower()
+    assert "github.com/amesclar/wind-map" in agent
+
+
+def test_user_agent_uses_the_configured_value():
+    assert config.nws_user_agent("  my-app/1.0 (ops@example.com)  ") == "my-app/1.0 (ops@example.com)"
+    assert config.nws_user_agent("   ") == config.NWS_DEFAULT_USER_AGENT
+
+
+def test_startup_warns_when_the_user_agent_is_unset(monkeypatch, caplog):
+    monkeypatch.delenv("NWS_USER_AGENT", raising=False)
+
+    with caplog.at_level(logging.WARNING, logger="backend.app.main"), TestClient(app):
+        pass
+
+    assert "NWS_USER_AGENT is not set" in caplog.text
+
+
+def test_startup_is_quiet_when_the_user_agent_is_set(monkeypatch, caplog):
+    monkeypatch.setenv("NWS_USER_AGENT", "wind-map/0.11 (ops@example.com)")
+
+    with caplog.at_level(logging.WARNING, logger="backend.app.main"), TestClient(app):
+        pass
+
+    assert "NWS_USER_AGENT" not in caplog.text
