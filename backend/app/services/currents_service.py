@@ -15,6 +15,7 @@ The cache is keyed by (rounded lat, lon, hour), and one hourly request stores ev
 UTC day from the same response, as the wind grid does (SCRUM-166).
 """
 
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -24,6 +25,9 @@ import httpx
 
 from backend.app.config import (
     CACHE_TTL_SECONDS,
+    LAND_ELEVATION_THRESHOLD_M,
+    OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+    OPEN_METEO_ELEVATION_URL,
     OPEN_METEO_MARINE_TIMEOUT_SECONDS,
     OPEN_METEO_MARINE_URL,
 )
@@ -34,7 +38,12 @@ from backend.app.services.model_info import floor_hour
 from backend.app.services.time_window import hour_key
 from backend.app.units import coord_key
 
+logger = logging.getLogger(__name__)
+
 CURRENT_VARIABLES = ("ocean_current_velocity", "ocean_current_direction")
+# Open-Meteo's elevation endpoint accepts a bounded coordinate list; grids are chunked like the
+# marine fetch.
+ELEVATION_BATCH_SIZE = 100
 # The marine API converts current velocity to knots when asked; verified against the live API.
 MARINE_PARAMS = {"wind_speed_unit": "kn"}
 POINT_SERIES_HOURS = 48
@@ -76,6 +85,7 @@ async def get_grid_currents(
 
     if at is None:
         values = await _fetch_current(missing)
+        values = _drop_land(values, await _land_cells(values))
         _store(missing, values, hour, now)
         for point, value in zip(missing, values, strict=True):
             cached[coord_key(*point)] = value
@@ -83,8 +93,9 @@ async def get_grid_currents(
 
     # One response already carries the whole UTC day, so cache every hour of it (SCRUM-166).
     series = await _fetch_hourly(missing, at, at)
+    land = await _land_cells([value for values in series.values() for value in values if value is not None])
     for series_hour, values in series.items():
-        _store(missing, values, series_hour, now)
+        _store(missing, _drop_land(values, land), series_hour, now)
     requested = hour_key(at)
     if requested not in series:
         raise httpx.HTTPError(f"Open-Meteo marine response did not include the requested hour {requested}")
@@ -110,9 +121,10 @@ async def get_point_currents(
     for day in missing_days:
         day_start = datetime.fromisoformat(day).replace(tzinfo=UTC)
         series = await _fetch_hourly([(lat, lon)], day_start, day_start)
+        land = await _land_cells([value for values in series.values() for value in values if value is not None])
         stamp = time.time()
         for series_hour, values in series.items():
-            _store([(lat, lon)], values, series_hour, stamp)
+            _store([(lat, lon)], _drop_land(values, land), series_hour, stamp)
     if missing_days:
         cached = _read_series(lat, lon, [hour_key(moment) for moment in wanted])
 
@@ -278,6 +290,63 @@ def _cell(item: dict, fallback: tuple[float, float]) -> tuple[float, float]:
     if lat is None or lon is None:
         return fallback
     return (float(lat), float(lon))
+
+
+def _cell_of(value: CurrentValue) -> tuple[float, float]:
+    """The rounded cell key used for deduplication and the land test."""
+    return (round(value.latitude, 6), round(value.longitude, 6))
+
+
+async def _elevations(cells: list[tuple[float, float]]) -> dict[tuple[float, float], float]:
+    """Elevation in metres for each unique cell, or {} when Open-Meteo cannot say.
+
+    One batched request per 100 cells. A failed lookup is not fatal: without a verdict the
+    values are kept, because hiding real water is worse than a rare chevron over land while
+    the elevation service is down.
+    """
+    unique = list(dict.fromkeys(cells))
+    result: dict[tuple[float, float], float] = {}
+    for start in range(0, len(unique), ELEVATION_BATCH_SIZE):
+        chunk = unique[start : start + ELEVATION_BATCH_SIZE]
+        try:
+            data = await open_meteo.get_json(
+                OPEN_METEO_ELEVATION_URL,
+                {
+                    "latitude": ",".join(str(lat) for lat, _ in chunk),
+                    "longitude": ",".join(str(lon) for _, lon in chunk),
+                },
+                timeout=OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("Elevation lookup failed; keeping current cells: %s", exc)
+            return result
+        values = data.get("elevation") if isinstance(data, dict) else None
+        if not isinstance(values, list) or len(values) != len(chunk):
+            logger.warning("Elevation lookup returned an unexpected payload; keeping current cells")
+            return result
+        for cell, elevation in zip(chunk, values, strict=True):
+            if isinstance(elevation, (int, float)):
+                result[cell] = float(elevation)
+    return result
+
+
+async def _land_cells(values: list[Value]) -> set[tuple[float, float]]:
+    """Cells whose centre sits above sea level, so a chevron there would be on land (SCRUM-238).
+
+    The Marine model's land mask is coarser than the chart: Whidbey is about one cell wide, so
+    cells it considers sea can still fall on the island. Elevation is the check that keeps the
+    chevron on water; a cell at or below the threshold is treated as sea.
+    """
+    cells = [_cell_of(value) for value in values if value is not None]
+    if not cells:
+        return set()
+    elevations = await _elevations(cells)
+    return {cell for cell, elevation in elevations.items() if elevation > LAND_ELEVATION_THRESHOLD_M}
+
+
+def _drop_land(values: list[Value], land: set[tuple[float, float]]) -> list[Value]:
+    """Null the values whose cell is on land, so they are cached as empty rows."""
+    return [None if value is not None and _cell_of(value) in land else value for value in values]
 
 
 def _value(velocity: object, direction: object, cell: tuple[float, float]) -> Value:

@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 #   3 → 4 (SCRUM-96): ocean-current grid cache, keyed by hour like the wind grid.
 #   4 → 5 (SCRUM-210): the wind grid cache keeps the gust too, so barb pop-ups show it.
 #   5 → 6 (SCRUM-238): the currents cache keeps the model cell each value came from.
-SCHEMA_VERSION = 6
+#   6 → 7 (SCRUM-238): cached current cells are re-checked against elevation, so land rows go.
+SCHEMA_VERSION = 7
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (

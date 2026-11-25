@@ -23,3 +23,12 @@
 3.3 WHEN a forecast hour is requested THEN the response shall still include every hour of that UTC day from the one response and echo the requested hour.
 3.4 WHEN the point-series endpoint is used THEN it shall return the same hourly values as before.
 3.5 WHEN the layer draws THEN the chevron glyph, tiers, legend and hour handling shall be unchanged.
+
+## 4. Follow-up after user testing (Whidbey Island)
+
+4.1 WHEN the Marine model treats a narrow island as sea (its cells are about 6 to 9 km; Whidbey is about one cell wide) THEN placing the chevron at the cell centre still draws it on land: reported inland at Oak Harbor, Cornet Bay and Polnell Point.
+4.2 WHEN a returned cell's centre is above sea level according to the Open-Meteo Elevation API THEN the service shall drop that cell, so a chevron is only drawn over water.
+4.3 WHEN several values share a cell THEN the elevation shall be looked up once for that cell, batched with the other cells of the request.
+4.4 WHEN the elevation lookup fails THEN the service shall keep the values rather than hiding real water (the land test is an improvement, not a dependency for showing data).
+4.5 WHEN a cell is found on land THEN it shall be cached as an empty row, so the lookup is not repeated on later pans.
+4.6 WHEN caches were written before the land test THEN schema v7 shall recreate them, so no previously cached land cell survives the deploy.

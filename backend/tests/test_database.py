@@ -129,7 +129,7 @@ def test_init_db_creates_every_table_and_sets_schema_version():
         assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
 
 
-def test_schema_v6_recreates_the_currents_cache_with_cell_coordinates():
+def test_schema_upgrade_recreates_the_currents_cache_with_cell_coordinates():
     """The currents cache gains the model cell each value came from (SCRUM-238)."""
     with db_connection() as conn:
         conn.execute("DROP TABLE grid_currents_cache;")

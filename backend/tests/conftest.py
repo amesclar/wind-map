@@ -35,11 +35,18 @@ def client():
 
 
 class OpenMeteoStub:
-    """Replaces `httpx.AsyncClient.get`. Unconfigured, any call fails the test."""
+    """Replaces `httpx.AsyncClient.get`. Unconfigured, any call fails the test.
+
+    Elevation lookups (SCRUM-238) are routed separately and default to sea level, so a currents
+    test that only cares about the marine payload does not have to configure them. `call_count`
+    and `last_params` describe the data calls (forecast/marine); `elevation_calls` is separate.
+    """
 
     def __init__(self):
         self.calls: list[dict] = []
+        self.elevation_calls: list[dict] = []
         self._handler = self._unexpected
+        self._elevation_handler = lambda count: {"elevation": [0.0] * count}
 
     @staticmethod
     def _unexpected():
@@ -69,15 +76,37 @@ class OpenMeteoStub:
         self._handler = handler
 
     def fail(self, exc: Exception):
-        """Raise `exc` from every call."""
+        """Raise `exc` from every data call."""
 
         def handler():
             raise exc
 
         self._handler = handler
 
+    def respond_elevation(self, elevation):
+        """Answer elevation lookups with one value per coordinate, or a fixed list."""
+
+        def handler(count: int):
+            values = elevation if isinstance(elevation, list) else [elevation] * count
+            return {"elevation": values}
+
+        self._elevation_handler = handler
+
+    def fail_elevation(self, exc: Exception):
+        """Raise `exc` from every elevation lookup."""
+
+        def handler(count: int):
+            raise exc
+
+        self._elevation_handler = handler
+
     async def get(self, client_self, url, **kwargs):
-        self.calls.append({"url": url, "params": kwargs.get("params") or {}})
+        call = {"url": url, "params": kwargs.get("params") or {}}
+        if url.endswith("/v1/elevation"):
+            self.elevation_calls.append(call)
+            count = len(str(call["params"].get("latitude", "")).split(","))
+            return http_response(self._elevation_handler(count))
+        self.calls.append(call)
         return self._handler()
 
 

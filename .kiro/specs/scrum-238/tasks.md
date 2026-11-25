@@ -28,3 +28,8 @@
 - [x] 6. CI and manual check
   - Run the `ci-checks` skill; after deploy, check Camano Island on the paper chart and dark base.
   - _Requirements: all_
+
+- [x] 7. Follow-up: land test for model cells (Whidbey user test)
+  - Elevation lookup for unique cells, 0.5 m threshold, land cells dropped and cached empty, fail-open on lookup errors, schema v7.
+  - _Requirements: 4.1–4.6_
+  - _Files: backend/app/config.py, backend/app/services/currents_service.py, backend/app/database.py, backend/tests/conftest.py, backend/tests/test_currents.py, requirements.md_
