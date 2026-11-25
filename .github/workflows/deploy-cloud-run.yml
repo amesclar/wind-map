@@ -20,6 +20,10 @@ env:
   IMAGE: us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map
   RUNTIME_SERVICE_ACCOUNT: wind-map-runner@wind-app-515017.iam.gserviceaccount.com
   LITESTREAM_BUCKET: wind-map-litestream-wind-app-515017
+  # In-app feedback (SCRUM-179, SCRUM-190): the Atlassian site and the account that owns
+  # JIRA_API_TOKEN. Neither is a secret; the token itself comes from Secret Manager below.
+  JIRA_BASE_URL: https://nehes.atlassian.net
+  JIRA_EMAIL: amesclar@gmail.com
 
 permissions:
   contents: read
@@ -71,6 +75,9 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      # Every runtime secret is listed here on purpose (SCRUM-190): a deploy that omits one detaches
+      # it from the service, and a secret that does not exist fails the deploy, so run
+      # scripts/gcp-provision.sh before the first deployment.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "$SERVICE" \
@@ -84,8 +91,8 @@ jobs:
             --min-instances=0 \
             --no-cpu-throttling \
             --allow-unauthenticated \
-            --set-env-vars="LITESTREAM_BUCKET=$LITESTREAM_BUCKET" \
-            --set-secrets="APP_PASSWORD=APP_PASSWORD:latest" \
+            --set-env-vars="LITESTREAM_BUCKET=$LITESTREAM_BUCKET,JIRA_BASE_URL=$JIRA_BASE_URL,JIRA_EMAIL=$JIRA_EMAIL" \
+            --set-secrets="APP_PASSWORD=APP_PASSWORD:latest,CARTO_API_KEY=CARTO_API_KEY:latest,JIRA_API_TOKEN=JIRA_API_TOKEN:latest" \
             --quiet
 
       - name: Smoke test the deployment

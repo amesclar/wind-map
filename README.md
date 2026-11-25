@@ -185,7 +185,8 @@ It provisions:
 
 - the private bucket `gs://wind-map-litestream-wind-app-515017` in `us-west1`, with uniform
   bucket-level access, public access prevention and a 7-day abort of unfinished uploads;
-- the Secret Manager secret `APP_PASSWORD` (and `CARTO_API_KEY` when a value is supplied);
+- the Secret Manager secrets `APP_PASSWORD`, and `CARTO_API_KEY` and `JIRA_API_TOKEN` when values
+  are supplied;
 - the service account `wind-map-runner@wind-app-515017.iam.gserviceaccount.com`, with
   `roles/storage.objectAdmin` on the bucket and `roles/secretmanager.secretAccessor` on the secrets.
 
@@ -219,7 +220,7 @@ The workflow applies these settings:
 | :--- | :--- |
 | Image | `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:VERSION-<sha>` |
 | Service account | `wind-map-runner@wind-app-515017.iam.gserviceaccount.com` |
-| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `APP_PASSWORD` from Secret Manager |
+| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `JIRA_BASE_URL`, `JIRA_EMAIL`; `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN` from Secret Manager |
 | Scaling | `--max-instances=1 --min-instances=0 --no-cpu-throttling` (one writer, CPU always allocated) |
 | Access | `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM |
 
@@ -237,8 +238,8 @@ gcloud run deploy wind-map --project=wind-app-515017 --region=us-west1 \
   --service-account=wind-map-runner@wind-app-515017.iam.gserviceaccount.com \
   --memory=512Mi --max-instances=1 --min-instances=0 --no-cpu-throttling \
   --allow-unauthenticated \
-  --set-env-vars=LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017 \
-  --set-secrets=APP_PASSWORD=APP_PASSWORD:latest
+  --set-env-vars=LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017,JIRA_BASE_URL=https://nehes.atlassian.net,JIRA_EMAIL=you@example.com \
+  --set-secrets=APP_PASSWORD=APP_PASSWORD:latest,CARTO_API_KEY=CARTO_API_KEY:latest,JIRA_API_TOKEN=JIRA_API_TOKEN:latest
 ```
 
 Cloud Run must allow unauthenticated requests so the app can answer with its own Basic Auth
@@ -273,9 +274,16 @@ gcloud run services update-traffic wind-map --region=us-west1 \
 gcloud run services update-traffic wind-map --region=us-west1 --to-latest   # back to the newest
 ```
 
-A CARTO key is optional. To add it later, create the secret (`CARTO_API_KEY`), grant the runner
-`roles/secretmanager.secretAccessor` on it, and add `CARTO_API_KEY=CARTO_API_KEY:latest` to
-`--set-secrets`; without it the map uses the OpenStreetMap tiles.
+**Runtime secrets (SCRUM-190).** The service reads three secrets, and the workflow injects all of
+them: `APP_PASSWORD` (Basic Auth), `CARTO_API_KEY` (map tiles) and `JIRA_API_TOKEN` (in-app
+feedback, together with the non-secret `JIRA_BASE_URL` and `JIRA_EMAIL`). They are listed in one
+place in the workflow because a deploy that names only some of them detaches the rest, which is
+exactly what used to drop the CARTO and Jira values on every merge.
+
+`scripts/gcp-provision.sh` creates the secrets and grants the runner access to each of them, so run
+it before the first deploy: `gcloud run deploy` fails when a referenced secret does not exist.
+Without a CARTO key the map uses the OpenStreetMap tiles; without the Jira trio the feedback button
+stays hidden.
 
 ---
 
