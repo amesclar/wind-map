@@ -271,3 +271,32 @@ def test_startup_is_quiet_when_the_user_agent_is_set(monkeypatch, caplog):
         pass
 
     assert "NWS_USER_AGENT" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_retry_warning_names_the_status_and_attempt_but_not_the_point(client, monkeypatch, caplog):
+    """This line used to print the `/points` URL, the request's coordinates included (SCRUM-253)."""
+    responses = [
+        http_response({}, status=503),
+        http_response(recorded(POINTS_FILE)),
+        http_response(recorded(GRID_FILE)),
+    ]
+
+    async def fake_get(self, url, **kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    monkeypatch.setattr("backend.app.services.nws.retry_delay", lambda response, attempt: 0.0)
+
+    with caplog.at_level("DEBUG", logger="backend.app.services.nws"):
+        resp = client.get("/api/weather/point?lat=48.2939&lon=-122.6064&model=nws_ndfd")
+
+    assert resp.status_code == 200
+    assert "NWS answered 503; retrying (attempt 1 of 2)" in caplog.text
+    assert "48.2939" not in caplog.text
+    assert "122.6064" not in caplog.text
+    assert "api.weather.gov" not in caplog.text

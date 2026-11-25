@@ -10,7 +10,7 @@ from backend.app.database import get_db_connection
 from backend.app.main import app
 from backend.app.services.forecast_parser import build_weather_point
 from backend.app.units import deg_to_cardinal
-from factories import forecast_payload, upstream_error
+from factories import forecast_payload, upstream_error, upstream_status_error
 
 POINT = "/api/weather/point?lat=48.78&lon=-121.94"
 
@@ -318,3 +318,20 @@ def test_saved_location_cache_hit_reports_current_location_details(client, open_
 
     assert hit["cached"] is True
     assert hit["location_name"] == "Renamed"
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_point_weather_failure_logs_the_exception_but_not_the_point(client, open_meteo, caplog):
+    open_meteo.fail(upstream_status_error("https://api.open-meteo.com/v1/forecast?latitude=48.0&longitude=-122.0"))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.weather"):
+        resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
+
+    assert resp.status_code == 502
+    assert "HTTPStatusError" in caplog.text
+    assert "48.0" not in caplog.text
+    assert "-122.0" not in caplog.text

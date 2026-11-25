@@ -14,7 +14,7 @@ from backend.app.services.tide_service import (
     get_point_tide,
     window_hours,
 )
-from factories import upstream_error
+from factories import upstream_error, upstream_status_error
 
 HOUR = datetime(2026, 11, 25, 12, tzinfo=UTC)
 START = HOUR.replace(hour=0) - timedelta(days=1)
@@ -232,3 +232,33 @@ def test_endpoint_reports_quota_exhausted(client, open_meteo):
     response = client.get("/api/tides/point", params={"lat": 48.4, "lon": -122.7})
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "open_meteo_quota_exhausted"
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_upstream_failure_logs_the_exception_but_not_the_point(client, open_meteo, caplog):
+    """httpx's message carries the request URL, coordinates included; the log must not."""
+    open_meteo.fail(upstream_status_error("https://marine-api.open-meteo.com/v1/marine?latitude=48.4&longitude=-122.7"))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.tides"):
+        response = client.get("/api/tides/point", params={"lat": 48.4, "lon": -122.7})
+
+    assert response.status_code == 502
+    assert "HTTPStatusError" in caplog.text
+    assert "48.4" not in caplog.text
+    assert "-122.7" not in caplog.text
+
+
+def test_quota_warning_keeps_the_reset_time_but_not_the_point(client, open_meteo, caplog):
+    open_meteo.fail(QuotaExceededError("limit", reset_at=None))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.tides"):
+        response = client.get("/api/tides/point", params={"lat": 48.4, "lon": -122.7})
+
+    assert response.status_code == 503
+    assert "quota exhausted" in caplog.text
+    assert "48.4" not in caplog.text
+    assert "-122.7" not in caplog.text

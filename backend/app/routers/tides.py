@@ -38,10 +38,12 @@ async def get_tide_point(
     try:
         return await get_point_tide(lat, lon, at)
     except QuotaExceededError as exc:
-        logger.warning("Open-Meteo quota exhausted (tide %s,%s); reset at %s", lat, lon, exc.reset_at)
+        logger.warning("Open-Meteo quota exhausted for the tide point; reset at %s", exc.reset_at)
         raise quota_exhausted(exc) from exc
     except httpx.HTTPError as exc:
-        logger.exception("Open-Meteo marine request failed for tide at %s,%s", lat, lon)
+        # The exception type, never logger.exception: httpx's message carries the request URL, and
+        # the point with it (SCRUM-253).
+        logger.error("Open-Meteo marine request failed for the tide point: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch tide data from Open-Meteo",
