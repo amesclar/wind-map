@@ -96,6 +96,11 @@ def test_models_expose_cadence_horizon_and_run_times(client):
     assert aifs["update_hours"] == 6
     assert aifs["update_cycles_utc"] == [0, 6, 12, 18]
 
+    gem = models["gem_seamless"]
+    assert gem["horizon_hours"] == 240
+    assert gem["update_hours"] == 6
+    assert gem["update_cycles_utc"] == [0, 6, 12, 18]
+
 
 def test_model_table_horizons_match_config():
     """The bundled model table is the source of truth for cadence and horizon (SCRUM-115)."""
@@ -115,6 +120,7 @@ def test_model_table_horizons_match_config():
         "ecmwf_ifs": "ECMWF IFS (HRES 9 km)",
         "ecmwf_aifs025_single": "ECMWF AIFS (AI)",
         "gfs_seamless": "NOAA GFS",
+        "gem_seamless": "CMC GEM",
         "icon_seamless": "DWD ICON Global",
     }
     for model_id, row_name in expected_rows.items():
@@ -134,6 +140,7 @@ def test_model_table_horizons_match_config():
         ("ecmwf_ifs", 15),
         ("ecmwf_aifs025_single", 15),
         ("gfs_seamless", 16),
+        ("gem_seamless", 10),
         ("icon_seamless", 8),
     ],
 )
@@ -205,6 +212,14 @@ def test_grid_time_serves_that_hours_values_and_caches_per_hour(client, open_met
 
     # Other hours of that day are cached by the same response (SCRUM-166); the same-day cases
     # and the cross-day boundary are covered in test_grid.py.
+
+
+def test_grid_time_rejects_an_hour_past_gems_horizon(client):
+    """GEM seamless stops at 10 days even though the endpoint allows longer windows (SCRUM-228)."""
+    far = future_hour(hours=250)
+    resp = client.get("/api/weather/grid", params=grid_params(time=iso(far), model="gem_seamless"))
+    assert resp.status_code == 422
+    assert "horizon" in resp.json()["detail"]
 
 
 def test_grid_without_time_still_serves_current_conditions(client, open_meteo):
