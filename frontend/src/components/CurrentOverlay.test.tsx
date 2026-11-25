@@ -42,6 +42,7 @@ describe('CurrentOverlay (SCRUM-99)', () => {
     expect(html).toContain('NNW (333°)');
     expect(html).toContain('Mon 23 Nov 12:00 PST');
     expect(createdMarkers[1].popupHtml).toContain('6.3 km/h');
+    expect(createdMarkers[0].popupOptions).toMatchObject({ autoPan: true, keepInView: true });
   });
 
   it('removes every marker on unmount', () => {

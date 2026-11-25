@@ -81,6 +81,29 @@ describe('MapView popups (SCRUM-92)', () => {
     expect(div.querySelector('img')).toBeNull();
     expect(div.textContent).toContain('<img src=x onerror="alert(1)">');
   });
+
+  it('binds the shared placement options and keeps an edge pop-up inside the panel (SCRUM-252)', () => {
+    render(<MapView {...baseProps} locations={[makeLocation({ id: 3 })]} />);
+
+    expect(createdMarkers[0].popupOptions).toMatchObject({ autoPan: true, keepInView: true });
+    expect(createdMarkers[0].popupOptions?.autoPanPaddingTopLeft).toEqual([12, 88]);
+
+    const popup = document.createElement('div');
+    popup.className = 'leaflet-popup';
+    const tip = document.createElement('div');
+    tip.className = 'leaflet-popup-tip-container';
+    popup.append(tip);
+    document.body.append(popup);
+
+    act(() => currentMap().fire('popupopen', { popup: { getElement: () => popup } }));
+
+    // jsdom reports every rect as empty, so the card looks like it sits in the top-left corner.
+    expect(popup.style.marginLeft).toBe('12px');
+    expect(popup.style.marginTop).toBe('88px');
+    expect(tip.style.display).toBe('none');
+
+    popup.remove();
+  });
 });
 
 describe('MapView startup focus (SCRUM-248)', () => {

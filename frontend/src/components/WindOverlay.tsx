@@ -5,6 +5,7 @@ import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF, NO_DATA } from '../utils/units';
 import { escapeHtml } from '../utils/html';
+import { POPUP_OPTIONS } from '../utils/popupPlacement';
 import { CHART_MIN_ZOOM } from './mapTiles';
 
 interface WindOverlayProps {
@@ -244,7 +245,10 @@ export function WindOverlay({
         interactive: true,
       }).addTo(map);
       // Leaflet opens a bound pop-up on click, so a click shows the point's values and selects it.
-      marker.bindPopup(buildGridPointPopup(point, unitSystem, speedUnit, dirDisplay, timeLabel));
+      marker.bindPopup(
+        buildGridPointPopup(point, unitSystem, speedUnit, dirDisplay, timeLabel),
+        POPUP_OPTIONS,
+      );
       marker.on('click', () => onSelectRef.current(point));
       return { point, marker };
     });

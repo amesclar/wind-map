@@ -54,6 +54,14 @@ describe('WindOverlay drawing (SCRUM-122)', () => {
     ]);
   });
 
+  it('binds its pop-up with the shared placement options (SCRUM-252)', () => {
+    const { map } = fakeMap();
+    render(<WindOverlay map={map} points={[point(48)]} selectedPoint={null} onGridPointSelect={() => {}} />);
+
+    expect(created[0].popupOptions).toMatchObject({ autoPan: true, keepInView: true });
+    expect(created[0].popupOptions?.autoPanPaddingTopLeft).toEqual([12, 88]);
+  });
+
   it('selects the clicked grid point', () => {
     const { map } = fakeMap();
     const onSelect = vi.fn();

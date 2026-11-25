@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import L from 'leaflet';
 import type { CurrentPoint, WindSpeedUnit } from '../types';
 import { buildCurrentChevronIcon, buildCurrentPopup } from './WaterCurrentChevron';
+import { POPUP_OPTIONS } from '../utils/popupPlacement';
 
 interface CurrentOverlayProps {
   map: L.Map | null;
@@ -24,7 +25,7 @@ export function CurrentOverlay({ map, points, speedUnit = 'knots', timeLabel = n
         icon: buildCurrentChevronIcon(point),
         interactive: true,
       }).addTo(map);
-      marker.bindPopup(buildCurrentPopup(point, speedUnit, timeLabel));
+      marker.bindPopup(buildCurrentPopup(point, speedUnit, timeLabel), POPUP_OPTIONS);
       return marker;
     });
     return () => {
