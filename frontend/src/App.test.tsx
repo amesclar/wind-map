@@ -360,6 +360,28 @@ describe('App map integration (SCRUM-126)', () => {
     expect(vi.mocked(saveMapImage)).not.toHaveBeenCalled();
   });
 
+  it('reports a failed single-view export in the dialog and keeps its options (SCRUM-241)', async () => {
+    vi.mocked(saveMapPdf).mockRejectedValueOnce(
+      new Error('The PDF library could not be loaded. Reload the page and try again.'),
+    );
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    const name = (screen.getByTestId('export-file-name') as HTMLInputElement).value;
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Reload the page and try again');
+    // The dialog stays open with the chosen options, and Export is usable again without a retry.
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect((screen.getByTestId('export-file-name') as HTMLInputElement).value).toBe(name);
+    expect(screen.getByRole('radio', { name: /PDF/ }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(vi.mocked(saveMapPdf)).toHaveBeenCalledTimes(1);
+  });
+
   it('captures one frame per hour for a range, saves one ZIP and restores the hour (SCRUM-155, SCRUM-156)', async () => {
     render(<App />);
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());

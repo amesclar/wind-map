@@ -299,7 +299,7 @@ export const App: React.FC = () => {
         timezone={timezone}
         rangeHours={mapExport.rangeHours}
         progress={mapExport.rangeProgress}
-        error={mapExport.rangeError}
+        error={mapExport.exportError}
         onCancelRange={mapExport.handleCancelRange}
         onSaveCaptured={mapExport.handleSaveCaptured}
       />
