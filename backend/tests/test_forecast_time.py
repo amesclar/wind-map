@@ -107,7 +107,7 @@ def test_model_table_horizons_match_config():
         return round(value * 24 if match[2].lower().startswith("d") else value)
 
     expected_rows = {
-        "ecmwf_ifs04": "ECMWF IFS (HRES 9 km)",
+        "ecmwf_ifs": "ECMWF IFS (HRES 9 km)",
         "gfs_seamless": "NOAA GFS",
         "icon_seamless": "DWD ICON Global",
     }
@@ -123,7 +123,7 @@ def test_model_table_horizons_match_config():
 
 @pytest.mark.parametrize(
     ("model", "days"),
-    [("best_match", 7), ("ecmwf_ifs04", 15), ("gfs_seamless", 16), ("icon_seamless", 8)],
+    [("best_match", 7), ("ecmwf_ifs", 15), ("gfs_seamless", 16), ("icon_seamless", 8)],
 )
 def test_horizon_days_cover_the_window(model, days):
     assert model_horizon_days(model) == days

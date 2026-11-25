@@ -98,11 +98,14 @@ CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
 # Supported weather models
 AVAILABLE_MODELS = [
     {"id": "best_match", "name": "Open-Meteo (Best Match)"},
-    {"id": "ecmwf_ifs04", "name": "ECMWF IFS 0.4°"},
+    {"id": "ecmwf_ifs", "name": "ECMWF IFS HRES 9 km"},
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
 ]
 MODEL_IDS = frozenset(m["id"] for m in AVAILABLE_MODELS)
+# Retired model ids are answered as their replacement for one release (SCRUM-226), so a cached
+# frontend that still sends `ecmwf_ifs04` gets ECMWF values instead of a 422.
+MODEL_ALIASES: dict[str, str] = {"ecmwf_ifs04": "ecmwf_ifs"}
 DEFAULT_MODEL = "best_match"  # Open-Meteo picks the best model; no `models` param is sent
 DEFAULT_TIMEZONE = "America/Los_Angeles"  # Pacific, per requirements
 
@@ -123,7 +126,7 @@ if not 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24:
 # documented 7-day default rather than a single model's horizon.
 MODEL_METADATA: dict[str, dict[str, object]] = {
     "best_match": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
-    "ecmwf_ifs04": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    "ecmwf_ifs": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
     "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
 }
