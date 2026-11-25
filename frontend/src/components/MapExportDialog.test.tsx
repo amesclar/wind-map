@@ -66,7 +66,7 @@ describe('MapExportDialog (SCRUM-117, SCRUM-162)', () => {
       format: 'jpeg',
       jpegQuality: 0.8,
       pageSize: 'letter',
-      orientation: 'portrait',
+      orientation: 'landscape',
       fileName: `${FILE_BASE}.jpeg`,
     });
   });
@@ -91,6 +91,26 @@ describe('MapExportDialog (SCRUM-117, SCRUM-162)', () => {
       orientation: 'landscape',
       fileName: `${FILE_BASE}.pdf`,
     });
+  });
+
+  it('opens a PDF on landscape and still lets the user pick portrait (SCRUM-243)', () => {
+    const props = renderDialog();
+
+    fireEvent.click(screen.getByRole('radio', { name: /PDF/ }));
+    expect(screen.getByRole('radio', { name: 'Landscape' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'Portrait' }).getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(props.onExport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ format: 'pdf', orientation: 'landscape' }),
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Portrait' }));
+    expect(screen.getByRole('radio', { name: 'Portrait' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(props.onExport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ format: 'pdf', orientation: 'portrait' }),
+    );
   });
 
   it('lets the user edit the name, keeps one extension and cleans it on export (SCRUM-162)', () => {
@@ -166,7 +186,7 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
       format: 'png',
       jpegQuality: 0.92,
       pageSize: 'letter',
-      orientation: 'portrait',
+      orientation: 'landscape',
       hours: RANGE_HOURS.slice(0, 3),
     });
   });
@@ -273,7 +293,8 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     expect(screen.queryByLabelText('File name')).toBeNull();
 
     fireEvent.click(screen.getByRole('radio', { name: /A4/ }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
+    // Portrait stays selectable in range mode too, even though landscape is the default.
+    fireEvent.click(screen.getByRole('radio', { name: 'Portrait' }));
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
     expect(props.onExport).toHaveBeenCalledWith({
@@ -281,7 +302,7 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
       format: 'pdf',
       jpegQuality: 0.92,
       pageSize: 'a4',
-      orientation: 'landscape',
+      orientation: 'portrait',
       hours: RANGE_HOURS.slice(0, 3),
     });
   });
