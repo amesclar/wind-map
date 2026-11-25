@@ -17,6 +17,8 @@ const BASE_PROPS = {
   onToggleWaterCurrents: vi.fn(),
   seamarksVisible: false,
   onToggleSeamarks: vi.fn(),
+  bcDepthVisible: false,
+  onToggleBcDepth: vi.fn(),
 };
 
 describe('MapSettingsModal wind overlay toggle', () => {
@@ -72,6 +74,26 @@ describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
     expect(within(body).getByText(/OpenSeaMap/)).toBeTruthy();
     // The chart note carries the same notice (SCRUM-203), so both are expected here.
     expect(within(body).getAllByText(/Not for navigation/).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('MapSettingsModal B.C. depth toggle (SCRUM-205)', () => {
+  it('is off by default and calls the handler with the flipped value', () => {
+    const onToggle = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} bcDepthVisible={false} onToggleBcDepth={onToggle} />);
+    const toggle = screen.getByTestId('bc-depth-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('names CHS, the navigation notice and the derivative notice', () => {
+    render(<MapSettingsModal {...BASE_PROPS} bcDepthVisible />);
+    const body = screen.getByTestId('map-settings-body');
+    expect(within(body).getByText(/B\.C\. Depth \(CHS NONNA\)/)).toBeTruthy();
+    expect(within(body).getByText(/Bathymetry © CHS NONNA/)).toBeTruthy();
+    expect(within(body).getByText(/Canadian Hydrographic Service/)).toBeTruthy();
+    expect(screen.getByTestId('bc-depth-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 });
 

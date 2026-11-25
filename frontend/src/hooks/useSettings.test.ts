@@ -66,6 +66,22 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(result.current.seamarksVisible).toBe(false);
   });
 
+  it('keeps B.C. depth off unless it was turned on (SCRUM-205)', () => {
+    const off = renderHook(() => useMapSettings());
+    expect(off.result.current.bcDepthVisible).toBe(false);
+
+    act(() => off.result.current.setBcDepthVisible(true));
+    expect(localStorage.getItem(STORAGE_KEYS.bcDepth)).toBe('true');
+
+    const restored = renderHook(() => useMapSettings());
+    expect(restored.result.current.bcDepthVisible).toBe(true);
+  });
+
+  it('falls back to off for a stored B.C. depth value that is not a boolean', () => {
+    localStorage.setItem(STORAGE_KEYS.bcDepth, 'yes');
+    expect(renderHook(() => useMapSettings()).result.current.bcDepthVisible).toBe(false);
+  });
+
   it('restores the paper chart, and a server CARTO key does not take it away (SCRUM-203)', () => {
     localStorage.setItem(STORAGE_KEYS.tileLayer, 'paper_chart');
     const { result } = renderHook(() => useMapSettings());

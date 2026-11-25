@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Anchor } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Anchor, Layers } from 'lucide-react';
 import { MapTileLayer } from '../types';
 import {
   NOAA_ATTRIBUTION_TEXT,
   NOAA_COVERAGE_NOTICE,
   NOAA_NOTICE,
+  NONNA_ATTRIBUTION_TEXT,
+  NONNA_DERIVATIVE_NOTICE,
+  NONNA_NOTICE,
   SEAMARK_ATTRIBUTION_TEXT,
   SEAMARK_NOTICE,
 } from './mapTiles';
@@ -26,6 +29,9 @@ interface MapSettingsModalProps {
   /** Nautical seamark overlay (SCRUM-175), off by default. */
   seamarksVisible: boolean;
   onToggleSeamarks: (visible: boolean) => void;
+  /** CHS NONNA bathymetry for B.C. waters (SCRUM-205), off by default. */
+  bcDepthVisible: boolean;
+  onToggleBcDepth: (visible: boolean) => void;
 }
 
 export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
@@ -43,6 +49,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onToggleWaterCurrents,
   seamarksVisible,
   onToggleSeamarks,
+  bcDepthVisible,
+  onToggleBcDepth,
 }) => {
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
@@ -378,6 +386,42 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
                         seamarksVisible ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* B.C. Depth Toggle (SCRUM-205) */}
+              <div className="pt-2 border-t border-dark-600/70">
+                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-sky-400" />
+                  B.C. Depth (CHS NONNA)
+                </label>
+                <div className="flex items-center justify-between p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 transition">
+                  <div>
+                    <div className="text-xs font-medium text-gray-100">
+                      Show bathymetry contours
+                    </div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      Shaded depth and contours for B.C. waters, where the paper chart has no
+                      coverage. Drawn under the seamarks and the wind layers. {NONNA_ATTRIBUTION_TEXT} ·{' '}
+                      {NONNA_NOTICE}.
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1">{NONNA_DERIVATIVE_NOTICE}</div>
+                  </div>
+                  <button
+                    data-testid="bc-depth-toggle"
+                    type="button"
+                    onClick={() => onToggleBcDepth(!bcDepthVisible)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
+                      bcDepthVisible ? 'bg-sky-500' : 'bg-dark-600'
+                    }`}
+                    aria-pressed={bcDepthVisible}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        bcDepthVisible ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
                   </button>

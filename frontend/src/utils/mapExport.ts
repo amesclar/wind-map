@@ -4,7 +4,12 @@
  * Pure functions so the wording, units, timezone handling and file naming are unit tested
  * without a canvas or a browser.
  */
-import { SEAMARK_ATTRIBUTION_TEXT, SEAMARK_NOTICE } from '../components/mapTiles';
+import {
+  NONNA_ATTRIBUTION_TEXT,
+  NONNA_NOTICE,
+  SEAMARK_ATTRIBUTION_TEXT,
+  SEAMARK_NOTICE,
+} from '../components/mapTiles';
 import type { UnitSystem, WindSpeedUnit } from '../types';
 import { formatStepLabel, floorToHour } from './forecastWindow';
 import { formatTemperatureFromF, roundKnotsInUnit, SPEED_UNIT_LABEL } from './units';
@@ -55,6 +60,8 @@ export interface ExportFooterInput {
   speedUnit: WindSpeedUnit;
   /** Plain-text attribution of the base map, e.g. "© OpenStreetMap contributors © CARTO". */
   attribution: string;
+  /** CHS NONNA depth overlay on: its credit and notice join the footer (SCRUM-205). */
+  bcDepth?: boolean;
   /** Seamark overlay on: its credit and the not-for-navigation notice join the footer (SCRUM-175). */
   seamarks?: boolean;
   version: string;
@@ -68,12 +75,14 @@ export function buildExportFooter({
   unitSystem,
   speedUnit,
   attribution,
+  bcDepth = false,
   seamarks = false,
   version,
 }: ExportFooterInput): string {
   const temperature = unitSystem === 'imperial' ? '°F' : '°C';
+  const depthCredit = bcDepth ? ` · ${NONNA_ATTRIBUTION_TEXT} · ${NONNA_NOTICE}` : '';
   const seamarkCredit = seamarks ? ` · ${SEAMARK_ATTRIBUTION_TEXT} · ${SEAMARK_NOTICE}` : '';
-  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${seamarkCredit} · Wind Map v${version}`;
+  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${depthCredit}${seamarkCredit} · Wind Map v${version}`;
 }
 
 export type ExportExtension = 'png' | 'jpeg' | 'pdf';

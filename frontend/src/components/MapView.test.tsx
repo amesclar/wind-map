@@ -9,7 +9,12 @@ import leaflet, {
   markerAt,
   resetLeafletMock,
 } from '../test/leafletMock';
-import { CHART_COVERAGE_MAX_LAT, CHART_MIN_ZOOM, CHART_PANE } from './mapTiles';
+import {
+  CHART_COVERAGE_MAX_LAT,
+  CHART_MIN_ZOOM,
+  CHART_PANE,
+  NONNA_PANE,
+} from './mapTiles';
 import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
@@ -177,6 +182,53 @@ describe('MapView wind color gradient (SCRUM-124)', () => {
     await waitFor(() => expect(createdMarkers).toHaveLength(1));
     const html = (createdMarkers[0].icon as { html: string }).html;
     expect(html).toContain('wind-barb-halo');
+  });
+});
+
+describe('MapView B.C. depth overlay (SCRUM-205)', () => {
+  const nonnaCalls = () =>
+    leaflet.tileLayer.wms.mock.calls.filter(
+      ([, options]) => (options as { pane?: string } | undefined)?.pane === NONNA_PANE,
+    );
+
+  it('adds NONNA in its own pane between the chart and the seamarks, and removes it', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    const { rerender } = render(<MapView {...baseProps} locations={[]} bcDepthVisible />);
+
+    await waitFor(() => expect(nonnaCalls()).toHaveLength(1));
+    expect(nonnaCalls()[0][0]).toContain('nonna-geoserver.data.chs-shc.ca');
+    const pane = currentMap().panes[NONNA_PANE];
+    expect(pane.style.zIndex).toBe('208');
+    expect(pane.style.pointerEvents).toBe('none');
+
+    const layer = leaflet.tileLayer.wms.mock.results[
+      leaflet.tileLayer.wms.mock.calls.indexOf(nonnaCalls()[0])
+    ].value as { remove: ReturnType<typeof vi.fn> };
+
+    rerender(<MapView {...baseProps} locations={[]} bcDepthVisible={false} />);
+    await waitFor(() => expect(layer.remove).toHaveBeenCalled());
+  });
+
+  it('leaves the seamark layer alone when the depth overlay toggles', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    const { rerender } = render(<MapView {...baseProps} locations={[]} seamarksVisible />);
+    const seamark = createdTileLayers.find((layer) => layer.options?.pane === 'seamarkPane')!;
+
+    rerender(<MapView {...baseProps} locations={[]} seamarksVisible bcDepthVisible />);
+    await waitFor(() => expect(nonnaCalls()).toHaveLength(1));
+    expect(seamark.remove).not.toHaveBeenCalled();
+
+    rerender(<MapView {...baseProps} locations={[]} seamarksVisible bcDepthVisible={false} />);
+    await waitFor(() => expect(nonnaCalls()).toHaveLength(1));
+    expect(seamark.remove).not.toHaveBeenCalled();
+  });
+
+  it('adds no depth layer when it is off', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+    render(<MapView {...baseProps} locations={[]} />);
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(nonnaCalls()).toHaveLength(0);
   });
 });
 
