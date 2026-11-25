@@ -1,9 +1,58 @@
 import { describe, it, expect } from 'vitest';
-import { getTemperatureColor, generateWindBarbSvg } from './WindBarb';
+import {
+  CHART_TEMPERATURE_BANDS,
+  getChartTemperatureColor,
+  getTemperatureColor,
+  generateWindBarbSvg,
+} from './WindBarb';
+
+// WCAG 2.1 relative luminance and contrast against the chart's white water.
+const channel = (value: number) => {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const luminance = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => channel(parseInt(hex.slice(i, i + 2), 16)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrastOnWhite = (hex: string) => 1.05 / (luminance(hex) + 0.05);
 
 // ---------------------------------------------------------------------------
 // getTemperatureColor
 // ---------------------------------------------------------------------------
+
+describe('getChartTemperatureColor (SCRUM-216)', () => {
+  it('keeps the standard ramp\'s bands, in the same order', () => {
+    expect(getChartTemperatureColor(-10)).toBe('#528be6');
+    expect(getChartTemperatureColor(32)).toBe('#528be6');
+    expect(getChartTemperatureColor(33)).toBe('#1a9286');
+    expect(getChartTemperatureColor(50)).toBe('#1a9286');
+    expect(getChartTemperatureColor(51)).toBe('#198c43');
+    expect(getChartTemperatureColor(68)).toBe('#198c43');
+    expect(getChartTemperatureColor(69)).toBe('#8f5c14');
+    expect(getChartTemperatureColor(80)).toBe('#8f5c14');
+    expect(getChartTemperatureColor(81)).toBe('#9d3d0d');
+    expect(getChartTemperatureColor(90)).toBe('#9d3d0d');
+    expect(getChartTemperatureColor(91)).toBe('#9a1611');
+    expect(getChartTemperatureColor(120)).toBe('#9a1611');
+  });
+
+  it('clears 3:1 against white chart water at every step, matching the recorded numbers', () => {
+    for (const band of CHART_TEMPERATURE_BANDS) {
+      const measured = contrastOnWhite(band.color);
+      expect(measured).toBeGreaterThanOrEqual(3);
+      // The table carries the measurement, so a colour edit that skips the measurement fails here.
+      expect(measured).toBeCloseTo(band.contrast, 1);
+    }
+  });
+
+  it('darkens as temperature rises, so the order survives when hue is lost', () => {
+    const luminances = CHART_TEMPERATURE_BANDS.map((band) => luminance(band.color));
+    for (let i = 1; i < luminances.length; i += 1) {
+      expect(luminances[i]).toBeLessThan(luminances[i - 1]);
+    }
+  });
+});
 
 describe('getTemperatureColor', () => {
   it('returns ice blue at or below freezing', () => {

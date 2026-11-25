@@ -13,6 +13,30 @@ export function getTemperatureColor(tempF: number): string {
   return '#ef4444'; // Red
 }
 
+/**
+ * Chart variant of the temperature colour (SCRUM-216): same hue families as `getTemperatureColor`,
+ * stepped darker because the grid barbs sit on white chart water. Each `contrast` was measured on
+ * #ffffff with the WCAG relative-luminance formula at 40 px, where all six now clear 3:1.
+ *
+ * Luminance also falls as temperature rises (0.260 → 0.075), so the bands stay ordered when hue is
+ * lost: under the Viénot 1999 deuteranopia simulation the bands run 0.428, 0.384, 0.342, 0.280,
+ * 0.234, 0.179 — every neighbouring pair at least 0.043 apart. Keep these numbers in step with the
+ * table; the tests compare the recorded contrast against the computed one.
+ */
+export const CHART_TEMPERATURE_BANDS = [
+  { maxF: 32, color: '#528be6', contrast: 3.39 }, // ice blue
+  { maxF: 50, color: '#1a9286', contrast: 3.82 }, // teal
+  { maxF: 68, color: '#198c43', contrast: 4.31 }, // green
+  { maxF: 80, color: '#8f5c14', contrast: 5.66 }, // amber
+  { maxF: 90, color: '#9d3d0d', contrast: 6.76 }, // orange
+  { maxF: Infinity, color: '#9a1611', contrast: 8.41 }, // red
+] as const;
+
+/** The darker ramp used by grid barbs on the paper chart only (SCRUM-216). */
+export function getChartTemperatureColor(tempF: number): string {
+  return CHART_TEMPERATURE_BANDS.find((band) => tempF <= band.maxF)!.color;
+}
+
 export interface WindBarbOutline {
   /** Stroke colour of this pass. */
   color: string;
@@ -27,6 +51,11 @@ export interface WindBarbOptions {
   size?: number;
   showLabel?: boolean;
   colorOverride?: string;
+  /**
+   * Which temperature table to use (SCRUM-216). `chart` is the darker ramp, drawn on the light
+   * chart sheet; everything else keeps the original table.
+   */
+  colorScheme?: 'standard' | 'chart';
   /**
    * Outline passes drawn behind the glyph, outermost first (SCRUM-208). They are real geometry, not
    * a CSS glow: at 32 px a blurred `drop-shadow` turns the barb into a smudge, while a stroked
@@ -107,10 +136,13 @@ export function generateWindBarbSvg(options: WindBarbOptions): string {
     size = 44,
     showLabel = true,
     colorOverride,
+    colorScheme = 'standard',
     outlines = [],
   } = options;
 
-  const color = colorOverride ?? getTemperatureColor(tempF);
+  const color =
+    colorOverride ??
+    (colorScheme === 'chart' ? getChartTemperatureColor(tempF) : getTemperatureColor(tempF));
   const shape = barbFeatures(speedKnots);
 
   // Outlines first so the temperature-coloured glyph paints on top of them.

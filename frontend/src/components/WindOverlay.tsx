@@ -102,6 +102,8 @@ export function generateGridBarbSvg(
   tempF: number | null | undefined,
   size: number = BARB_SIZE,
   outlines?: WindBarbOutline[],
+  /** Paper chart (SCRUM-216): the darker ramp that clears 3:1 on white chart water. */
+  chartBase = false,
 ): string {
   const hasTemp = typeof tempF === 'number';
   return generateWindBarbSvg({
@@ -111,6 +113,7 @@ export function generateGridBarbSvg(
     size,
     showLabel: false,
     colorOverride: hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
+    colorScheme: chartBase ? 'chart' : 'standard',
     outlines,
   });
 }
@@ -127,6 +130,7 @@ export function buildGridBarbIcon(
     pt.temperature_f,
     size,
     BARB_OUTLINES,
+    lightBase,
   );
   // Selected barb gets a highlight ring: white on the dark bases, inverted on the light chart
   // sheet where white would disappear (SCRUM-203).
