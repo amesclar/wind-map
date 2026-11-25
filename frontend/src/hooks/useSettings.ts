@@ -13,6 +13,7 @@ const parseOverlay = (stored: string | null) => stored === null || stored === 't
 const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
 const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
+const parseBcDepth = (stored: string | null) => stored === 'true'; // default off (SCRUM-205)
 
 /** Tile layer, CARTO API key and wind overlay visibility, persisted to localStorage. */
 export function useMapSettings() {
@@ -49,6 +50,11 @@ export function useMapSettings() {
   const [seamarksVisible, setSeamarksVisible] = useLocalStorageState(
     STORAGE_KEYS.seamarks,
     parseSeamarks,
+  );
+  // B.C. depth context (SCRUM-205): CHS NONNA is an extra overseas request per tile, so off too.
+  const [bcDepthVisible, setBcDepthVisible] = useLocalStorageState(
+    STORAGE_KEYS.bcDepth,
+    parseBcDepth,
   );
 
   /** Saving a key switches to the CARTO layer; clearing it keeps the current layer. */
@@ -88,6 +94,8 @@ export function useMapSettings() {
     setWaterCurrentsVisible,
     seamarksVisible,
     setSeamarksVisible,
+    bcDepthVisible,
+    setBcDepthVisible,
     applyServerConfig,
   };
 }

@@ -103,6 +103,63 @@ export function seamarkLayerConfig(): TileLayerConfig {
   };
 }
 
+/**
+ * CHS NONNA bathymetry (SCRUM-205): depth context for B.C. waters, where the NOAA chart has no
+ * coverage. Unlike the chart it is a true overlay - measured 23-81 % clear pixels per tile - so it
+ * draws over a base map instead of replacing one, and at 0.7 the base map, labels and contours all
+ * stay legible. It is a bathymetric overview: shaded depth and contours, no soundings and no aids.
+ */
+export const NONNA_URL = 'https://nonna-geoserver.data.chs-shc.ca/geoserver/wms';
+/** `NONNA 10` is the 10 m product; `NONNA 100` carries nothing at chart zooms that this one lacks. */
+export const NONNA_LAYERS = 'nonna:NONNA 10';
+const NONNA_ATTRIBUTION =
+  'Bathymetry &copy; <a href="https://data.chs-shc.ca/">CHS NONNA</a>';
+/** Plain-text credit for the exported footer and the settings toggle (licence condition). */
+export const NONNA_ATTRIBUTION_TEXT = 'Bathymetry © CHS NONNA';
+/** NONNA is explicitly non-navigational; the toggle and the export both say so. */
+export const NONNA_NOTICE = 'Not for navigation';
+/**
+ * The CHS clickwrap requires a derivative notice wherever its data appears in another product, and
+ * that the inclusion must not read as an endorsement by CHS or DFO. The full wording is in
+ * `requirements.md`; this is the sentence the toggle carries.
+ */
+export const NONNA_DERIVATIVE_NOTICE =
+  'This product has been produced by Wind Map and includes data provided by the Canadian Hydrographic Service of the Department of Fisheries and Oceans. The incorporation of that data does NOT constitute an endorsement by CHS or DFO of this product.';
+/**
+ * Between the chart (205) and the seamarks (210) in its own pane, not the seamark pane: the depth
+ * shading then stays under the aids whatever order the two overlays are toggled in.
+ */
+export const NONNA_PANE = 'nonnaPane';
+/** Measured in SCRUM-200: contours stay legible and the dark base map still reads through. */
+export const NONNA_OPACITY = 0.7;
+/** Below z8 the layer carries nothing useful, so it is not requested at all. */
+export const NONNA_MIN_ZOOM = 8;
+/** NONNA 10 is published to z12; above that the z12 tiles upscale instead of coming back blank. */
+export const NONNA_MAX_NATIVE_ZOOM = 12;
+
+/** WMS request for the CHS NONNA overlay, drawn at `NONNA_OPACITY` in its own pane. */
+export function nonnaLayerConfig(): TileLayerConfig {
+  return {
+    kind: 'wms',
+    url: NONNA_URL,
+    options: {
+      layers: NONNA_LAYERS,
+      format: 'image/png',
+      transparent: true,
+      // NONNA runs 1.3.0, where EPSG:3857 goes in `CRS=`; NOAA's 1.1.1 chart wants `SRS=`.
+      version: '1.3.0',
+      crs: L.CRS.EPSG3857,
+      attribution: NONNA_ATTRIBUTION,
+      pane: NONNA_PANE,
+      opacity: NONNA_OPACITY,
+      crossOrigin: true,
+      minZoom: NONNA_MIN_ZOOM,
+      maxNativeZoom: NONNA_MAX_NATIVE_ZOOM,
+      maxZoom: 19,
+    },
+  };
+}
+
 /** URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set. */
 export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLayerConfig {
   switch (layer) {
