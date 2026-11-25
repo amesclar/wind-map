@@ -29,8 +29,8 @@ next_extreme}`. `points` is the three-day hourly series in metres; `datum` is `m
 point or one outside the model returns no points and no extremes.
 
 1.4 `last_extreme` is the nearest high/low at or before the selected hour; `next_extreme` is the
-first one after it. Each is `{type: high|low, time, height_m}` with the time refined to the
-minute.
+first one after it and `next_extreme_after` the following one (SCRUM-250). Each is
+`{type: high|low, time, height_m}` with the time refined to the minute.
 
 1.5 Upstream network/HTTP failures are 502; a persistent 429 keeps the currents' 503
 `open_meteo_quota_exhausted` shape, without leaking the upstream URL.
@@ -55,9 +55,10 @@ made until a pop-up opens.
 current hour). A module-level cache de-duplicates requests per rounded point and hour, including
 in-flight ones; failures are not cached and leave the rest of the pop-up unchanged.
 
-3.3 The block reads `Tide · above MSL`, the selected hour's height, then `last low`/`last high`
-and `next low`/`next high` with local `HH:mm` times. The first row's state reads `now` for the
-current hour and otherwise the same label as the 🕒 row.
+3.3 The block reads `Tide · above MSL`, the selected hour's height, then the last, next and
+following high/low with local `HH:mm` times; the fourth row is omitted when
+`next_extreme_after` is null. The first row's state reads `now` for the current hour and otherwise
+the same label as the 🕒 row.
 
 3.4 Heights are metres in the metric display and feet in the imperial one, one decimal.
 

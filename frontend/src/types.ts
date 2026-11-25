@@ -171,4 +171,6 @@ export interface TidePointResponse {
   points: TideSample[];
   last_extreme: TideExtreme | null;
   next_extreme: TideExtreme | null;
+  /** The extreme after the next one (SCRUM-250). */
+  next_extreme_after: TideExtreme | null;
 }

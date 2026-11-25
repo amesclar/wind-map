@@ -14,6 +14,7 @@ const tide: TidePointResponse = {
   points: [{ time: '2026-11-25T12:00', height_m: 1.4 }],
   last_extreme: { type: 'low', time: '2026-11-25T03:40', height_m: 0.2 },
   next_extreme: { type: 'high', time: '2026-11-25T15:38', height_m: 2.3 },
+  next_extreme_after: { type: 'low', time: '2026-11-26T05:12', height_m: -0.4 },
 };
 
 describe('tide heights and times', () => {
@@ -29,7 +30,7 @@ describe('tide heights and times', () => {
 });
 
 describe('tide block (SCRUM-195)', () => {
-  it('names the datum and the caveat, and shows now with the last low and next high', () => {
+  it('names the datum and the caveat, and shows now with the last, next and following extremes', () => {
     const html = buildTideBlockHtml(tide, 'imperial', true, null);
 
     expect(html).toContain('Tide · above MSL');
@@ -38,11 +39,25 @@ describe('tide block (SCRUM-195)', () => {
     expect(html).toContain('now');
     expect(html).toContain('last low');
     expect(html).toContain('next high');
+    expect(html).toContain('-1.3 ft');
     expect(html).toContain('▲');
     expect(html).toContain('▼');
     expect(html).not.toContain('⬆');
     expect(html).not.toContain('⬇');
-    expect(html).toContain('aria-hidden="true"');
+    // The current row's empty gutter plus one marker per extreme.
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(4);
+  });
+
+  it('omits the fourth reading when there is no second future extreme', () => {
+    const html = buildTideBlockHtml(
+      { ...tide, next_extreme_after: null },
+      'imperial',
+      true,
+      null,
+    );
+
+    expect(html).not.toContain('-1.3 ft');
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
   });
 
   it('names the selected hour instead of now for a forecast hour', () => {

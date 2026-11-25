@@ -74,7 +74,7 @@ async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> 
         cached = await _fetch_window(lat, lon, moment)
 
     samples = [Height(_parse(hour), height) for hour in hours if (height := cached.get(hour)) is not None]
-    last, following = derive_extremes(samples, moment)
+    last, following, after = derive_extremes(samples, moment)
     return TidePointResponse(
         latitude=lat,
         longitude=lon,
@@ -84,6 +84,7 @@ async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> 
         points=[TideSample(time=_stamp(sample.moment), height_m=round(sample.height_m, 3)) for sample in samples],
         last_extreme=last,
         next_extreme=following,
+        next_extreme_after=after,
     )
 
 
@@ -101,8 +102,10 @@ def _refine(previous: Height, current: Height, following: Height, kind: str) -> 
     return TideExtreme(type=kind, time=_stamp(peak), height_m=round(height, 3))
 
 
-def derive_extremes(samples: list[Height], moment: datetime) -> tuple[TideExtreme | None, TideExtreme | None]:
-    """Nearest high/low at or before `moment`, and the first one after it.
+def derive_extremes(
+    samples: list[Height], moment: datetime
+) -> tuple[TideExtreme | None, TideExtreme | None, TideExtreme | None]:
+    """Nearest high/low at or before `moment`, and the first two after it.
 
     A sample above both neighbours is a high and one below both is a low, so a flat or
     single-slope stretch never invents an extreme and the series edges are not extrapolated.
@@ -116,8 +119,10 @@ def derive_extremes(samples: list[Height], moment: datetime) -> tuple[TideExtrem
             extremes.append(_refine(previous, current, following, "low"))
 
     last = next((extreme for extreme in reversed(extremes) if _parse(extreme.time) <= moment), None)
-    following = next((extreme for extreme in extremes if _parse(extreme.time) > moment), None)
-    return last, following
+    upcoming = [extreme for extreme in extremes if _parse(extreme.time) > moment]
+    following = upcoming[0] if upcoming else None
+    after = upcoming[1] if len(upcoming) > 1 else None
+    return last, following, after
 
 
 def _read_window(lat: float, lon: float, hours: list[str]) -> dict[str, float | None]:
