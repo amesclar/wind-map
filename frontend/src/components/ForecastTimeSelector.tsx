@@ -160,7 +160,7 @@ export const ForecastTimeSelector: React.FC<ForecastTimeSelectorProps> = ({
             <span data-testid="forecast-time-label" className="truncate text-xs font-semibold text-gray-100">
               {label}
             </span>
-            <span data-testid="forecast-model-info" className="truncate text-[10px] text-gray-400">
+            <span data-testid="forecast-model-info" className="truncate text-xs text-gray-400">
               {modelLine}
             </span>
           </div>
