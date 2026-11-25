@@ -5,6 +5,9 @@ Values come from Open-Meteo's Marine API (MeteoFrance SMOC via Copernicus Marine
 
 - It returns `null` over land and outside the model domain. Those nodes are dropped from responses
   and cached as empty rows, so an inland view is not fetched again on every pan.
+- It answers each requested point with its nearest sea cell and returns that cell's coordinates.
+  Values are placed at the cell, not the request (SCRUM-238), so a coastal point never gets a
+  chevron on land; points sharing a cell share one chevron.
 - Velocity is converted to knots by the request itself (`wind_speed_unit=kn`), matching the wind
   endpoints; no km/h maths happens here.
 
@@ -12,7 +15,9 @@ The cache is keyed by (rounded lat, lon, hour), and one hourly request stores ev
 UTC day from the same response, as the wind grid does (SCRUM-166).
 """
 
+import sqlite3
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -34,8 +39,20 @@ CURRENT_VARIABLES = ("ocean_current_velocity", "ocean_current_direction")
 MARINE_PARAMS = {"wind_speed_unit": "kn"}
 POINT_SERIES_HOURS = 48
 
-# A cached value pair, or None when the point has no current there (land / outside the domain).
-Value = tuple[float, float] | None
+
+@dataclass(frozen=True)
+class CurrentValue:
+    """A current value and the Marine model cell it came from (SCRUM-238)."""
+
+    latitude: float
+    longitude: float
+    velocity_knots: float
+    direction_deg: float
+
+
+# A cached value with its cell, or None when the point has no current there (land / outside
+# the domain).
+Value = CurrentValue | None
 
 
 async def get_grid_currents(
@@ -107,11 +124,25 @@ async def get_point_currents(
         result.append(
             CurrentSeriesPoint(
                 time=hour_key(moment),
-                velocity_knots=value[0],
-                direction_deg=value[1],
+                velocity_knots=value.velocity_knots,
+                direction_deg=value.direction_deg,
             )
         )
     return result
+
+
+def _cached_value(row: sqlite3.Row) -> Value:
+    """One cached value with its cell, or None for an empty row ("checked, no current")."""
+    if row["velocity_knots"] is None:
+        return None
+    # The stored cell places the chevron exactly as the live response did (SCRUM-238). The key
+    # is a fallback for a row written before the schema bump; the migration replaces those.
+    return CurrentValue(
+        latitude=row["cell_lat"] if row["cell_lat"] is not None else row["lat_key"],
+        longitude=row["cell_lon"] if row["cell_lon"] is not None else row["lon_key"],
+        velocity_knots=row["velocity_knots"],
+        direction_deg=row["direction_deg"],
+    )
 
 
 def _read_cached_points(
@@ -125,16 +156,12 @@ def _read_cached_points(
     placeholders = ",".join("?" for _ in lat_keys)
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT lat_key, lon_key, velocity_knots, direction_deg FROM grid_currents_cache "  # noqa: S608
+            "SELECT lat_key, lon_key, velocity_knots, direction_deg, cell_lat, cell_lon "  # noqa: S608
+            "FROM grid_currents_cache "
             f"WHERE hour=? AND expires_at>? AND lat_key IN ({placeholders})",
             (hour, now, *lat_keys),
         ).fetchall()
-    return {
-        (row["lat_key"], row["lon_key"]): (
-            None if row["velocity_knots"] is None else (row["velocity_knots"], row["direction_deg"])
-        )
-        for row in rows
-    }
+    return {(row["lat_key"], row["lon_key"]): _cached_value(row) for row in rows}
 
 
 def _read_series(
@@ -149,14 +176,12 @@ def _read_series(
     placeholders = ",".join("?" for _ in hours)
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT hour, velocity_knots, direction_deg FROM grid_currents_cache "  # noqa: S608
+            "SELECT hour, lat_key, lon_key, velocity_knots, direction_deg, cell_lat, cell_lon "  # noqa: S608
+            "FROM grid_currents_cache "
             f"WHERE lat_key=? AND lon_key=? AND hour IN ({placeholders}) AND expires_at>?",
             (lat_key, lon_key, *hours, time.time()),
         ).fetchall()
-    return {
-        row["hour"]: (None if row["velocity_knots"] is None else (row["velocity_knots"], row["direction_deg"]))
-        for row in rows
-    }
+    return {row["hour"]: _cached_value(row) for row in rows}
 
 
 def _points_from(
@@ -164,18 +189,28 @@ def _points_from(
     cached: dict[tuple[float, float], Value],
     hour: str,
 ) -> list[CurrentPoint]:
-    """Requested coordinates with data, in request order; points without a current are dropped."""
+    """One point per model cell with data, in request order (SCRUM-238).
+
+    Points without a current are dropped. Several requested points can snap to the same cell,
+    especially at high zoom, so each cell is returned once and carries its own coordinates: the
+    chevron sits on water and its pop-up names the true source of the value.
+    """
     result: list[CurrentPoint] = []
+    seen: set[tuple[float, float]] = set()
     for lat, lon in points:
         value = cached.get(coord_key(lat, lon))
         if value is None:
             continue
+        cell = (round(value.latitude, 6), round(value.longitude, 6))
+        if cell in seen:
+            continue
+        seen.add(cell)
         result.append(
             CurrentPoint(
-                latitude=lat,
-                longitude=lon,
-                velocity_knots=value[0],
-                direction_deg=value[1],
+                latitude=value.latitude,
+                longitude=value.longitude,
+                velocity_knots=value.velocity_knots,
+                direction_deg=value.direction_deg,
                 time=None if hour == "current" else hour,
             )
         )
@@ -193,19 +228,26 @@ def _store(
     rows = []
     for (lat, lon), value in zip(points, values, strict=True):
         lat_key, lon_key = coord_key(lat, lon)
-        velocity, direction = (None, None) if value is None else value
-        rows.append((lat_key, lon_key, hour, now, expires_at, velocity, direction))
+        if value is None:
+            velocity, direction, cell_lat, cell_lon = None, None, None, None
+        else:
+            velocity, direction = value.velocity_knots, value.direction_deg
+            cell_lat, cell_lon = value.latitude, value.longitude
+        rows.append((lat_key, lon_key, hour, now, expires_at, velocity, direction, cell_lat, cell_lon))
     with db_connection() as conn:
         conn.executemany(
             """
             INSERT INTO grid_currents_cache
-                (lat_key, lon_key, hour, cached_at, expires_at, velocity_knots, direction_deg)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (lat_key, lon_key, hour, cached_at, expires_at, velocity_knots, direction_deg,
+                 cell_lat, cell_lon)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(lat_key, lon_key, hour) DO UPDATE SET
                 cached_at=excluded.cached_at,
                 expires_at=excluded.expires_at,
                 velocity_knots=excluded.velocity_knots,
-                direction_deg=excluded.direction_deg
+                direction_deg=excluded.direction_deg,
+                cell_lat=excluded.cell_lat,
+                cell_lon=excluded.cell_lon
             """,
             rows,
         )
@@ -229,11 +271,25 @@ def _as_list(data: object, expected: int) -> list[dict]:
     return items  # type: ignore[return-value]
 
 
-def _value(velocity: object, direction: object) -> Value:
-    """A value pair, or None when the API has no current for that point or hour."""
+def _cell(item: dict, fallback: tuple[float, float]) -> tuple[float, float]:
+    """The model cell Open-Meteo answered with; the request is the fallback if it omits it."""
+    lat = item.get("latitude")
+    lon = item.get("longitude")
+    if lat is None or lon is None:
+        return fallback
+    return (float(lat), float(lon))
+
+
+def _value(velocity: object, direction: object, cell: tuple[float, float]) -> Value:
+    """A value at its model cell, or None when the API has no current for that point or hour."""
     if velocity is None or direction is None:
         return None
-    return (float(velocity), float(direction))  # type: ignore[arg-type]
+    return CurrentValue(
+        latitude=cell[0],
+        longitude=cell[1],
+        velocity_knots=float(velocity),  # type: ignore[arg-type]
+        direction_deg=float(direction),  # type: ignore[arg-type]
+    )
 
 
 async def _fetch_current(points: list[tuple[float, float]]) -> list[Value]:
@@ -252,8 +308,9 @@ async def _fetch_current(points: list[tuple[float, float]]) -> list[Value]:
         _value(
             (item.get("current") or {}).get("ocean_current_velocity"),
             (item.get("current") or {}).get("ocean_current_direction"),
+            _cell(item, point),
         )
-        for item in items
+        for item, point in zip(items, points, strict=True)
     ]
 
 
@@ -288,10 +345,11 @@ async def _fetch_hourly(
         timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
     )
     items = _as_list(data, len(points))
+    cells = [_cell(item, point) for item, point in zip(items, points, strict=True)]
     series: dict[str, list[Value]] = {}
     for index, stamp in enumerate(_series_times(items)):
         values: list[Value] = []
-        for item in items:
+        for item, cell in zip(items, cells, strict=True):
             hourly = item.get("hourly") or {}
             velocity = hourly.get("ocean_current_velocity") or []
             direction = hourly.get("ocean_current_direction") or []
@@ -299,6 +357,7 @@ async def _fetch_hourly(
                 _value(
                     velocity[index] if index < len(velocity) else None,
                     direction[index] if index < len(direction) else None,
+                    cell,
                 )
             )
         series[_series_hour(stamp)] = values

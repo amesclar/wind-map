@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 #   2 → 3 (SCRUM-115): every cache row is keyed by the forecast hour too ('current' = live).
 #   3 → 4 (SCRUM-96): ocean-current grid cache, keyed by hour like the wind grid.
 #   4 → 5 (SCRUM-210): the wind grid cache keeps the gust too, so barb pop-ups show it.
-SCHEMA_VERSION = 5
+#   5 → 6 (SCRUM-238): the currents cache keeps the model cell each value came from.
+SCHEMA_VERSION = 6
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -99,6 +100,10 @@ CREATE TABLE IF NOT EXISTS grid_currents_cache (
     expires_at     REAL NOT NULL,
     velocity_knots REAL,
     direction_deg  REAL,
+    -- The Marine model cell the value came from (SCRUM-238): Open-Meteo snaps a requested
+    -- point to its nearest sea cell, and the chevron is drawn here instead of on land.
+    cell_lat       REAL,
+    cell_lon       REAL,
     PRIMARY KEY (lat_key, lon_key, hour)
 );
 """
