@@ -45,18 +45,31 @@ export function useWindGrid(
   onLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void,
   /** Called once when Open-Meteo's request limit stops the grid (SCRUM-170). */
   onQuotaExhausted?: (resetAt: string | null) => void,
+  /**
+   * In-flight report for the single-view export (SCRUM-242): true from the moment a view's grid
+   * request starts until its points have been drawn. Reported from an effect, so `false` arrives
+   * after the commit that creates the barbs and an export waiting on it cannot capture first.
+   */
+  onLoadingChange?: (loading: boolean) => void,
 ): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
 
   useEffect(() => {
     if (!map) return;
     if (!enabled) {
       setPoints([]);
+      setLoading(false);
       return;
     }
 
     let lastKey = '';
     let controller: AbortController | null = null;
+    let disposed = false;
 
     const refresh = async () => {
       const bounds = map.getBounds();
@@ -74,6 +87,7 @@ export function useWindGrid(
       controller?.abort();
       const current = new AbortController();
       controller = current;
+      setLoading(true);
       try {
         const next = await fetchWindGrid(
           { ...box, cols, rows, model, time: validTime }, 
@@ -92,6 +106,13 @@ export function useWindGrid(
           return;
         }
         console.error('Failed to load wind grid:', err);
+      } finally {
+        // A superseded request must not report the newer one as finished, and a torn-down
+        // effect must not report anything at all.
+        if (!disposed && controller === current) {
+          controller = null;
+          setLoading(false);
+        }
       }
     };
 
@@ -99,6 +120,7 @@ export function useWindGrid(
     map.on('moveend', refresh);
     map.on('zoomend', refresh);
     return () => {
+      disposed = true;
       map.off('moveend', refresh);
       map.off('zoomend', refresh);
       controller?.abort();

@@ -33,6 +33,15 @@ import { APP_VERSION } from '../version';
 export const RANGE_FRAME_TIMEOUT_MS = 60_000;
 const RANGE_POLL_MS = 100;
 
+/**
+ * How long a single-view export waits for the current view's wind grid before capturing anyway
+ * (SCRUM-242). The barbs are drawn from that grid and a pan or zoom leaves them off the map until
+ * it lands, so an export started too early used to save a barb-less image. A grid that never
+ * settles must still not block the save.
+ */
+export const VIEW_GRID_TIMEOUT_MS = 5_000;
+const VIEW_GRID_POLL_MS = 100;
+
 /** Everything the export pipeline reads from the app (SCRUM-174). */
 export interface MapExportSettings {
   /** The map element the image is captured from (SCRUM-116). */
@@ -96,6 +105,8 @@ export function useMapExport({
   } | null>(null);
   // Latest accepted grid response per hour, the range loop's readiness signal.
   const gridFrameRef = useRef<{ validTime: string | null; points: GridWindPoint[] } | null>(null);
+  // The current view's grid request is in flight; the single-view export waits for it (SCRUM-242).
+  const gridLoadingRef = useRef(false);
   const weatherLoadingRef = useRef(weatherLoading);
   weatherLoadingRef.current = weatherLoading;
 
@@ -154,6 +165,19 @@ export function useMapExport({
       seamarksVisible,
     ],
   );
+
+  /**
+   * Wait (bounded) for the current view's grid, so the barbs are in the image (SCRUM-242). The
+   * report comes from `useWindGrid` after the commit that draws the markers, so when this returns
+   * the barbs are already on the map.
+   */
+  const waitForViewGrid = useCallback(async () => {
+    if (!windOverlayVisible && !windColorOverlayVisible) return;
+    const deadline = Date.now() + VIEW_GRID_TIMEOUT_MS;
+    while (gridLoadingRef.current && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, VIEW_GRID_POLL_MS));
+    }
+  }, [windOverlayVisible, windColorOverlayVisible]);
 
   /** Resolve once the map shows `hour` with that hour's grid data (when drawn) and its tiles. */
   const waitForHour = useCallback(
@@ -264,6 +288,9 @@ export function useMapExport({
       try {
         // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
         const content = buildContent(forecastTime, options.fileName, capturedAt);
+        // The barbs come from a grid that is refetched after every pan or zoom; capture before
+        // it lands and the image shows the chart without them (SCRUM-242).
+        await waitForViewGrid();
         if (options.format === 'pdf') {
           await saveMapPdf(element, content, {
             fileName: content.fileName,
@@ -285,12 +312,17 @@ export function useMapExport({
         setSavingMap(false);
       }
     },
-    [mapContainerRef, forecastTime, selectedModelInfo, buildContent, runRangeExport],
+    [mapContainerRef, forecastTime, selectedModelInfo, buildContent, runRangeExport, waitForViewGrid],
   );
 
   /** Every accepted grid response doubles as the range loop's readiness signal (SCRUM-155). */
   const handleGridLoaded = useCallback((frame: { validTime: string | null; points: GridWindPoint[] }) => {
     gridFrameRef.current = frame;
+  }, []);
+
+  /** Grid fetch state from `useWindGrid`, reported after the commit that draws the barbs (SCRUM-242). */
+  const handleGridLoadingChange = useCallback((loading: boolean) => {
+    gridLoadingRef.current = loading;
   }, []);
 
   const handleCancelRange = useCallback(() => rangeAbortRef.current?.abort(), []);
@@ -334,5 +366,6 @@ export function useMapExport({
     handleCancelRange,
     handleSaveCaptured,
     handleGridLoaded,
+    handleGridLoadingChange,
   };
 }

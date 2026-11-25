@@ -77,6 +77,8 @@ interface MapViewProps {
   onGridLoaded?: (frame: { validTime: string | null; points: GridWindPoint[] }) => void;
   /** Open-Meteo's request limit stopped the grid; carries its reset instant (SCRUM-170). */
   onGridQuotaExhausted?: (resetAt: string | null) => void;
+  /** Whether the current view's grid is in flight, so an export can wait for its barbs (SCRUM-242). */
+  onGridLoadingChange?: (loading: boolean) => void;
 }
 
 interface LocationMarker {
@@ -171,6 +173,7 @@ export const MapView: React.FC<MapViewProps> = ({
   containerRef,
   onGridLoaded,
   onGridQuotaExhausted,
+  onGridLoadingChange,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -213,6 +216,7 @@ export const MapView: React.FC<MapViewProps> = ({
     validTime,
     onGridLoaded,
     onGridQuotaExhausted,
+    onGridLoadingChange,
   );
   // Currents have their own fetch and horizon: the layer follows the same selected hour
   // (SCRUM-99) but not the weather model or the wind layers.
