@@ -61,20 +61,40 @@ def test_short_hourly_series_yields_fewer_slices():
     ]
 
 
-def test_missing_or_short_variable_series_default_to_zero():
+def test_missing_or_short_variable_series_stay_null():
+    """A missing value is absence, not calm wind and 32 °F (SCRUM-225)."""
     raw = forecast_payload(time="2026-11-12T12:00")
     del raw["hourly"]["wind_gusts_10m"]
     raw["hourly"]["temperature_2m"] = raw["hourly"]["temperature_2m"][:14]
 
     parsed = parse_forecast(raw)
 
-    assert parsed.points[1].wind_gust_knots == 0.0  # series missing
-    assert parsed.points[1].temperature_c == 0.0  # index 15 past the short series
+    assert parsed.points[1].wind_gust_knots is None  # series missing
+    assert parsed.points[1].temperature_c is None  # index 15 past the short series
+    assert parsed.points[1].temperature_f is None
     assert parsed.points[1].wind_speed_knots == 15.0  # other values unaffected
 
 
-def test_empty_response_gives_zeroed_current_and_no_slices():
+def test_missing_current_wind_fields_are_not_zero():
+    raw = forecast_payload(
+        wind_speed_10m=None,
+        wind_direction_10m=None,
+        temperature_2m=None,
+        wind_gusts_10m=None,
+    )
+
+    parsed = parse_forecast(raw)
+
+    assert parsed.current.wind_speed_knots is None
+    assert parsed.current.wind_direction_deg is None
+    assert parsed.current.wind_direction_cardinal is None
+    assert parsed.current.temperature_c is None
+    assert parsed.current.temperature_f is None
+
+
+def test_empty_response_gives_null_current_and_no_slices():
     parsed = parse_forecast({})
 
     assert parsed.points == []
-    assert parsed.current.wind_speed_knots == 0.0
+    assert parsed.current.wind_speed_knots is None
+    assert parsed.current.temperature_f is None

@@ -3,7 +3,7 @@ import L from 'leaflet';
 import type { GridWindPoint, SelectedGridPoint, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
-import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
+import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF, NO_DATA } from '../utils/units';
 import { escapeHtml } from '../utils/html';
 import { CHART_MIN_ZOOM } from './mapTiles';
 
@@ -35,6 +35,17 @@ function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boo
 /** Fallback color when a grid point has no temperature. */
 export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
 
+/** A point that can be drawn: a barb needs both a speed and a direction (SCRUM-225). */
+export type DrawableGridPoint = GridWindPoint & {
+  wind_speed_knots: number;
+  wind_direction_deg: number;
+};
+
+/** Missing speed or direction means no barb, not a calm one (SCRUM-225). */
+export function hasWindData(pt: GridWindPoint): pt is DrawableGridPoint {
+  return typeof pt.wind_speed_knots === 'number' && typeof pt.wind_direction_deg === 'number';
+}
+
 /**
  * The outline pass every barb gets (SCRUM-208, SCRUM-218): one tight dark rim drawn as an SVG stroke
  * behind the glyph. The same rim works on the light chart — it separates a green or teal barb from
@@ -54,14 +65,14 @@ const NO_KEEP_OUT: ReadonlyArray<{ latitude: number; longitude: number }> = [];
  * barb. Pure and pixel-based, so it is testable without a map; other bases pass no options and get
  * the array back untouched.
  */
-export function declutterGridPoints(
-  points: GridWindPoint[],
+export function declutterGridPoints<T extends GridWindPoint>(
+  points: T[],
   project: (point: { latitude: number; longitude: number }) => { x: number; y: number },
   {
     thin = false,
     keepOut = NO_KEEP_OUT,
-  }: { thin?: boolean; keepOut?: ReadonlyArray<{ latitude: number; longitude: number }> } = {},
-): GridWindPoint[] {
+  }: { thin?: boolean; keepOut?: ReadonlyArray<{ latitude: number; longitude: number }>   } = {},
+): T[] {
   if (!thin && keepOut.length === 0) return points;
   // Row/column rather than array index, so a checkerboard stays a checkerboard whatever order the
   // grid response arrives in.
@@ -119,7 +130,7 @@ export function generateGridBarbSvg(
 }
 
 export function buildGridBarbIcon(
-  pt: GridWindPoint,
+  pt: DrawableGridPoint,
   isSelected: boolean,
   lightBase = false,
 ): L.DivIcon {
@@ -157,18 +168,22 @@ export function buildGridPointPopup(
   dirDisplay: WindDirDisplay = 'barb',
   timeLabel: string | null = null,
 ): string {
-  const speed = formatKnotsInUnit(pt.wind_speed_knots, speedUnit);
+  const speedKnots = pt.wind_speed_knots;
+  const directionDeg = pt.wind_direction_deg;
+  const hasWind = typeof speedKnots === 'number' && typeof directionDeg === 'number';
+  const speed = hasWind ? formatKnotsInUnit(speedKnots, speedUnit) : NO_DATA;
   // Gusts come with the grid point (SCRUM-210); older cached frames may not have one.
   const gust =
     typeof pt.wind_gust_knots === 'number' ? formatKnotsInUnit(pt.wind_gust_knots, speedUnit) : null;
   const temperature =
-    typeof pt.temperature_f === 'number' ? formatTemperatureFromF(pt.temperature_f, unitSystem) : '--';
-  const direction =
-    dirDisplay === 'barb'
-      ? generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, 28)
+    typeof pt.temperature_f === 'number' ? formatTemperatureFromF(pt.temperature_f, unitSystem) : NO_DATA;
+  const direction = !hasWind
+    ? NO_DATA
+    : dirDisplay === 'barb'
+      ? generateGridBarbSvg(speedKnots, directionDeg, pt.temperature_f, 28)
       : dirDisplay === 'cardinal'
-        ? `${degreesToCardinal(pt.wind_direction_deg)} (${Math.round(pt.wind_direction_deg)}°)`
-        : formatDegreesTrue(pt.wind_direction_deg);
+        ? `${degreesToCardinal(directionDeg)} (${Math.round(directionDeg)}°)`
+        : formatDegreesTrue(directionDeg);
   return `
     <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
       <div style="font-weight: 700; color: #f3f4f6; margin-bottom: 2px;">Wind point</div>
@@ -199,7 +214,7 @@ export function WindOverlay({
   timeLabel = null,
 }: WindOverlayProps) {
   // Each point is stored with its marker, so icon updates can't get out of step.
-  const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
+  const entriesRef = useRef<{ point: DrawableGridPoint; marker: L.Marker }[]>([]);
   const onSelectRef = useLatest(onGridPointSelect);
   const selectedRef = useLatest(selectedPoint);
   const lightBaseRef = useLatest(lightBase);
@@ -211,8 +226,10 @@ export function WindOverlay({
       const pixel = map.latLngToContainerPoint([point.latitude, point.longitude]);
       return { x: pixel.x, y: pixel.y };
     };
+    // A point the model has no value for draws no barb at all (SCRUM-225).
+    const drawable = points.filter(hasWindData);
     // The chart is dense at its native resolution; deeper views spread out on their own (SCRUM-211).
-    const shown = declutterGridPoints(points, project, {
+    const shown = declutterGridPoints(drawable, project, {
       thin: declutter && map.getZoom() <= CHART_MIN_ZOOM,
       keepOut,
     });

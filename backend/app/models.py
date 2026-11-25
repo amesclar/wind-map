@@ -31,19 +31,22 @@ class GeocodeResult(BaseModel):
 
 
 class WeatherForecastPoint(BaseModel):
+    """One forecast slice. Wind and temperature stay null when Open-Meteo has no value
+    (SCRUM-225); 0 kn or 32 °F would be displayed as a real calm."""
+
     time: str
-    temperature_c: float
-    temperature_f: float
-    wind_speed_knots: float
-    wind_speed_kmh: float
-    wind_speed_mph: float
-    wind_speed_ms: float
-    wind_gust_knots: float
-    wind_gust_kmh: float
-    wind_gust_mph: float
-    wind_gust_ms: float
-    wind_direction_deg: float
-    wind_direction_cardinal: str
+    temperature_c: float | None
+    temperature_f: float | None
+    wind_speed_knots: float | None
+    wind_speed_kmh: float | None
+    wind_speed_mph: float | None
+    wind_speed_ms: float | None
+    wind_gust_knots: float | None
+    wind_gust_kmh: float | None
+    wind_gust_mph: float | None
+    wind_gust_ms: float | None
+    wind_direction_deg: float | None
+    wind_direction_cardinal: str | None
     humidity: float
     weather_code: int
 
@@ -72,10 +75,12 @@ class GridWindPoint(BaseModel):
 
     latitude: float
     longitude: float
-    wind_speed_knots: float
+    # SCRUM-225: all three stay null when Open-Meteo has no value for the point; a 0 kn /
+    # 0° / 32 °F point would read as a real calm.
+    wind_speed_knots: float | None
     # Gust for the same moment (SCRUM-210); null when Open-Meteo has none for the point.
     wind_gust_knots: float | None = None
-    wind_direction_deg: float
+    wind_direction_deg: float | None
     temperature_f: float | None = None
     # Forecast hour these values describe (SCRUM-115); null means current conditions.
     time: str | None = None

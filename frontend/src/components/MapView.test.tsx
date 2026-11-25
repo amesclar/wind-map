@@ -6,7 +6,7 @@ import {
   WIND_COLOR_OPACITY_ON_CHART,
   WIND_COLOR_PANE,
 } from './WindColorOverlay';
-import { makeLocation } from '../test/fixtures';
+import { makeForecast, makeLocation, makePoint } from '../test/fixtures';
 import leaflet, {
   createdMarkers,
   createdPolylines,
@@ -755,5 +755,56 @@ describe('MapView saved-location marker updates (SCRUM-92)', () => {
     const { unmount } = render(<MapView {...baseProps} locations={[makeLocation()]} />);
     unmount();
     expect(createdMarkers[0].remove).toHaveBeenCalled();
+  });
+});
+
+describe('MapView missing wind data (SCRUM-225)', () => {
+  const barbMarkers = () =>
+    createdMarkers.filter((marker) =>
+      ((marker.icon as { html?: string }).html ?? '').includes('data-wind-barb'),
+    );
+
+  it('draws no barb and names the model when the whole view has no data', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48, longitude: -122, wind_speed_knots: null, wind_direction_deg: null, temperature_f: null },
+      { latitude: 49, longitude: -121, wind_speed_knots: null, wind_direction_deg: null, temperature_f: null },
+    ]);
+    render(<MapView {...baseProps} locations={[]} modelName="ECMWF IFS" windOverlayVisible />);
+
+    await waitFor(() => expect(screen.getByTestId('no-wind-data-notice')).toBeTruthy());
+    expect(screen.getByTestId('no-wind-data-notice').textContent).toContain('ECMWF IFS');
+    expect(barbMarkers()).toHaveLength(0);
+  });
+
+  it('shows no notice when the view has wind data', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+    ]);
+    render(<MapView {...baseProps} locations={[]} windOverlayVisible />);
+
+    await waitFor(() => expect(barbMarkers()).toHaveLength(1));
+    expect(screen.queryByTestId('no-wind-data-notice')).toBeNull();
+  });
+
+  it('shows a no-data marker and "No data" values for a location without wind', () => {
+    const location = makeLocation({ id: 5 });
+    const weather = makeForecast({
+      location_id: 5,
+      current: makePoint(0, 0, 0, {
+        wind_speed_knots: null,
+        wind_direction_deg: null,
+        wind_gust_knots: null,
+        temperature_c: null,
+        temperature_f: null,
+      }),
+    });
+    render(<MapView {...baseProps} locations={[location]} weatherMap={{ 5: weather }} />);
+
+    const marker = createdMarkers.find(
+      (entry) => ((entry.icon as { html?: string }).html ?? '').includes('No wind data'),
+    );
+    expect(marker).toBeTruthy();
+    expect(marker!.popupHtml).toContain('No data');
+    expect(marker!.popupHtml).not.toContain('32°F');
   });
 });

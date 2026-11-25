@@ -7,6 +7,7 @@ import {
   generateGridBarbSvg,
   declutterGridPoints,
   GRID_BARB_FALLBACK_COLOR,
+  hasWindData,
 } from './WindOverlay';
 import { generateWindBarbSvg, getChartTemperatureColor, getTemperatureColor } from './WindBarb';
 
@@ -226,11 +227,35 @@ describe('buildGridPointPopup (SCRUM-126)', () => {
     expect(el.textContent).not.toContain('⚡');
   });
 
-  it('draws the barb when barb display is chosen, and shows -- without a temperature', () => {
+  it('draws the barb when barb display is chosen, and says No data without a temperature', () => {
     const el = parse(buildGridPointPopup({ ...point, temperature_f: null }, 'imperial', 'knots'));
     expect(el.querySelector('svg')).not.toBeNull();
-    expect(el.textContent).toContain('🌡️ --');
+    expect(el.textContent).toContain('🌡️ No data');
     expect(el.textContent).not.toContain('°F');
     expect(el.textContent).not.toContain('°T');
+  });
+});
+
+describe('missing grid data (SCRUM-225)', () => {
+  it('is drawable only with both a speed and a direction', () => {
+    expect(hasWindData(pt(12))).toBe(true);
+    expect(hasWindData({ ...pt(12), wind_speed_knots: null })).toBe(false);
+    expect(hasWindData({ ...pt(12), wind_direction_deg: null })).toBe(false);
+  });
+
+  it('shows "No data" in the pop-up instead of 0 kt, 32 °F or a calm barb', () => {
+    const el = parse(
+      buildGridPointPopup(
+        { ...pt(12), wind_speed_knots: null, wind_direction_deg: null, temperature_f: null },
+        'imperial',
+        'knots',
+        'cardinal',
+      ),
+    );
+
+    expect(el.textContent).toContain('No data');
+    expect(el.textContent).not.toContain('0 kt');
+    expect(el.textContent).not.toContain('32°F');
+    expect(el.querySelector('svg')).toBeNull();
   });
 });

@@ -99,7 +99,10 @@ async def _get_forecast(
         "forecast": [p.model_dump() for p in parsed.points],
         "valid_time": parsed.valid_time,
     }
-    cache.put(payload, now)
+    # A frame with no wind value anywhere is a temporary upstream gap, not a calm forecast:
+    # return it but do not cache it, so the next request asks Open-Meteo again (SCRUM-225).
+    if any(p.wind_speed_knots is not None for p in (parsed.current, *parsed.points)):
+        cache.put(payload, now)
     return WeatherForecastResponse(**payload, cached=False, cached_at=now)
 
 

@@ -20,18 +20,19 @@ export interface GeocodeResult {
 
 export interface WeatherForecastPoint {
   time: string;
-  temperature_c: number;
-  temperature_f: number;
-  wind_speed_knots: number;
-  wind_speed_kmh: number;
-  wind_speed_mph: number;
-  wind_speed_ms: number;
-  wind_gust_knots: number;
-  wind_gust_kmh: number;
-  wind_gust_mph: number;
-  wind_gust_ms: number;
-  wind_direction_deg: number;
-  wind_direction_cardinal: string;
+  /** SCRUM-225: null when Open-Meteo has no value; shown as "No data", never as 0 or 32 °F. */
+  temperature_c: number | null;
+  temperature_f: number | null;
+  wind_speed_knots: number | null;
+  wind_speed_kmh: number | null;
+  wind_speed_mph: number | null;
+  wind_speed_ms: number | null;
+  wind_gust_knots: number | null;
+  wind_gust_kmh: number | null;
+  wind_gust_mph: number | null;
+  wind_gust_ms: number | null;
+  wind_direction_deg: number | null;
+  wind_direction_cardinal: string | null;
   humidity: number;
   weather_code: number;
 }
@@ -112,10 +113,11 @@ export interface FeedbackResult {
 export interface GridWindPoint {
   latitude: number;
   longitude: number;
-  wind_speed_knots: number;
+  /** SCRUM-225: null when the model has no value for the point; no barb is drawn for it. */
+  wind_speed_knots: number | null;
   /** Gust for the same moment (SCRUM-210); absent when the model has none for the point. */
   wind_gust_knots?: number | null;
-  wind_direction_deg: number;
+  wind_direction_deg: number | null;
   /** Temperature in °F; colors the map barb (SCRUM-89). */
   temperature_f?: number | null;
   /** Forecast hour these values describe (SCRUM-115); null or absent means current. */

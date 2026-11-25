@@ -22,7 +22,7 @@ from backend.app.database import db_connection
 from backend.app.models import GridWindPoint
 from backend.app.services import open_meteo
 from backend.app.services.time_window import hour_key
-from backend.app.units import as_float, as_optional_float, c_to_f, coord_key
+from backend.app.units import as_optional_float, c_to_f, coord_key
 
 GRID_VARIABLES = ("wind_speed_10m", "wind_gusts_10m", "wind_direction_10m", "temperature_2m")
 
@@ -111,7 +111,25 @@ def _read_cached_points(
 
 
 def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: float) -> None:
-    expires_at = now + CACHE_TTL_SECONDS
+    # A no-data point is not cached (SCRUM-225): a temporary upstream gap must not be served
+    # as calm wind for the whole TTL, and `_read_cached_points` only reads rows with a value.
+    rows = [
+        (
+            *coord_key(p.latitude, p.longitude),
+            model,
+            hour,
+            now,
+            now + CACHE_TTL_SECONDS,
+            p.wind_speed_knots,
+            p.wind_gust_knots,
+            p.wind_direction_deg,
+            p.temperature_f,
+        )
+        for p in fetched
+        if p.wind_speed_knots is not None and p.temperature_f is not None
+    ]
+    if not rows:
+        return
     with db_connection() as conn:
         conn.executemany(
             """
@@ -127,20 +145,7 @@ def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: floa
                 wind_direction_deg=excluded.wind_direction_deg,
                 temperature_f=excluded.temperature_f
             """,
-            [
-                (
-                    *coord_key(p.latitude, p.longitude),
-                    model,
-                    hour,
-                    now,
-                    expires_at,
-                    p.wind_speed_knots,
-                    p.wind_gust_knots,
-                    p.wind_direction_deg,
-                    p.temperature_f,
-                )
-                for p in fetched
-            ],
+            rows,
         )
 
 
@@ -168,16 +173,42 @@ def _as_list(data: object, expected: int) -> list[dict]:
     return items  # type: ignore[return-value]
 
 
-def _point_from_current(lat: float, lon: float, item: dict, hour: str | None) -> GridWindPoint:
-    current = item.get("current") or {}
+def _grid_point(
+    lat: float,
+    lon: float,
+    speed: float | None,
+    gust: float | None,
+    direction: float | None,
+    temp_c: float | None,
+    hour: str | None,
+) -> GridWindPoint:
+    """One grid point; a missing speed, direction or temperature makes it no data (SCRUM-225).
+
+    All three go null together so nothing downstream can pair a real speed with a fabricated
+    temperature, or draw a calm barb for a point the model has no value for.
+    """
+    has_data = speed is not None and direction is not None and temp_c is not None
     return GridWindPoint(
         latitude=lat,
         longitude=lon,
-        wind_speed_knots=as_float(current.get("wind_speed_10m")),
-        wind_gust_knots=as_optional_float(current.get("wind_gusts_10m")),
-        wind_direction_deg=as_float(current.get("wind_direction_10m")),
-        temperature_f=c_to_f(current.get("temperature_2m")),
+        wind_speed_knots=float(speed) if has_data else None,
+        wind_gust_knots=as_optional_float(gust),
+        wind_direction_deg=float(direction) if has_data else None,
+        temperature_f=c_to_f(temp_c) if has_data else None,
         time=hour,
+    )
+
+
+def _point_from_current(lat: float, lon: float, item: dict, hour: str | None) -> GridWindPoint:
+    current = item.get("current") or {}
+    return _grid_point(
+        lat,
+        lon,
+        current.get("wind_speed_10m"),
+        current.get("wind_gusts_10m"),
+        current.get("wind_direction_10m"),
+        current.get("temperature_2m"),
+        hour,
     )
 
 
@@ -185,14 +216,14 @@ def _point_from_hourly(lat: float, lon: float, item: dict, index: int, hour: str
     hourly = item.get("hourly") or {}
     series = {name: hourly.get(name) or [] for name in GRID_VARIABLES}
     values = {name: series[name][index] if index < len(series[name]) else None for name in GRID_VARIABLES}
-    return GridWindPoint(
-        latitude=lat,
-        longitude=lon,
-        wind_speed_knots=as_float(values["wind_speed_10m"]),
-        wind_gust_knots=as_optional_float(values["wind_gusts_10m"]),
-        wind_direction_deg=as_float(values["wind_direction_10m"]),
-        temperature_f=c_to_f(values["temperature_2m"]),
-        time=hour,
+    return _grid_point(
+        lat,
+        lon,
+        values["wind_speed_10m"],
+        values["wind_gusts_10m"],
+        values["wind_direction_10m"],
+        values["temperature_2m"],
+        hour,
     )
 
 

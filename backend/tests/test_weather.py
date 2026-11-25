@@ -67,6 +67,27 @@ def test_weather_forecast_and_cache(client, open_meteo):
     assert open_meteo.call_count == 1
 
 
+def test_all_missing_forecast_is_not_cached(client, open_meteo):
+    """A frame with no wind anywhere is an upstream gap, not a calm forecast (SCRUM-225)."""
+    raw = forecast_payload(
+        wind_speed_10m=None,
+        wind_direction_10m=None,
+        temperature_2m=None,
+        wind_gusts_10m=None,
+    )
+    for name in ("wind_speed_10m", "wind_direction_10m", "temperature_2m", "wind_gusts_10m"):
+        raw["hourly"][name] = [None] * len(raw["hourly"]["time"])
+    open_meteo.respond(raw)
+
+    first = client.get(POINT).json()
+    second = client.get(POINT).json()
+
+    assert open_meteo.call_count == 2  # the null frame was not stored
+    assert first["cached"] is False and second["cached"] is False
+    assert first["current"]["wind_speed_knots"] is None
+    assert first["current"]["temperature_f"] is None
+
+
 def test_point_weather_returns_forecast(client, open_meteo):
     open_meteo.respond(forecast_payload())
     resp = client.get("/api/weather/point?lat=48.29&lon=-122.60")
