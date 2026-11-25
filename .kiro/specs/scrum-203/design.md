@@ -42,6 +42,11 @@ export const NOAA_NOTICE = 'Not for navigation';
 export const NOAA_COVERAGE_NOTICE =
   'NOAA chart coverage is U.S. waters only — Canada, inland and open ocean show blank chart paper.';
 export const CHART_TILE_CLASS = 'noaa-chart-tiles';
+/** The chart is clipped at this latitude and this zoom, so it never paints cream paper over the base. */
+export const CHART_COVERAGE_MAX_LAT = 49.6;
+export const CHART_MIN_ZOOM = 12;
+/** Above the base tiles (200), below the seamarks (210). */
+export const CHART_PANE = 'chartPane';
 ```
 
 `tileLayerConfig('paper_chart')` returns:
@@ -75,19 +80,37 @@ flag works.
 
 ### Mount (`frontend/src/components/MapView.tsx`)
 
-The existing base-layer effect already mounts exactly one layer and removes it on change, which is
-the behaviour 2.4 needs; only the construction branches:
+The base-layer effect keeps mounting the user's chosen layer. When `paper_chart` is selected it
+mounts **that layer as the substrate** and the chart above it in its own pane:
 
 ```ts
-const config = tileLayerConfig(tileLayerType, cartoApiKey);
-const layer = config.kind === 'wms'
-  ? L.tileLayer.wms(config.url, config.options)
-  : L.tileLayer(config.url, config.options);
+// substrate: always the keyless dark base, so the clip edge reveals a working map with no key
+const substrate = tileLayerConfig('osm_dark');
+baseLayer = L.tileLayer(substrate.url, substrate.options).addTo(map);
+
+// chart: clipped to coverage and to z12+
+chartLayer = L.tileLayer.wms(CHART_URL, {
+  ...chartTileOptions,
+  pane: CHART_PANE,
+  bounds: L.latLngBounds([-85, -180], [CHART_COVERAGE_MAX_LAT, -60]),
+  minZoom: CHART_MIN_ZOOM,
+}).addTo(map);
 ```
 
-No new pane: chart tiles go to Leaflet's `tilePane` (z 200), so the seamark pane (210), the wind
-colour pane (250), the barb markers (600) and the legends (750) keep the order documented in
-`requirements.md`.
+The substrate is deliberately `osm_dark` rather than the previously chosen base: it is keyless, it is
+the default, and a clip edge must never depend on a CARTO key being present. The trade-off is that a
+user on `osm_standard` or `carto_dark` sees the dark base north of the border instead of their own
+choice; the coverage notice explains it, and the alternative (remembering a previous raster base in
+ephemeral state) is not worth the extra state for this opt-in mode.
+
+`CHART_PANE` is created once at z-index 205 with `pointer-events: none`, so the seamark pane (210),
+wind colour (250), barbs (600) and legends (750) keep the order documented in `requirements.md`.
+
+Why a substrate at all: the chart is clipped, and outside the clip a layer that draws nothing leaves
+the dark map background. Keeping the user's base underneath means panning north of the border or
+zooming out simply reveals the ordinary map. The cost is OSM tiles fetched under the chart where it
+covers them; that is the price of never showing an empty canvas, and it is bounded by Leaflet's
+`keepBuffer`.
 
 `chartBase = tileLayerType === 'paper_chart'` is computed once and drives:
 
@@ -102,14 +125,17 @@ colour pane (250), the barb markers (600) and the legends (750) keep the order d
 
 `NOAA_COVERAGE_NOTICE` renders in a compact chip at the map's top-right, below the Leaflet zoom
 control (`absolute right-3 top-24 z-[750]`, dark card like `CurrentLegend`, `pointer-events-none`,
-`role="note"`, `data-testid="chart-coverage-notice"`), only while `chartBase`. Top-left belongs to
-the currents key and the bottom strip belongs to the wind colour legend, so top-right is the only
+`role="note"`, `data-testid="chart-coverage-notice"`), only while the chart is selected **and not
+actually painting** — that is, when `map.getBounds().getSouth() > CHART_COVERAGE_MAX_LAT` or
+`map.getZoom() < CHART_MIN_ZOOM`. A small `chartInView` state updated on `moveend`/`zoomend` (and
+once on mount) drives it, because the chip has to follow a pan north or a zoom out. Top-left belongs
+to the currents key and the bottom strip belongs to the wind colour legend, so top-right is the only
 free corner. The same sentence appears under the radio in Map Settings, and the credit plus notice
 in the export footer.
 
-There is no per-view detection: the measurement shows a no-coverage tile is a single paper colour
-with no marker, so a coverage polygon or a tile-content check would be guesswork. The notice is
-static and always true while the mode is on.
+There is still no per-tile detection: a no-coverage tile is a single paper colour with no marker, so
+the clip is the only guard and the chip is what explains it. The chip is conditional rather than
+always-on precisely because the clip makes the condition computable from the map state.
 
 ### Contrast pass
 
@@ -179,6 +205,39 @@ No new plumbing: `useMapExport` already passes `attributionText(tileLayer)` into
 skips the filter, and `waitForTiles` covers their load. The export chrome stays dark (6.4): the
 frame is drawn outside the map area and a light frame would be a second, unrelated theme.
 
+### Seamap base style (SCRUM-200 amendment)
+
+A fifth `MapTileLayer` value, `seamap`, mounted through MapLibre:
+
+```ts
+const { default: maplibregl } = await import('maplibre-gl');
+await import('@maplibre/maplibre-gl-leaflet');
+const layer = (L as unknown as { maplibreGL: (o: unknown) => L.Layer }).maplibreGL({
+  style: 'https://tiles.openwaters.io/seamap/style.json',
+  pane: CHART_PANE,          // above the base, below the seamarks
+  interactive: false,        // clicks reach the map
+  attributionControl: false,
+  maxZoom: 19,
+});
+```
+
+- **Lazy**: the import sits behind the first selection of the style, so the 309 kB gzip arrives then
+  and the initial bundle is untouched. `MapTileLayer` stays a string union, so settings and the radio
+  group need no new shape.
+- **Zoom**: Seamap's tiles stop at 14. `L.maplibreGL` has no `maxNativeZoom`, so the layer keeps a
+  `maxZoom` of 19 and the map's own zoom is what the user sees; the style upscales the z14 tiles. If
+  upscaling looks worse than a plain base in the review, the fallback is to keep `osm_dark` under it
+  and cut Seamap in at z14 and below — recorded as the check in task 15.
+- **Export**: SCRUM-204 solved the GL capture, but two things are still needed here: the context must
+  be created with `preserveDrawingBuffer: true` (the plugin passes `canvasContextAttributes`), and
+  `captureDom.includeInCapture` must keep the GL container, since it is not an `img.leaflet-tile` and
+  its canvas would otherwise be skipped or awaited forever.
+- **Attribution**: `attributionText('seamap')` returns `© Open Waters: Seamap · © OpenStreetMap
+  contributors`; the radio carries the same plus the licence split (CC-BY 4.0 tiles, ODbL for the
+  OSM-derived layers) and says it shows navigation aids, not soundings.
+- **Contrast**: the pale style is the least legible of the light bases under the gradient, so 5.4's
+  attenuation applies to it identically, and Map Settings recommends the gradient off.
+
 ## Correctness properties
 
 1. For every `MapTileLayer` value, `attributionText` returns a non-empty credit and the three
@@ -194,6 +253,12 @@ frame is drawn outside the map area and a light frame would be a second, unrelat
 7. The gradient canvas opacity is `WIND_COLOR_OPACITY_ON_CHART` while `chartBase` and
    `WIND_COLOR_OPACITY` otherwise (5.4).
 8. Chevron SVG output for `halo: false` equals today's output exactly (5.3).
+9. With `paper_chart` selected the mount is a pair: one `osm_dark` substrate plus one chart layer, and
+   the chart carries `bounds`/`minZoom` from the exported constants (2.4, 2.7).
+10. The coverage chip is present exactly when the chart is selected and not painting, and absent
+    otherwise (4.2, 4.4).
+11. `attributionText` covers all five values, and `seamap` names both Seamap and OpenStreetMap (6.1, 8.4).
+12. Selecting `seamap` imports MapLibre; no import happens for the other four values (8.2).
 
 ## Risks
 
@@ -220,5 +285,5 @@ frame is drawn outside the map area and a light frame would be a second, unrelat
 ## Out of scope
 
 The overlay recommended by the evaluation (its own ticket), CHS ENC or any CHS purchase, NONNA
-contours, a light theme for the app, self-hosted tiles, a backend proxy or cache, and any change to
-the existing three base maps.
+contours (its own B.C. ticket), a light theme for the app, self-hosted tiles, a backend proxy or
+cache, and any change to the three dark/standard base maps and their rendering.

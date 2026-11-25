@@ -61,13 +61,19 @@ obstructions and aids to navigation, without the data-quality polygons of layer 
 `L.tileLayer.wms`, while the three existing values keep using `L.tileLayer`.
 2.3 THEN the chart layer shall never carry the `.osm-dark-tiles` class, and that filter shall never
 apply to a chart tile on screen or in an export.
-2.4 WHEN `paper_chart` is selected THEN exactly one base layer shall be mounted — no OSM layer
-underneath — because the chart tiles are fully opaque and an underlying layer would be invisible
-and still cost requests; selecting any other value shall remove the chart layer with no duplicate.
-2.5 THEN the chart shall mount in Leaflet's default tile pane, so the seamark pane (210), the wind
-gradient (250), the barbs (600) and the legends (750) keep their order.
+2.4 WHEN `paper_chart` is selected THEN the user's normal base layer shall stay mounted beneath a chart
+layer on its own pane at z-index 205, because the chart is clipped by coverage and zoom (2.7) and
+must reveal that base outside the clip rather than a blank canvas; inside the clip the opaque chart
+covers it completely. Selecting any other value shall remove the chart layer with no duplicate.
+2.5 THEN the chart's pane at 205 shall sit above the base tiles (200) and below the seamark pane
+(210), so the gradient (250), the barbs (600) and the legends (750) keep their order, and clicks
+shall still reach the map.
 2.6 THEN no `TRANSPARENT` parameter shall be relied on: the service ignores it, so the config shall
 state opacity in a comment rather than pretend to control it.
+2.7 THEN the chart layer shall carry `bounds` clipped at 49.6 N and a `minZoom` of 12, because
+outside its coverage the service answers with one flat cream tile (0 % ink at z10, z12 and z14 over
+the Strait of Georgia) which, as a layer, hides the base map instead of leaving a hole. Both values
+shall be exported constants so the notice and the tests share them.
 
 ### 3. Map Settings
 
@@ -84,11 +90,16 @@ dialog shall stay open, like the other three.
 
 4.1 THEN the app shall not attempt to detect missing chart coverage from tile content: a
 no-coverage tile is uniform paper `#f4e8c1` with no marker, indistinguishable from covered land.
-4.2 WHEN `paper_chart` is selected THEN a compact map notice shall state that NOAA coverage is
-U.S. waters only, so Canada, inland water and open ocean show blank chart paper.
-4.3 THEN the mode shall stay usable outside coverage: the notice, the wind layers, the currents,
-the markers and the legends shall all render normally over blank paper, with no error and no empty
-canvas.
+4.2 WHEN `paper_chart` is selected THEN a compact map notice shall state that the chart covers U.S.
+waters up to the border, that north of it and below z12 the normal base map shows, and that the
+chart is not for navigation.
+4.3 THEN the mode shall stay usable outside coverage and below the zoom floor: the notice, the wind
+layers, the currents, the markers and the legends shall all render normally over the ordinary base
+map, with no error and no blank canvas.
+4.4 THEN north of the clip the notice shall be the only signal, because no tile in the service
+reports "no chart here".
+4.5 THEN a view that is outside the clip shall show no chart tile at all rather than a cream sheet,
+and switching the mode on or off shall never leave an empty map.
 
 ### 5. Contrast pass on a light base
 
@@ -99,11 +110,13 @@ water and cream land; the dark temperature chip shall be kept.
 disappears on white water.
 5.3 WHEN the chart base is mounted THEN current chevrons shall draw a light under-stroke behind the
 tier stroke; tier colours, opacities and widths shall not change, so the chevron key stays in sync.
-5.4 WHEN the chart base is mounted THEN the wind colour gradient shall draw at a lower opacity than
-on the dark bases, so the chart's own symbology stays readable; the export captures the same
-canvas and therefore the same value. Measured (SCRUM-200): the gradient is the element that buries
-the chart, not the barbs — with it off the chart at full strength is the most legible state in the
-review (mean luma 0.88, 94 % light pixels), and at 0.55 it bleaches the paper's own symbols.
+5.4 WHEN the chart base or the Seamap style is mounted THEN the wind colour gradient shall draw at a
+lower opacity than on the dark bases, so the chart's own symbology stays readable; the export
+captures the same canvas and therefore the same value. Measured (SCRUM-200): the gradient is the
+element that buries the chart, not the barbs — with it off the chart at full strength is the most
+legible state in the review (mean luma 0.88, 94 % light pixels), and at 0.55 it bleaches the paper's
+own symbols. Map Settings shall recommend turning the gradient off with either light style, without
+overriding the user's toggle.
 5.5 THEN the legends, pop-ups, Leaflet zoom control and attribution shall keep their current dark
 styling; no light theme shall be introduced.
 5.6 THEN saved-location markers and their pop-ups shall stay legible over the chart, using the same
@@ -126,24 +139,49 @@ the light map.
 7.1 THEN `requirements.md` at the repository root shall record the fourth base map, the setting, the
 coverage rule, the export attribution and the contrast decisions, in the same pull request.
 
+### 8. Seamap as a fifth base style (SCRUM-200 amendment, 2026-11-25)
+
+8.1 WHEN the base map is chosen THEN `MapTileLayer` shall also accept `seamap`, rendered as vector
+tiles through MapLibre, because the product keeps Seamap for its rendering of navigation aids.
+8.2 THEN `maplibre-gl` and `@maplibre/maplibre-gl-leaflet` shall be loaded lazily, only when the
+style is first selected, so the initial bundle does not grow by the measured 309 kB gzip.
+8.3 THEN the layer shall use `maxNativeZoom: 14`, upscaling beyond it rather than blanking, and
+shall draw in a pane below the seamarks with `interactive: false`.
+8.4 THEN the credit `(c) Open Waters: Seamap, (c) OpenStreetMap contributors` shall appear in the
+radio and in the export footer.
+8.5 THEN the export shall capture the GL canvas, which needs `preserveDrawingBuffer: true` and a
+capture filter that keeps the GL container instead of treating it as a tile.
+8.6 THEN the style shall draw with the wind gradient attenuated as in 5.4, and Map Settings shall
+say the style is a navigation-aid rendering rather than a chart, with no depth soundings.
+8.7 THEN the licence position shall be recorded in the radio: CC-BY 4.0 tiles, ODbL for the
+OSM-derived layers, attribution required either way.
+
 ## Acceptance criteria
 
-- A fourth radio exists, is not the default, survives a reload, and each of the four values renders
-  its own base layer with no duplicate layer left behind.
+- A fourth and fifth radio exist, neither is the default, both survive a reload, and each of the
+  five values renders its own base layer with no duplicate layer left behind.
 - Barbs, chevrons, markers, pop-ups, legends and controls are legible over the chart at z10-z18 in
   U.S. waters, with screenshots as evidence.
-- Outside chart coverage (Vancouver, inland, offshore) the mode shows blank paper with the notice
-  and no error, evidenced in B.C. and inland.
+- Outside chart coverage (Vancouver, inland, offshore) or below z12 the mode shows the ordinary
+  base map with the notice and no error, evidenced in B.C. and inland, with no chart tile requested
+  outside the clip.
 - An export with the chart base contains the chart tiles and `© NOAA Office of Coast Survey · Not
   for navigation` in its footer, in PNG and in PDF.
-- Users who never select the mode see no change, including their stored base map, and no OSM base
-  requests are made while the chart base is mounted.
-- `requirements.md` is updated in the same pull request, no new runtime dependency is added, and
-  the frontend lint, typecheck, coverage and build checks pass with the backend untouched.
+- Users who never select either light style see no change, including their stored base map; the app
+  loads no MapLibre code until Seamap is selected.
+- `requirements.md` is updated in the same pull request, and the frontend lint, typecheck, coverage
+  and build checks pass with the backend untouched.
 
 ## Estimate
 
-8 points: a new base-map value through settings, the tile table, the WMS mount, the radio,
-attribution and export, plus a contrast pass over barbs, chevrons, markers, both legends, controls
-and the export chrome, with visual verification inside and outside coverage. If it grows, split into
-configuration (~3) and the contrast pass (~5).
+**13 points as now scoped, which is above the 8-point ceiling and should be split.**
+
+- Chart base map, its clip, contrast pass and export credit: **8 points** (a base-map value through
+  settings, the tile table, the WMS mount and its bounds, the radio, attribution and export, plus the
+  contrast pass over barbs, chevrons, markers, both legends, controls and the export chrome, with
+  visual verification inside and outside the clip).
+- Seamap base style (section 8): **5 points** (a second base-map value, a lazily loaded MapLibre
+  layer, `maxNativeZoom` upscaling, the GL capture path, attribution, tests and a visual pass).
+
+Recommended split: keep SCRUM-203 for the chart base at 8 and raise the Seamap style as its own
+5-point ticket, since the two share only the radio group and the gradient attenuation.
