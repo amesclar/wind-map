@@ -5,8 +5,8 @@ Each step is its own function or class:
 - `parse_provider_forecast`  pure parsing (services/forecast_parser.py, services/nws_parser.py)
 - `SavedLocationCache` / `PointCache`  caching (services/forecast_cache.py)
 
-Open-Meteo is the provider for every model but NDFD, which is dispatched by model id (SCRUM-245
-prototype; SCRUM-106 builds it out with caching and error mapping).
+Open-Meteo is the provider for every model but NDFD, which is dispatched by model id (SCRUM-106).
+Both providers share this cache: a warm (location, model, timezone, hour) costs no upstream call.
 """
 
 import math
@@ -47,7 +47,7 @@ async def fetch_forecast(
     """Raw provider forecast (current + hourly). Raises httpx.HTTPError.
 
     NDFD returns one gridpoint document per point instead of a request with parameters; the
-    parser turns its periods into the same slices (SCRUM-245 prototype).
+    parser turns its periods into the same slices (SCRUM-106).
     """
     if model == NWS_MODEL:
         return await nws.fetch_gridpoints(latitude, longitude)
@@ -71,7 +71,7 @@ def parse_provider_forecast(
     at: datetime | None = None,
     timezone: str = DEFAULT_TIMEZONE,
 ) -> Any:
-    """The parser for the provider that served `raw` (SCRUM-245 prototype)."""
+    """The parser for the provider that served `raw` (SCRUM-106)."""
     if model == NWS_MODEL:
         return parse_nws_forecast(raw, at=at, timezone=timezone)
     return parse_forecast(raw, at=at, timezone=timezone)

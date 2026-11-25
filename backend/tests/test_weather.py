@@ -45,6 +45,19 @@ def test_build_weather_point():
     assert pt.wind_gust_mph == round(22.0 * 1.15078, 1)
 
 
+def test_build_weather_point_keeps_missing_humidity_missing():
+    """A provider without a humidity value reports null, not 0 % (SCRUM-106)."""
+    pt = build_weather_point(
+        time_str="2026-11-12T12:00",
+        temp_c=10.0,
+        humidity=None,
+        wind_knots=10.0,
+        wind_deg=180.0,
+        weather_code=0,
+    )
+    assert pt.humidity is None
+
+
 def test_weather_forecast_and_cache(client, open_meteo):
     loc_id = client.get("/api/locations").json()[0]["id"]
     open_meteo.respond(forecast_payload())

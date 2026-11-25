@@ -133,6 +133,8 @@ def test_init_db_creates_every_table_and_sets_schema_version():
         assert {"locations", *CACHE_TABLES} <= _tables(conn)
         assert "temperature_f" in _columns(conn, "grid_weather_cache")
         assert {"cell_lat", "cell_lon"} <= _columns(conn, "grid_currents_cache")
+        # Long-lived NWS grid mapping, outside CACHE_TABLES so it survives upgrades (SCRUM-106).
+        assert {"office", "grid_x", "grid_y"} <= _columns(conn, "nws_grid_cache")
         assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
 
 

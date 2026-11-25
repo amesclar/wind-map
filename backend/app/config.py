@@ -89,6 +89,8 @@ LAND_ELEVATION_THRESHOLD_M = 0.5
 NWS_BASE_URL = "https://api.weather.gov"
 NWS_MODEL = "nws_ndfd"
 NWS_TIMEOUT_SECONDS = 15.0
+# Same attempt budget as the Open-Meteo client (SCRUM-106): one retry pair covers a 503 blip.
+NWS_RETRIES = 2
 # NWS asks every client to identify itself and answers 403 to an empty User-Agent (measured
 # 2026-11-25), so one is always sent. Set NWS_USER_AGENT to an app name plus a contact address.
 NWS_USER_AGENT = os.getenv("NWS_USER_AGENT", "").strip() or "wind-map (NWS NDFD prototype)"

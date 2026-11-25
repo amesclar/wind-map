@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from backend.app.config import DEFAULT_TIMEZONE, FORECAST_POINTS, FORECAST_STEP_HOURS
 from backend.app.models import WeatherForecastPoint
-from backend.app.units import as_float, c_to_f, deg_to_cardinal, knots_to_units
+from backend.app.units import c_to_f, deg_to_cardinal, knots_to_units
 
 # Variables requested for both `current` and `hourly`.
 FORECAST_VARIABLES = (
@@ -58,7 +58,7 @@ def build_weather_point(
         wind_gust_ms=gust["ms"],
         wind_direction_deg=wind_deg_val,
         wind_direction_cardinal=None if wind_deg_val is None else deg_to_cardinal(wind_deg_val),
-        humidity=round(as_float(humidity), 1),
+        humidity=None if humidity is None else round(float(humidity), 1),
         weather_code=0 if weather_code is None else int(weather_code),
     )
 
