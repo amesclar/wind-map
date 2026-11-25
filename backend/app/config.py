@@ -122,20 +122,23 @@ if not 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24:
 
 # Per-model forecast metadata (SCRUM-115). The UI shows the update cadence, the time horizon and
 # the derived run times, and `/api/weather/grid?time=` only accepts hours inside the selected
-# model's horizon. Source of truth for the values is the model table at
-# frontend/src/assets/weather-models.md (update frequency and time horizon columns); horizons are
-# capped at Open-Meteo's 16-day maximum. best_match is a composite, so it uses Open-Meteo's
-# documented 7-day default rather than a single model's horizon.
+# model's horizon. This table is the single source of truth since the static model guide was
+# removed (SCRUM-232); each entry names the Open-Meteo doc page its cadence and horizon come from.
+# Horizons are capped at Open-Meteo's 16-day maximum.
 MODEL_METADATA: dict[str, dict[str, object]] = {
+    # Composite: Open-Meteo's documented 7-day default (https://open-meteo.com/en/docs).
     "best_match": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
+    # https://open-meteo.com/en/docs/ecmwf-api — IFS HRES 9 km, 6-hourly, 15 days.
     "ecmwf_ifs": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
-    # AIFS (SCRUM-227) is ECMWF's AI model: 6-hourly cycles and natively 6-hourly steps, which
-    # Open-Meteo interpolates to hourly, and no wind gusts at all.
+    # https://open-meteo.com/en/docs/ecmwf-api — AIFS 0.25° (SCRUM-227): 6-hourly cycles and
+    # natively 6-hourly steps, which Open-Meteo interpolates to hourly; no wind gusts at all.
     "ecmwf_aifs025_single": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    # https://open-meteo.com/en/docs/gfs-api — GFS, 6-hourly, 16 days.
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
-    # GEM seamless (SCRUM-228) blends the 12-hourly global GEM with the 6-hourly regional RDPS and
-    # HRDPS runs. Open-Meteo caps this model's API at 10 days, not the 16 the static table claimed.
+    # https://open-meteo.com/en/docs/gem-api — seamless blend (SCRUM-228) of the 12-hourly global
+    # GEM with the 6-hourly regional RDPS and HRDPS runs; Open-Meteo caps the API at 10 days.
     "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
+    # https://open-meteo.com/en/docs/dwd-api — ICON global, 6-hourly, 7.5 days.
     "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
 }
 if set(MODEL_METADATA) != MODEL_IDS:

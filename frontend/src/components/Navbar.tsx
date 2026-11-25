@@ -11,7 +11,6 @@ import {
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 import { MapExportControl } from './MapExportControl';
-import refreshIcon from '../assets/refresh-icon.png';
 
 interface NavbarProps {
   models: WeatherModel[];
@@ -22,7 +21,6 @@ interface NavbarProps {
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
   onOpenPreferences: () => void;
-  onOpenModelGuide: () => void;
   hasCartoKey: boolean;
   /** Opens the export dialog (SCRUM-117). */
   onOpenExportDialog: () => void;
@@ -42,7 +40,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAndAddLocation,
   onOpenMapSettings,
   onOpenPreferences,
-  onOpenModelGuide,
   hasCartoKey,
   onOpenExportDialog,
   savingMap,
@@ -100,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Right Controls: Model, guide, export, Preferences */}
+      {/* Right Controls: Model, feedback, export, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
@@ -117,18 +114,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             ))}
           </select>
         </div>
-
-        {/* Model update frequency guide (SCRUM-110). Sits right of the model
-            selector and left of the gear; outside the lg-only block so it stays
-            reachable when the selector itself is hidden. */}
-        <button
-          onClick={onOpenModelGuide}
-          title="Model Update Cycles & Frequency"
-          aria-label="Model Update Cycles & Frequency"
-          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 transition"
-        >
-          <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
-        </button>
 
         {/* Feedback (SCRUM-179): left of export so export stays immediately left of the gear */}
         {feedbackEnabled && (

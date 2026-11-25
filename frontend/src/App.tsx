@@ -14,7 +14,6 @@ import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
-import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
@@ -78,7 +77,6 @@ export const App: React.FC = () => {
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
-  const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   // Open-Meteo quota warning: shown once per reset window, however many grid requests fail.
@@ -199,7 +197,6 @@ export const App: React.FC = () => {
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
-        onOpenModelGuide={() => setIsModelGuideOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
         onOpenExportDialog={mapExport.openDialog}
         savingMap={mapExport.savingMap}
@@ -275,11 +272,6 @@ export const App: React.FC = () => {
         onToggleSeamarks={mapSettings.setSeamarksVisible}
         bcDepthVisible={mapSettings.bcDepthVisible}
         onToggleBcDepth={mapSettings.setBcDepthVisible}
-      />
-
-      <WeatherModelGuideModal
-        isOpen={isModelGuideOpen}
-        onClose={() => setIsModelGuideOpen(false)}
       />
 
       <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />

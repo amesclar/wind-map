@@ -17,7 +17,6 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onSelectAndAddLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
     onOpenPreferences: vi.fn(),
-    onOpenModelGuide: vi.fn(),
     hasCartoKey: false,
     onOpenExportDialog: vi.fn(),
     savingMap: false,
@@ -60,11 +59,9 @@ describe('Navbar (SCRUM-92)', () => {
     expect(props.onSelectModel).toHaveBeenCalledWith('gfs_seamless');
   });
 
-  it('opens the model update frequency guide from the icon beside the model selector (SCRUM-110)', () => {
-    const { props } = renderNavbar();
-    const button = screen.getByRole('button', { name: 'Model Update Cycles & Frequency' });
-    fireEvent.click(button);
-    expect(props.onOpenModelGuide).toHaveBeenCalled();
+  it('has no model guide button any more (SCRUM-232)', () => {
+    renderNavbar();
+    expect(screen.queryByRole('button', { name: 'Model Update Cycles & Frequency' })).toBeNull();
   });
 
   it('opens the export dialog from the download trigger (SCRUM-117, SCRUM-157)', () => {
@@ -93,12 +90,12 @@ describe('Navbar (SCRUM-92)', () => {
     expect(screen.queryByText('°F')).toBeNull();
   });
 
-  it('shows the feedback button between the guide and export, keeping export left of the gear (SCRUM-179)', () => {
+  it('keeps the toolbar order feedback · export · gear (SCRUM-179, SCRUM-232)', () => {
     const { props, container } = renderNavbar();
     const buttons = Array.from(container.querySelectorAll('header button'));
     const titles = buttons.map((b) => b.getAttribute('title'));
     const feedback = titles.indexOf('Send feedback');
-    expect(titles.indexOf('Model Update Cycles & Frequency')).toBeLessThan(feedback);
+    expect(feedback).toBeGreaterThan(-1);
     expect(feedback).toBeLessThan(titles.indexOf('Export map image'));
     expect(titles.indexOf('Export map image')).toBe(titles.indexOf('Preferences') - 1);
     const button = screen.getByRole('button', { name: 'Send feedback' });

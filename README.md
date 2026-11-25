@@ -28,7 +28,6 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
   - *NOAA GFS Seamless*
   - *CMC GEM Seamless*
   - *DWD ICON Seamless*
-- **Weather Model Guide:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
 - **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
@@ -76,7 +75,7 @@ wind-map/
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
-    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
+    │   │                        # SavedLocationsModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
     │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
     │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
@@ -90,9 +89,9 @@ wind-map/
     │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
     │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
     │   │                        # currentTiers.ts (tier table behind chevrons and legend),
-    │   │                        # modelGuide.ts (model table), html.ts (escaping)
+    │   │                        # html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
-    │   ├── assets/              # weather-models.md, icon artwork
+    │   ├── assets/              # icon artwork
     │   ├── constants.ts         # Defaults, timezone list, storage keys
     │   ├── types.ts             # TypeScript interfaces
     │   ├── version.ts           # Injected __APP_VERSION__
