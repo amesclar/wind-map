@@ -92,6 +92,11 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - The script builds the `wind-map` image, restarts the `wind-map` container with the `wind_data` volume on port 5005, and waits for `GET /api/health` to respond.
 - **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
 
+## Google Cloud Deploys Are Deliberate (SCRUM-223)
+- **Default:** Google Cloud is touched only when `develop` is merged into `master` for a release. A `develop` or feature-branch merge rebuilds the local container and stops there.
+- **Exception:** a feature the user asks to test publicly may be deployed from the branch they name, through Actions → Deploy to Cloud Run (`workflow_dispatch`). Never deploy a branch the user did not name.
+- **Never** add an automatic deploy trigger for `develop` or a feature branch, and report every Google Cloud deploy with its branch and image tag. Mechanics: `release-versioning.md`.
+
 ---
 <!-- from .kiro/steering/documentation.md -->
 
@@ -173,3 +178,10 @@ The app version must always match the release version.
 - **When creating a release `vX.Y.Z`:** bump both files, write `release-notes/x-x-x.md`, merge `develop` into `master`, then publish the tag from `master` with the notes (see the `release` skill).
 - If asked to create a release without a version bump, ask whether to bump `VERSION` first instead of tagging a mismatched version.
 - Tests (`version.test.ts`, `test_version.py`) fail if `VERSION`, `package.json`, the badge or `/api/health` disagree, or if the version is not `X.Y.Z[-<hash>]`.
+
+## Google Cloud Deploys Are Deliberate (SCRUM-223)
+- **What counts:** anything that reaches the running Google Cloud service or its image registry — the `deploy-cloud-run.yml` workflow, `gcloud builds submit`, `gcloud run deploy` and a manual push to Artifact Registry.
+- **Only from `master`, and only for a release:** a `develop` merge rebuilds the local container (`scripts/rebuild-container.sh`) and stops there. Production changes when `develop` is merged into `master` for a version bump.
+- **Exception — user testing:** a feature may be deployed from its own branch only when the user asks for it and names the branch. Trigger it from the Actions tab (`workflow_dispatch`); its `VERSION-<sha>` tag keeps that build identifiable, and the next release replaces it.
+- **Never** add an automatic deploy trigger for `develop` or a feature branch, and never deploy a branch the user did not name.
+- **Report** every Google Cloud deploy in the summary, with the branch and the image tag.

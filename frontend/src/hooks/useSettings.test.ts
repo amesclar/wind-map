@@ -49,6 +49,60 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(localStorage.getItem(STORAGE_KEYS.cartoApiKey)).toBeNull();
   });
 
+  it('keeps the seamark overlay off unless it was turned on (SCRUM-175)', () => {
+    const off = renderHook(() => useMapSettings());
+    expect(off.result.current.seamarksVisible).toBe(false);
+
+    act(() => off.result.current.setSeamarksVisible(true));
+    expect(localStorage.getItem(STORAGE_KEYS.seamarks)).toBe('true');
+
+    const restored = renderHook(() => useMapSettings());
+    expect(restored.result.current.seamarksVisible).toBe(true);
+  });
+
+  it('falls back to off for a stored seamark value that is not a boolean', () => {
+    localStorage.setItem(STORAGE_KEYS.seamarks, 'maybe');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.seamarksVisible).toBe(false);
+  });
+
+  it('keeps B.C. depth off unless it was turned on (SCRUM-205)', () => {
+    const off = renderHook(() => useMapSettings());
+    expect(off.result.current.bcDepthVisible).toBe(false);
+
+    act(() => off.result.current.setBcDepthVisible(true));
+    expect(localStorage.getItem(STORAGE_KEYS.bcDepth)).toBe('true');
+
+    const restored = renderHook(() => useMapSettings());
+    expect(restored.result.current.bcDepthVisible).toBe(true);
+  });
+
+  it('falls back to off for a stored B.C. depth value that is not a boolean', () => {
+    localStorage.setItem(STORAGE_KEYS.bcDepth, 'yes');
+    expect(renderHook(() => useMapSettings()).result.current.bcDepthVisible).toBe(false);
+  });
+
+  it('restores the paper chart, and a server CARTO key does not take it away (SCRUM-203)', () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'paper_chart');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.tileLayer).toBe('paper_chart');
+
+    // Production always has a server key; without the guard the mode would be unreachable.
+    act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
+    expect(result.current.tileLayer).toBe('paper_chart');
+    expect(result.current.cartoApiKey).toBe('server-key');
+  });
+
+  it('restores Seamap, and a server CARTO key does not take it away (SCRUM-206)', () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'seamap');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.tileLayer).toBe('seamap');
+
+    act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
+    expect(result.current.tileLayer).toBe('seamap');
+    expect(result.current.cartoApiKey).toBe('server-key');
+  });
+
   it('uses a server CARTO key for the session only', () => {
     const { result } = renderHook(() => useMapSettings());
     act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
@@ -86,6 +140,18 @@ describe('useMapSettings (SCRUM-92)', () => {
 
     act(() => result.current.setWindColorOverlayVisible(false));
     expect(localStorage.getItem(STORAGE_KEYS.windColorOverlayVisible)).toBe('false');
+  });
+
+  it('defaults the high contrast gradient to off and persists it (SCRUM-213)', () => {
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(false);
+
+    const { result } = renderHook(() => useMapSettings());
+    act(() => result.current.setWindColorHighContrast(true));
+    expect(localStorage.getItem(STORAGE_KEYS.windColorHighContrast)).toBe('true');
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(true);
+
+    act(() => result.current.setWindColorHighContrast(false));
+    expect(renderHook(() => useMapSettings()).result.current.windColorHighContrast).toBe(false);
   });
 });
 

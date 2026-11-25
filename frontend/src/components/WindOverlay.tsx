@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import type { GridWindPoint, SelectedGridPoint, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
-import { generateWindBarbSvg } from './WindBarb';
+import { generateWindBarbSvg, type WindBarbOutline } from './WindBarb';
 import { useLatest } from '../hooks/useLatest';
 import { degreesToCardinal, formatDegreesTrue, formatKnotsInUnit, formatTemperatureFromF } from '../utils/units';
 import { escapeHtml } from '../utils/html';
+import { CHART_MIN_ZOOM } from './mapTiles';
 
 interface WindOverlayProps {
   map: L.Map | null;
@@ -12,8 +13,12 @@ interface WindOverlayProps {
   points: GridWindPoint[];
   selectedPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
-  /** Dark halo so temperature colors stay readable over the gradient (SCRUM-123). */
-  halo?: boolean;
+  /** Paper chart base (SCRUM-203): SVG outline passes replace the CSS glow (SCRUM-208). */
+  lightBase?: boolean;
+  /** Paper chart declutter (SCRUM-211): thin the grid at the chart's zoom and clear saved locations. */
+  declutter?: boolean;
+  /** Positions a grid barb must not cover; their own marker draws a labelled barb (SCRUM-211). */
+  keepOut?: ReadonlyArray<{ latitude: number; longitude: number }>;
   /** Units and direction display for the barb pop-up (SCRUM-126), the user's settings. */
   unitSystem?: UnitSystem;
   speedUnit?: WindSpeedUnit;
@@ -29,8 +34,63 @@ function isSamePoint(a: SelectedGridPoint | null, lat: number, lon: number): boo
 
 /** Fallback color when a grid point has no temperature. */
 export const GRID_BARB_FALLBACK_COLOR = '#4ade80';
-const BARB_SIZE = 32;
-const SELECTED_BARB_SIZE = 40;
+
+/**
+ * The outline pass every barb gets (SCRUM-208, SCRUM-218): one tight dark rim drawn as an SVG stroke
+ * behind the glyph. The same rim works on the light chart — it separates a green or teal barb from
+ * white water — and on the dark bases, where it keeps the barb defined over a bright wind-colour
+ * gradient. Real geometry instead of a blurred `drop-shadow` keeps the edge sharp at 40 px.
+ */
+export const BARB_OUTLINES: WindBarbOutline[] = [{ color: '#161b22', width: 0.9 }];
+
+/** A grid barb this close to a saved location is dropped in its favour (SCRUM-211). */
+export const BARB_KEEP_OUT_RADIUS_PX = 30;
+const NO_KEEP_OUT: ReadonlyArray<{ latitude: number; longitude: number }> = [];
+
+/**
+ * Declutter the chart's grid (SCRUM-211). At the chart's native zoom the 80 px grid crowds the
+ * soundings, so every second point is dropped on a checkerboard, and any point within
+ * `BARB_KEEP_OUT_RADIUS_PX` of a saved location goes, because that marker draws its own labelled
+ * barb. Pure and pixel-based, so it is testable without a map; other bases pass no options and get
+ * the array back untouched.
+ */
+export function declutterGridPoints(
+  points: GridWindPoint[],
+  project: (point: { latitude: number; longitude: number }) => { x: number; y: number },
+  {
+    thin = false,
+    keepOut = NO_KEEP_OUT,
+  }: { thin?: boolean; keepOut?: ReadonlyArray<{ latitude: number; longitude: number }> } = {},
+): GridWindPoint[] {
+  if (!thin && keepOut.length === 0) return points;
+  // Row/column rather than array index, so a checkerboard stays a checkerboard whatever order the
+  // grid response arrives in.
+  const rows = new Map(
+    [...new Set(points.map((point) => point.latitude))]
+      .sort((a, b) => b - a)
+      .map((latitude, index) => [latitude, index]),
+  );
+  const cols = new Map(
+    [...new Set(points.map((point) => point.longitude))]
+      .sort((a, b) => a - b)
+      .map((longitude, index) => [longitude, index]),
+  );
+  const keepOutPixels = keepOut.map(project);
+  return points.filter((point) => {
+    if (thin && ((rows.get(point.latitude) ?? 0) + (cols.get(point.longitude) ?? 0)) % 2 !== 0) {
+      return false;
+    }
+    const { x, y } = project(point);
+    return keepOutPixels.every(
+      (corner) => Math.hypot(corner.x - x, corner.y - y) >= BARB_KEEP_OUT_RADIUS_PX,
+    );
+  });
+}
+// Only about 40 % of the 50-unit viewBox is ink (staff y 25 → 6, feathers to x 37), so the drawn
+// glyph is far smaller than the box: 40 px here is a ~10 × 15 px barb. 40 still leaves the grid
+// barbs apart at z12 (SCRUM-209).
+const BARB_SIZE = 40;
+const SELECTED_BARB_SIZE = 48;
 
 /**
  * SVG for a grid barb — the same drawing and temperature colors the drawer uses.
@@ -41,6 +101,9 @@ export function generateGridBarbSvg(
   directionDeg: number,
   tempF: number | null | undefined,
   size: number = BARB_SIZE,
+  outlines?: WindBarbOutline[],
+  /** Paper chart (SCRUM-216): the darker ramp that clears 3:1 on white chart water. */
+  chartBase = false,
 ): string {
   const hasTemp = typeof tempF === 'number';
   return generateWindBarbSvg({
@@ -50,19 +113,34 @@ export function generateGridBarbSvg(
     size,
     showLabel: false,
     colorOverride: hasTemp ? undefined : GRID_BARB_FALLBACK_COLOR,
+    colorScheme: chartBase ? 'chart' : 'standard',
+    outlines,
   });
 }
 
-export function buildGridBarbIcon(pt: GridWindPoint, isSelected: boolean, halo = false): L.DivIcon {
+export function buildGridBarbIcon(
+  pt: GridWindPoint,
+  isSelected: boolean,
+  lightBase = false,
+): L.DivIcon {
   const size = isSelected ? SELECTED_BARB_SIZE : BARB_SIZE;
-  const svgHtml = generateGridBarbSvg(pt.wind_speed_knots, pt.wind_direction_deg, pt.temperature_f, size);
-  // Selected barb gets a white highlight ring.
-  const ringStyle = isSelected
-    ? 'border-radius:50%;box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);'
-    : '';
+  const svgHtml = generateGridBarbSvg(
+    pt.wind_speed_knots,
+    pt.wind_direction_deg,
+    pt.temperature_f,
+    size,
+    BARB_OUTLINES,
+    lightBase,
+  );
+  // Selected barb gets a highlight ring: white on the dark bases, inverted on the light chart
+  // sheet where white would disappear (SCRUM-203).
+  const ring = lightBase
+    ? 'box-shadow:0 0 0 2px #161b22,0 0 0 3px rgba(255,255,255,0.85);background:rgba(22,27,34,0.12);'
+    : 'box-shadow:0 0 0 2px #ffffff;background:rgba(255,255,255,0.12);';
+  const ringStyle = isSelected ? `border-radius:50%;${ring}` : '';
   return L.divIcon({
     className: 'wind-grid-barb-marker',
-    html: `<div data-wind-barb data-selected="${isSelected}" class="${halo ? 'wind-barb-halo' : ''}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
+    html: `<div data-wind-barb data-selected="${isSelected}" style="cursor:pointer;line-height:0;${ringStyle}">${svgHtml}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
@@ -80,6 +158,9 @@ export function buildGridPointPopup(
   timeLabel: string | null = null,
 ): string {
   const speed = formatKnotsInUnit(pt.wind_speed_knots, speedUnit);
+  // Gusts come with the grid point (SCRUM-210); older cached frames may not have one.
+  const gust =
+    typeof pt.wind_gust_knots === 'number' ? formatKnotsInUnit(pt.wind_gust_knots, speedUnit) : null;
   const temperature =
     typeof pt.temperature_f === 'number' ? formatTemperatureFromF(pt.temperature_f, unitSystem) : '--';
   const direction =
@@ -94,6 +175,7 @@ export function buildGridPointPopup(
       <div style="color: #9ca3af; font-size: 11px; margin-bottom: 6px;">${pt.latitude.toFixed(2)}°, ${pt.longitude.toFixed(2)}°</div>
       <div style="display: flex; gap: 8px; font-weight: 600;">
         <span style="color: #38bdf8;">💨 ${speed}</span>
+        ${gust ? `<span style="color: #fb923c;">⚡ G: ${gust}</span>` : ''}
         <span style="color: #4ade80;">🌡️ ${temperature}</span>
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px; display: flex; align-items: center; gap: 4px;">🧭 ${direction}</div>
@@ -108,7 +190,9 @@ export function WindOverlay({
   points,
   selectedPoint,
   onGridPointSelect,
-  halo = false,
+  lightBase = false,
+  declutter = false,
+  keepOut = NO_KEEP_OUT,
   unitSystem = 'imperial',
   speedUnit = 'knots',
   dirDisplay = 'barb',
@@ -118,17 +202,26 @@ export function WindOverlay({
   const entriesRef = useRef<{ point: GridWindPoint; marker: L.Marker }[]>([]);
   const onSelectRef = useLatest(onGridPointSelect);
   const selectedRef = useLatest(selectedPoint);
-  const haloRef = useLatest(halo);
+  const lightBaseRef = useLatest(lightBase);
 
   // Draw one barb marker per grid point; replaced whenever the points change.
   useEffect(() => {
     if (!map) return;
-    const entries = points.map((point) => {
+    const project = (point: { latitude: number; longitude: number }) => {
+      const pixel = map.latLngToContainerPoint([point.latitude, point.longitude]);
+      return { x: pixel.x, y: pixel.y };
+    };
+    // The chart is dense at its native resolution; deeper views spread out on their own (SCRUM-211).
+    const shown = declutterGridPoints(points, project, {
+      thin: declutter && map.getZoom() <= CHART_MIN_ZOOM,
+      keepOut,
+    });
+    const entries = shown.map((point) => {
       const marker = L.marker([point.latitude, point.longitude], {
         icon: buildGridBarbIcon(
           point,
           isSamePoint(selectedRef.current, point.latitude, point.longitude),
-          haloRef.current,
+          lightBaseRef.current,
         ),
         interactive: true,
       }).addTo(map);
@@ -142,16 +235,32 @@ export function WindOverlay({
       entries.forEach(({ marker }) => marker.remove());
       if (entriesRef.current === entries) entriesRef.current = [];
     };
-  }, [map, points, selectedRef, haloRef, onSelectRef, unitSystem, speedUnit, dirDisplay, timeLabel]);
+  }, [
+    map,
+    points,
+    selectedRef,
+    lightBaseRef,
+    onSelectRef,
+    unitSystem,
+    speedUnit,
+    dirDisplay,
+    timeLabel,
+    declutter,
+    keepOut,
+  ]);
 
   // Highlight the selected point without recreating markers.
   useEffect(() => {
     entriesRef.current.forEach(({ point, marker }) => {
       marker.setIcon(
-        buildGridBarbIcon(point, isSamePoint(selectedPoint, point.latitude, point.longitude), halo),
+        buildGridBarbIcon(
+          point,
+          isSamePoint(selectedPoint, point.latitude, point.longitude),
+          lightBase,
+        ),
       );
     });
-  }, [selectedPoint, halo]);
+  }, [selectedPoint, lightBase]);
 
   return null;
 }

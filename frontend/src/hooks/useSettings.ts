@@ -1,9 +1,16 @@
 import { useCallback, useState } from 'react';
+import { isLightBase } from '../components/mapTiles';
 import { DEFAULT_TIMEZONE, STORAGE_KEYS, TIMEZONES } from '../constants';
 import type { AppConfig, MapTileLayer, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { useLocalStorageState } from './useLocalStorageState';
 
-const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'osm_dark', 'osm_standard'];
+const TILE_LAYER_IDS: readonly MapTileLayer[] = [
+  'carto_dark',
+  'osm_dark',
+  'osm_standard',
+  'paper_chart',
+  'seamap',
+];
 
 const parseTileLayer = (stored: string | null): MapTileLayer =>
   TILE_LAYER_IDS.includes(stored as MapTileLayer) ? (stored as MapTileLayer) : 'osm_dark';
@@ -11,7 +18,11 @@ const parseApiKey = (stored: string | null) => stored ?? '';
 const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
 const parseColorOverlay = (stored: string | null) => stored === 'true'; // default off (SCRUM-124)
+// Off by default: the chart reduces the gradient on its own, so only other bases change (SCRUM-213).
+const parseHighContrast = (stored: string | null) => stored === 'true';
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
+const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
+const parseBcDepth = (stored: string | null) => stored === 'true'; // default off (SCRUM-205)
 
 /** Tile layer, CARTO API key and wind overlay visibility, persisted to localStorage. */
 export function useMapSettings() {
@@ -39,10 +50,26 @@ export function useMapSettings() {
     STORAGE_KEYS.windColorOverlayVisible,
     parseColorOverlay,
   );
+  // High contrast gradient (SCRUM-213): opt-in, so the chart's automatic reduction is the only
+  // default and the other bases keep full colour until asked otherwise.
+  const [windColorHighContrast, setWindColorHighContrast] = useLocalStorageState(
+    STORAGE_KEYS.windColorHighContrast,
+    parseHighContrast,
+  );
   // Set by the layer toggle in SCRUM-100; the overlay itself ships in SCRUM-99.
   const [waterCurrentsVisible, setWaterCurrentsVisible] = useLocalStorageState(
     STORAGE_KEYS.waterCurrentsVisible,
     parseCurrents,
+  );
+  // Nautical seamark overlay (SCRUM-175): a community tile server, so off unless asked for.
+  const [seamarksVisible, setSeamarksVisible] = useLocalStorageState(
+    STORAGE_KEYS.seamarks,
+    parseSeamarks,
+  );
+  // B.C. depth context (SCRUM-205): CHS NONNA is an extra overseas request per tile, so off too.
+  const [bcDepthVisible, setBcDepthVisible] = useLocalStorageState(
+    STORAGE_KEYS.bcDepth,
+    parseBcDepth,
   );
 
   /** Saving a key switches to the CARTO layer; clearing it keeps the current layer. */
@@ -60,10 +87,14 @@ export function useMapSettings() {
     (config: AppConfig) => {
       if (config.carto_api_key && !cartoApiKey) {
         setServerKey(config.carto_api_key);
-        setSessionTileLayer('carto_dark');
+        // A stored light base - the paper chart (SCRUM-203) or Seamap (SCRUM-206) - outranks the
+        // key's session default, or the mode would be unreachable in production after every reload,
+        // where the server key is always present. The key itself is still adopted, so switching to
+        // CARTO later does not need a reload.
+        if (!isLightBase(storedTileLayer)) setSessionTileLayer('carto_dark');
       }
     },
-    [cartoApiKey],
+    [cartoApiKey, storedTileLayer],
   );
 
   return {
@@ -75,8 +106,14 @@ export function useMapSettings() {
     setWindOverlayVisible,
     windColorOverlayVisible,
     setWindColorOverlayVisible,
+    windColorHighContrast,
+    setWindColorHighContrast,
     waterCurrentsVisible,
     setWaterCurrentsVisible,
+    seamarksVisible,
+    setSeamarksVisible,
+    bcDepthVisible,
+    setBcDepthVisible,
     applyServerConfig,
   };
 }

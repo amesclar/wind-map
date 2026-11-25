@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +52,31 @@ if CORS_ORIGINS:
 # Shared-password protection for the public deployment (SCRUM-134). It is a no-op while
 # APP_PASSWORD is unset, and it wraps CORS because it is added last.
 app.add_middleware(BasicAuthMiddleware)
+
+
+def cache_control_for(path: str, content_type: str) -> str | None:
+    """Cache policy for the built frontend (SCRUM-241).
+
+    Vite names every chunk after its contents, so an asset URL never changes meaning and can be
+    cached for good. The HTML shell names those chunks, so it must be revalidated: otherwise a
+    tab (or a reload) can keep asking for chunk names a rebuild has removed, and the PDF export
+    fails with "Failed to fetch dynamically imported module".
+    """
+    if path.startswith("/assets/"):
+        return "public, max-age=31536000, immutable"
+    if content_type.startswith("text/html"):
+        return "no-cache"
+    return None
+
+
+@app.middleware("http")
+async def static_cache_policy(request: Request, call_next):
+    response = await call_next(request)
+    policy = cache_control_for(request.url.path, response.headers.get("content-type", ""))
+    if policy:
+        response.headers["Cache-Control"] = policy
+    return response
+
 
 # Register API routers
 app.include_router(locations.router)

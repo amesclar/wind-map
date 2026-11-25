@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { GridWindPoint, MapTileLayer, UnitSystem, WeatherModelInfo, WindSpeedUnit } from '../types';
-import { attributionText } from '../components/mapTiles';
+import { attributionText, isLightBase, seamarksShownFor } from '../components/mapTiles';
 import type {
   MapExportError,
   MapExportFormat,
@@ -33,6 +33,15 @@ import { APP_VERSION } from '../version';
 export const RANGE_FRAME_TIMEOUT_MS = 60_000;
 const RANGE_POLL_MS = 100;
 
+/**
+ * How long a single-view export waits for the current view's wind grid before capturing anyway
+ * (SCRUM-242). The barbs are drawn from that grid and a pan or zoom leaves them off the map until
+ * it lands, so an export started too early used to save a barb-less image. A grid that never
+ * settles must still not block the save.
+ */
+export const VIEW_GRID_TIMEOUT_MS = 5_000;
+const VIEW_GRID_POLL_MS = 100;
+
 /** Everything the export pipeline reads from the app (SCRUM-174). */
 export interface MapExportSettings {
   /** The map element the image is captured from (SCRUM-116). */
@@ -48,6 +57,10 @@ export interface MapExportSettings {
   tileLayer: MapTileLayer;
   windOverlayVisible: boolean;
   windColorOverlayVisible: boolean;
+  /** CHS NONNA depth overlay on: the exported footer credits CHS (SCRUM-205). */
+  bcDepthVisible: boolean;
+  /** Seamark overlay on: the exported footer credits OpenSeaMap (SCRUM-175). */
+  seamarksVisible: boolean;
   /** True while the saved-location data for the shown hour is in flight. */
   weatherLoading: boolean;
 }
@@ -69,10 +82,14 @@ export function useMapExport({
   tileLayer,
   windOverlayVisible,
   windColorOverlayVisible,
+  bcDepthVisible,
+  seamarksVisible,
   weatherLoading,
 }: MapExportSettings) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [savingMap, setSavingMap] = useState(false);
+  // A failed single-view export: shown in the dialog, which keeps every option (SCRUM-241).
+  const [viewError, setViewError] = useState<MapExportError | null>(null);
 
   // Range export state (SCRUM-155): progress, a failure with the frames captured so far, the
   // frames themselves and the cancellation handle.
@@ -88,6 +105,8 @@ export function useMapExport({
   } | null>(null);
   // Latest accepted grid response per hour, the range loop's readiness signal.
   const gridFrameRef = useRef<{ validTime: string | null; points: GridWindPoint[] } | null>(null);
+  // The current view's grid request is in flight; the single-view export waits for it (SCRUM-242).
+  const gridLoadingRef = useRef(false);
   const weatherLoadingRef = useRef(weatherLoading);
   weatherLoadingRef.current = weatherLoading;
 
@@ -123,17 +142,43 @@ export function useMapExport({
         unitSystem,
         speedUnit,
         attribution: attributionText(tileLayer),
+        bcDepth: bcDepthVisible,
+        // The chart draws its own aids, so the credit goes with the hidden overlay (SCRUM-214).
+        seamarks: seamarksShownFor(tileLayer, seamarksVisible),
         version: APP_VERSION,
       }),
       barbs: barbLegendEntries(speedUnit),
-      temperatures: temperatureBands(unitSystem),
+      // The legend follows the ramp the barbs are drawn with: both light bases use the darker one.
+      temperatures: temperatureBands(unitSystem, isLightBase(tileLayer)),
       speedUnitLabel: SPEED_UNIT_LABEL[speedUnit],
       temperatureUnitLabel: unitSystem === 'imperial' ? '°F' : '°C',
       // The export shows the same scale as the on-screen strip only when the gradient is on.
       windColorScale: windColorOverlayVisible ? buildWindColorScale(speedUnit) : undefined,
     }),
-    [timezone, selectedModelInfo, unitSystem, speedUnit, tileLayer, windColorOverlayVisible],
+    [
+      timezone,
+      selectedModelInfo,
+      unitSystem,
+      speedUnit,
+      tileLayer,
+      windColorOverlayVisible,
+      bcDepthVisible,
+      seamarksVisible,
+    ],
   );
+
+  /**
+   * Wait (bounded) for the current view's grid, so the barbs are in the image (SCRUM-242). The
+   * report comes from `useWindGrid` after the commit that draws the markers, so when this returns
+   * the barbs are already on the map.
+   */
+  const waitForViewGrid = useCallback(async () => {
+    if (!windOverlayVisible && !windColorOverlayVisible) return;
+    const deadline = Date.now() + VIEW_GRID_TIMEOUT_MS;
+    while (gridLoadingRef.current && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, VIEW_GRID_POLL_MS));
+    }
+  }, [windOverlayVisible, windColorOverlayVisible]);
 
   /** Resolve once the map shows `hour` with that hour's grid data (when drawn) and its tiles. */
   const waitForHour = useCallback(
@@ -170,6 +215,7 @@ export function useMapExport({
         orientation: options.orientation,
       };
       setSavingMap(true);
+      setViewError(null);
       setRangeError(null);
       setRangeProgress(null);
       setRangeFrames([]);
@@ -239,9 +285,13 @@ export function useMapExport({
         return;
       }
       setSavingMap(true);
+      setViewError(null);
       try {
         // The dialog cleans the user's name (SCRUM-162) and falls back to the generated one.
         const content = buildContent(forecastTime, options.fileName, capturedAt);
+        // The barbs come from a grid that is refetched after every pan or zoom; capture before
+        // it lands and the image shows the chart without them (SCRUM-242).
+        await waitForViewGrid();
         if (options.format === 'pdf') {
           await saveMapPdf(element, content, {
             fileName: content.fileName,
@@ -253,17 +303,27 @@ export function useMapExport({
         }
         setIsDialogOpen(false);
       } catch (err) {
+        // The dialog stays open with the chosen options; the message names what went wrong.
         console.error('Failed to export the map image:', err);
+        setViewError({
+          message: err instanceof Error ? err.message : 'The map image could not be saved.',
+          frames: 0,
+        });
       } finally {
         setSavingMap(false);
       }
     },
-    [mapContainerRef, forecastTime, selectedModelInfo, buildContent, runRangeExport],
+    [mapContainerRef, forecastTime, selectedModelInfo, buildContent, runRangeExport, waitForViewGrid],
   );
 
   /** Every accepted grid response doubles as the range loop's readiness signal (SCRUM-155). */
   const handleGridLoaded = useCallback((frame: { validTime: string | null; points: GridWindPoint[] }) => {
     gridFrameRef.current = frame;
+  }, []);
+
+  /** Grid fetch state from `useWindGrid`, reported after the commit that draws the barbs (SCRUM-242). */
+  const handleGridLoadingChange = useCallback((loading: boolean) => {
+    gridLoadingRef.current = loading;
   }, []);
 
   const handleCancelRange = useCallback(() => rangeAbortRef.current?.abort(), []);
@@ -285,7 +345,10 @@ export function useMapExport({
     }
   }, [rangeFrames, timezone, modelId]);
 
-  const openDialog = useCallback(() => setIsDialogOpen(true), []);
+  const openDialog = useCallback(() => {
+    setViewError(null);
+    setIsDialogOpen(true);
+  }, []);
   const closeDialog = useCallback(() => setIsDialogOpen(false), []);
 
   return {
@@ -296,11 +359,14 @@ export function useMapExport({
     savingMap,
     rangeProgress,
     rangeError,
+    /** The failure the dialog reports, whichever export path produced it (SCRUM-241). */
+    exportError: rangeError ?? viewError,
     rangeFrames,
     rangeHours,
     handleExport,
     handleCancelRange,
     handleSaveCaptured,
     handleGridLoaded,
+    handleGridLoadingChange,
   };
 }

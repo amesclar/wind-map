@@ -4,6 +4,13 @@
  * Pure functions so the wording, units, timezone handling and file naming are unit tested
  * without a canvas or a browser.
  */
+import {
+  NONNA_ATTRIBUTION_TEXT,
+  NONNA_NOTICE,
+  SEAMARK_ATTRIBUTION_TEXT,
+  SEAMARK_NOTICE,
+} from '../components/mapTiles';
+import { CHART_TEMPERATURE_BANDS } from '../components/WindBarb';
 import type { UnitSystem, WindSpeedUnit } from '../types';
 import { formatStepLabel, floorToHour } from './forecastWindow';
 import { formatTemperatureFromF, roundKnotsInUnit, SPEED_UNIT_LABEL } from './units';
@@ -54,13 +61,29 @@ export interface ExportFooterInput {
   speedUnit: WindSpeedUnit;
   /** Plain-text attribution of the base map, e.g. "© OpenStreetMap contributors © CARTO". */
   attribution: string;
+  /** CHS NONNA depth overlay on: its credit and notice join the footer (SCRUM-205). */
+  bcDepth?: boolean;
+  /** Seamark overlay on: its credit and the not-for-navigation notice join the footer (SCRUM-175). */
+  seamarks?: boolean;
   version: string;
 }
 
-/** Units, the base-map attribution (required by OSM and CARTO) and the app version. */
-export function buildExportFooter({ unitSystem, speedUnit, attribution, version }: ExportFooterInput): string {
+/**
+ * Units, the base-map attribution (required by OSM and CARTO) and the app version. The seamark
+ * credit and the "not for navigation" notice appear only while that overlay is on (SCRUM-175).
+ */
+export function buildExportFooter({
+  unitSystem,
+  speedUnit,
+  attribution,
+  bcDepth = false,
+  seamarks = false,
+  version,
+}: ExportFooterInput): string {
   const temperature = unitSystem === 'imperial' ? '°F' : '°C';
-  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution} · Wind Map v${version}`;
+  const depthCredit = bcDepth ? ` · ${NONNA_ATTRIBUTION_TEXT} · ${NONNA_NOTICE}` : '';
+  const seamarkCredit = seamarks ? ` · ${SEAMARK_ATTRIBUTION_TEXT} · ${SEAMARK_NOTICE}` : '';
+  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${depthCredit}${seamarkCredit} · Wind Map v${version}`;
 }
 
 export type ExportExtension = 'png' | 'jpeg' | 'pdf';
@@ -209,20 +232,28 @@ export function barbLegendEntries(speedUnit: WindSpeedUnit): BarbLegendEntry[] {
 }
 
 export interface TemperatureBand {
-  /** Same colors the barbs use (see `getTemperatureColor`). */
+  /** Same colors the barbs use (see `getTemperatureColor`, or the chart ramp in SCRUM-216). */
   color: string;
   caption: string;
 }
 
-/** The barb temperature classes, labelled in the user's temperature unit. */
-export function temperatureBands(unitSystem: UnitSystem): TemperatureBand[] {
+/**
+ * The barb temperature classes, labelled in the user's temperature unit. On the paper chart the
+ * barbs use the darker ramp, so the legend follows it or the credit would not match the drawing
+ * (SCRUM-216).
+ */
+export function temperatureBands(unitSystem: UnitSystem, chartBase = false): TemperatureBand[] {
   const t = (fahrenheit: number) => formatTemperatureFromF(fahrenheit, unitSystem);
+  const colors = chartBase
+    ? CHART_TEMPERATURE_BANDS.map((band) => band.color)
+    : ['#60a5fa', '#2dd4bf', '#4ade80', '#fbbf24', '#fb923c', '#ef4444'];
+  const [ice, teal, green, amber, orange, red] = colors;
   return [
-    { color: '#60a5fa', caption: `≤ ${t(32)}` },
-    { color: '#2dd4bf', caption: `${t(32)}–${t(50)}` },
-    { color: '#4ade80', caption: `${t(50)}–${t(68)}` },
-    { color: '#fbbf24', caption: `${t(68)}–${t(80)}` },
-    { color: '#fb923c', caption: `${t(80)}–${t(90)}` },
-    { color: '#ef4444', caption: `> ${t(90)}` },
+    { color: ice, caption: `≤ ${t(32)}` },
+    { color: teal, caption: `${t(32)}–${t(50)}` },
+    { color: green, caption: `${t(50)}–${t(68)}` },
+    { color: amber, caption: `${t(68)}–${t(80)}` },
+    { color: orange, caption: `${t(80)}–${t(90)}` },
+    { color: red, caption: `> ${t(90)}` },
   ];
 }

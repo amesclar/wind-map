@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from backend.app.main import resolve_static_file
+from backend.app.main import cache_control_for, resolve_static_file
 
 
 def test_serves_a_file_inside_the_build(tmp_path: Path):
@@ -40,3 +40,20 @@ def test_rejects_a_directory(tmp_path: Path):
     (tmp_path / "assets").mkdir()
 
     assert resolve_static_file("assets", tmp_path) is None
+
+
+def test_hashed_assets_never_change_under_the_same_name():
+    assert (
+        cache_control_for("/assets/index-pWAozy-B.js", "text/javascript; charset=utf-8")
+        == "public, max-age=31536000, immutable"
+    )
+
+
+def test_the_shell_must_be_revalidated():
+    # The shell names the chunk hashes, so a cached copy would outlive a rebuild (SCRUM-241).
+    assert cache_control_for("/", "text/html; charset=utf-8") == "no-cache"
+    assert cache_control_for("/some/client/route", "text/html; charset=utf-8") == "no-cache"
+
+
+def test_api_responses_keep_their_own_policy():
+    assert cache_control_for("/api/health", "application/json") is None

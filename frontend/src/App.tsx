@@ -66,6 +66,8 @@ export const App: React.FC = () => {
     tileLayer: mapSettings.tileLayer,
     windOverlayVisible: mapSettings.windOverlayVisible,
     windColorOverlayVisible: mapSettings.windColorOverlayVisible,
+    bcDepthVisible: mapSettings.bcDepthVisible,
+    seamarksVisible: mapSettings.seamarksVisible,
     weatherLoading: allWeather.loading,
   });
 
@@ -207,7 +209,10 @@ export const App: React.FC = () => {
             selectedModel={selectedModel}
             windOverlayVisible={mapSettings.windOverlayVisible}
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
+            windColorHighContrast={mapSettings.windColorHighContrast}
             waterCurrentsVisible={mapSettings.waterCurrentsVisible}
+            seamarksVisible={mapSettings.seamarksVisible}
+            bcDepthVisible={mapSettings.bcDepthVisible}
             selectedGridPoint={selectedGridPoint}
             onGridPointSelect={handleGridPointSelect}
             unitSystem={units.unitSystem}
@@ -218,6 +223,7 @@ export const App: React.FC = () => {
             containerRef={mapContainerRef}
             onGridLoaded={mapExport.handleGridLoaded}
             onGridQuotaExhausted={handleGridQuotaExhausted}
+            onGridLoadingChange={mapExport.handleGridLoadingChange}
           />
         </div>
         <ForecastTimeSelector
@@ -249,8 +255,14 @@ export const App: React.FC = () => {
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
         windColorOverlayVisible={mapSettings.windColorOverlayVisible}
         onToggleWindColorOverlay={mapSettings.setWindColorOverlayVisible}
+        windColorHighContrast={mapSettings.windColorHighContrast}
+        onToggleWindColorHighContrast={mapSettings.setWindColorHighContrast}
         waterCurrentsVisible={mapSettings.waterCurrentsVisible}
         onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
+        seamarksVisible={mapSettings.seamarksVisible}
+        onToggleSeamarks={mapSettings.setSeamarksVisible}
+        bcDepthVisible={mapSettings.bcDepthVisible}
+        onToggleBcDepth={mapSettings.setBcDepthVisible}
       />
 
       <WeatherModelGuideModal
@@ -288,7 +300,7 @@ export const App: React.FC = () => {
         timezone={timezone}
         rangeHours={mapExport.rangeHours}
         progress={mapExport.rangeProgress}
-        error={mapExport.rangeError}
+        error={mapExport.exportError}
         onCancelRange={mapExport.handleCancelRange}
         onSaveCaptured={mapExport.handleSaveCaptured}
       />

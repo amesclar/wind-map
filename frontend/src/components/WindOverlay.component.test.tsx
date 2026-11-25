@@ -11,15 +11,21 @@ vi.mock('leaflet', () => import('../test/leafletMock'));
 
 function fakeMap() {
   const handlers: Record<string, () => void> = {};
+  const state = { zoom: 13 };
   const map = {
     getBounds: () => ({ getSouth: () => 47, getNorth: () => 49, getWest: () => -123, getEast: () => -121 }),
     getSize: () => ({ x: 800, y: 600 }),
+    getZoom: () => state.zoom,
+    latLngToContainerPoint: ([lat, lon]: [number, number]) => ({
+      x: ((lon + 123) / 2) * 800,
+      y: ((49 - lat) / 2) * 600,
+    }),
     on: vi.fn((event: string, fn: () => void) => {
       handlers[event] = fn;
     }),
     off: vi.fn(),
   };
-  return { map: map as unknown as L.Map };
+  return { map: map as unknown as L.Map, state };
 }
 
 const point = (lat: number, lon = -122): GridWindPoint => ({
@@ -73,21 +79,18 @@ describe('WindOverlay drawing (SCRUM-122)', () => {
     expect(htmlOf(marker)).toContain('box-shadow:0 0 0 2px #ffffff');
   });
 
-  it('adds the dark halo to the existing barbs when the gradient turns on (SCRUM-123)', () => {
+  it('gives every barb the crisp outline, gradient or not (SCRUM-218)', () => {
     const { map } = fakeMap();
     const points = [point(48)];
     const props = { map, points, selectedPoint: null, onGridPointSelect: () => {} };
-    const { rerender } = render(<WindOverlay {...props} halo={false} />);
+    const { rerender } = render(<WindOverlay {...props} />);
     const marker = created[0];
+    expect(htmlOf(marker)).toContain('data-barb-outline="true"');
     expect(htmlOf(marker)).not.toContain('wind-barb-halo');
 
-    rerender(<WindOverlay {...props} halo />);
-    expect(created).toHaveLength(1); // icons are updated, markers are not recreated
-    expect(marker.setIcon).toHaveBeenCalled();
-    expect(htmlOf(marker)).toContain('wind-barb-halo');
-
-    rerender(<WindOverlay {...props} halo={false} />);
-    expect(htmlOf(marker)).not.toContain('wind-barb-halo');
+    rerender(<WindOverlay {...props} selectedPoint={{ latitude: 48, longitude: -122 }} />);
+    expect(created).toHaveLength(1); // the icon changes, the marker does not
+    expect(htmlOf(marker)).toContain('data-barb-outline="true"');
   });
 
   it('replaces the markers when new points arrive', () => {
@@ -103,6 +106,41 @@ describe('WindOverlay drawing (SCRUM-122)', () => {
       [47, -122],
       [46, -122],
     ]);
+  });
+
+  it('thins the chart grid at its native zoom and draws every point deeper in (SCRUM-211)', () => {
+    const { map, state } = fakeMap();
+    const props = { map, selectedPoint: null, onGridPointSelect: () => {} };
+    const points = [point(48, -122), point(48, -121.5), point(47.5, -122), point(47.5, -121.5)];
+
+    state.zoom = 12;
+    const { rerender } = render(<WindOverlay {...props} points={points} declutter />);
+    // Checkerboard: the even row + even column pair survives, its neighbours do not.
+    expect(created.map((m) => m.latlng)).toEqual([
+      [48, -122],
+      [47.5, -121.5],
+    ]);
+
+    state.zoom = 13;
+    rerender(<WindOverlay {...props} points={[...points]} declutter />);
+    expect(created).toHaveLength(6); // the two thinned markers plus the four redrawn
+    expect(created.slice(2).map((m) => m.latlng)).toHaveLength(4);
+  });
+
+  it('leaves a saved location clear of grid barbs on the chart (SCRUM-211)', () => {
+    const { map } = fakeMap();
+    render(
+      <WindOverlay
+        map={map}
+        points={[point(48, -122), point(48, -121)]}
+        selectedPoint={null}
+        onGridPointSelect={() => {}}
+        declutter
+        keepOut={[{ latitude: 48, longitude: -122 }]}
+      />,
+    );
+
+    expect(created.map((m) => m.latlng)).toEqual([[48, -121]]);
   });
 
   it('removes its markers when the points are cleared and on unmount', () => {
