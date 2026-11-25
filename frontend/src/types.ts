@@ -114,12 +114,16 @@ export interface FeedbackPayload {
   app_version: string;
   timezone: string;
   user_agent: string;
+  /** Up to 3 validated files, sent in the same multipart request (SCRUM-219). */
+  files?: File[];
 }
 
 /** Response of POST /api/feedback: the Jira issue that was created. */
 export interface FeedbackResult {
   issue_key: string;
   issue_url: string;
+  /** True when the issue was filed but its files could not be attached (SCRUM-219). */
+  attachments_failed?: boolean;
 }
 
 /** One point of GET /api/weather/grid. */

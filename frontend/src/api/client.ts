@@ -175,11 +175,19 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   }
 }
 
-/** File feedback as a Jira issue (SCRUM-179). Never retried automatically: a retry could duplicate the ticket. */
+/**
+ * File feedback as a Jira issue (SCRUM-179, SCRUM-219). Always multipart, so the optional files
+ * travel in the same request; the browser sets the boundary because no Content-Type is passed.
+ * Never retried automatically: a retry could duplicate the ticket.
+ */
 export function submitFeedback(payload: FeedbackPayload): Promise<FeedbackResult> {
-  return request('/feedback', 'Failed to send feedback', {
-    init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
-  });
+  const { files = [], ...fields } = payload;
+  const body = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) body.append(key, String(value));
+  }
+  for (const file of files) body.append('files', file, file.name);
+  return request('/feedback', 'Failed to send feedback', { init: { method: 'POST', body } });
 }
 
 export function fetchWindGrid(

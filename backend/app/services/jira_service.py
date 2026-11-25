@@ -6,6 +6,7 @@ import re
 import httpx
 
 from backend.app import config
+from backend.app.services.feedback_attachments import Attachment
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +84,43 @@ async def create_feedback_issue(summary: str, description: str, feedback_type: s
     if not re.fullmatch(r"[A-Z][A-Z0-9_]*-\d+", key):
         raise JiraError("Jira returned an unexpected issue key")
     return {"issue_key": key, "issue_url": f"{config.JIRA_BASE_URL}/browse/{key}"}
+
+
+def _client(timeout: float) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        auth=httpx.BasicAuth(config.JIRA_EMAIL, config.JIRA_API_TOKEN),
+        timeout=timeout,
+        headers={"Accept": "application/json"},
+    )
+
+
+async def attach_files(issue_key: str, attachments: list[Attachment]) -> None:
+    """Post every file to the issue in one multipart call. Raises JiraError on any failure."""
+    files = [("file", (item.name, item.content, item.content_type)) for item in attachments]
+    try:
+        async with _client(config.JIRA_ATTACHMENT_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{config.JIRA_BASE_URL}/rest/api/2/issue/{issue_key}/attachments",
+                files=files,
+                headers={"X-Atlassian-Token": "no-check"},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("Jira attachment request failed: %s", type(exc).__name__)
+        raise JiraError("Jira attachment request failed") from exc
+    if response.status_code not in (200, 201):
+        logger.warning("Jira rejected the attachments with status %s", response.status_code)
+        raise JiraError(f"Jira returned {response.status_code}")
+
+
+async def append_description_note(issue_key: str, description: str, note: str) -> None:
+    """Add `note` to the issue description. Raises JiraError on any failure."""
+    payload = {"fields": {"description": f"{description}\n\n{note}"}}
+    try:
+        async with _client(config.JIRA_TIMEOUT_SECONDS) as client:
+            response = await client.put(f"{config.JIRA_BASE_URL}/rest/api/2/issue/{issue_key}", json=payload)
+    except httpx.HTTPError as exc:
+        logger.warning("Jira description update failed: %s", type(exc).__name__)
+        raise JiraError("Jira description update failed") from exc
+    if response.status_code not in (200, 204):
+        logger.warning("Jira rejected the description update with status %s", response.status_code)
+        raise JiraError(f"Jira returned {response.status_code}")

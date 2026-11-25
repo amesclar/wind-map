@@ -134,7 +134,7 @@ docker run -d -p 5005:5005 \
   -e JIRA_FEEDBACK_PROJECT="SCRUM" \
   -v wind_data:/app/data --name wind-map wind-map
 ```
-Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP.
+Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP. Up to three files can ride along in the same request — 4 MB each, 12 MB in total, and only images (PNG, JPEG, GIF, WebP), PDF or plain text — so the whole request stays under 12.5 MB, well below Cloud Run's 32 MiB limit; anything larger or of another type is refused with a short reason and nothing is filed.
 
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
@@ -364,7 +364,7 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
-| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue (needs the Jira variables below; 503 otherwise) |
+| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue, with up to 3 attachments (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
 The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Provider failures return 502 with a short message; details are in the server log, and a transient 5xx/429 is retried twice before it gets that far.

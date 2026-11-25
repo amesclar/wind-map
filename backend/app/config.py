@@ -243,7 +243,24 @@ JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "").strip()
 JIRA_FEEDBACK_PROJECT = os.getenv("JIRA_FEEDBACK_PROJECT", "").strip() or "SCRUM"
 JIRA_TIMEOUT_SECONDS = 10.0
 FEEDBACK_LABEL = "in-app-feedback"
-FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB
+FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB, the JSON body kept for one release
+
+# Feedback attachments (SCRUM-219): one multipart request that must stay well below Cloud Run's
+# 32 MiB HTTP/1 limit, so the platform never rejects it before the app can answer with a reason.
+FEEDBACK_MAX_FILES = 3
+FEEDBACK_MAX_FILE_BYTES = 4 * 1024 * 1024  # 4 MiB each
+FEEDBACK_MAX_FILES_BYTES = 12 * 1024 * 1024  # 12 MiB in total
+FEEDBACK_MAX_REQUEST_BYTES = int(12.5 * 1024 * 1024)  # files plus 0.5 MiB of text and boundaries
+JIRA_ATTACHMENT_TIMEOUT_SECONDS = 60.0
+
+
+def validate_feedback_limits(request_bytes: int = FEEDBACK_MAX_REQUEST_BYTES) -> None:
+    """Refuse a feedback cap that leaves under 4 MiB of headroom below Cloud Run's 32 MiB."""
+    if request_bytes >= 28 * 1024 * 1024:
+        raise ValueError("FEEDBACK_MAX_REQUEST_BYTES must stay below 28 MiB (Cloud Run allows 32 MiB)")
+
+
+validate_feedback_limits()
 
 
 def _positive_int(name: str, default: int) -> int:
