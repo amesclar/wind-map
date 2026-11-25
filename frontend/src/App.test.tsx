@@ -340,6 +340,20 @@ describe('App map integration (SCRUM-126)', () => {
     expect(content.fileName).toBe('mymap 2026.png');
   });
 
+  it('exports the darker chart ramp in the legend on the Seamap base (SCRUM-206)', async () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'seamap');
+    render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    fireEvent.click(screen.getByTitle('Export map image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(vi.mocked(saveMapImage)).toHaveBeenCalledTimes(1));
+    const [, content] = vi.mocked(saveMapImage).mock.calls[0];
+    const [{ temperatureBands }] = await Promise.all([import('./utils/mapExport')]);
+    expect(content.temperatures).toEqual(temperatureBands('imperial', true));
+  });
+
   it('exports the current view as a single-page PDF in the chosen size and orientation (SCRUM-117)', async () => {
     render(<App />);
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());

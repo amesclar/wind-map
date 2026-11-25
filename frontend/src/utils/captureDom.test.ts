@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { pendingTiles, waitForTiles } from './captureDom';
+import { includeInCapture, pendingTiles, waitForTiles } from './captureDom';
 import { registerCaptureMap, registerVectorMap, resetCaptureReadiness } from './captureReadiness';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,6 +13,18 @@ function tile(loaded: boolean): HTMLImageElement {
 }
 
 afterEach(resetCaptureReadiness);
+
+describe('includeInCapture for the Seamap base (SCRUM-206)', () => {
+  it('keeps the MapLibre container in the capture and still drops Leaflet chrome', () => {
+    const glContainer = document.createElement('div');
+    glContainer.className = 'maplibregl-map leaflet-maplibre-gl';
+    expect(includeInCapture(glContainer)).toBe(true);
+
+    const popup = document.createElement('div');
+    popup.className = 'leaflet-popup';
+    expect(includeInCapture(popup)).toBe(false);
+  });
+});
 
 describe('waitForTiles readiness (SCRUM-204)', () => {
   it('counts a tile that exists but has not painted yet', () => {

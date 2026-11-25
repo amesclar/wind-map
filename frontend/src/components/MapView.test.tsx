@@ -27,6 +27,11 @@ import * as api from '../api/client';
 
 vi.mock('leaflet', () => import('../test/leafletMock'));
 
+// The Seamap style loads MapLibre on demand (SCRUM-206); its own module is covered by
+// seamapLayer.test, so here only the mount, the pane and the cleanup matter.
+const seamap = vi.hoisted(() => ({ createSeamapLayer: vi.fn(), mountSeamapLayer: vi.fn() }));
+vi.mock('./seamapLayer', () => seamap);
+
 // The shared wind grid fetch lives in MapView (SCRUM-122).
 vi.mock('../api/client', () => ({ fetchWindGrid: vi.fn(), parseQuotaExhausted: vi.fn() }));
 
@@ -512,6 +517,136 @@ describe('MapView paper chart base (SCRUM-203)', () => {
     expect(html).toContain('data-barb-outline="true"');
     // White would disappear on white water: the chart base draws the ring dark (SCRUM-203).
     expect(html).toContain('box-shadow:0 0 0 2px #161b22');
+  });
+});
+
+describe('MapView Seamap base (SCRUM-206)', () => {
+  let glLayer: {
+    addTo: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+    getMaplibreMap: () => { loaded: () => boolean };
+  };
+  let unregister: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    glLayer = {
+      addTo: vi.fn(),
+      remove: vi.fn(),
+      getMaplibreMap: () => ({ loaded: () => true }),
+    };
+    glLayer.addTo.mockReturnValue(glLayer);
+    unregister = vi.fn();
+    seamap.createSeamapLayer.mockReset();
+    seamap.mountSeamapLayer.mockReset();
+    seamap.createSeamapLayer.mockResolvedValue(glLayer);
+    seamap.mountSeamapLayer.mockImplementation(
+      (map: unknown, layer: { addTo: (target: unknown) => unknown }) => {
+        layer.addTo(map);
+        return unregister;
+      },
+    );
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
+  });
+
+  it('mounts the keyless substrate and one GL layer in the chart pane, then removes both', async () => {
+    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="seamap" />);
+
+    await waitFor(() => expect(seamap.mountSeamapLayer).toHaveBeenCalledTimes(1));
+    const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
+    expect(substrate.url).toContain('tile.openstreetmap.org');
+    expect(substrate.options?.className).toBe('osm-dark-tiles');
+    // The same pane as the chart: above the base tiles, below the depth shading and the aids.
+    expect(currentMap().panes[CHART_PANE].style.zIndex).toBe('205');
+
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+
+    await waitFor(() => expect(glLayer.remove).toHaveBeenCalled());
+    expect(unregister).toHaveBeenCalled();
+    expect(substrate.remove).toHaveBeenCalled();
+    // No GL layer is left behind and the plain base took its place.
+    expect(
+      createdTileLayers.filter(
+        (layer) => layer.options?.className === 'osm-dark-tiles' && layer.remove.mock.calls.length === 0,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('removes the GL layer when the map goes away', async () => {
+    const { unmount } = render(<MapView {...baseProps} locations={[]} tileLayerType="seamap" />);
+    await waitFor(() => expect(seamap.mountSeamapLayer).toHaveBeenCalled());
+
+    unmount();
+
+    expect(unregister).toHaveBeenCalled();
+    expect(glLayer.remove).toHaveBeenCalled();
+  });
+
+  it('never mounts the layer on a map that went away while the renderer loaded', async () => {
+    let finish!: (layer: typeof glLayer) => void;
+    seamap.createSeamapLayer.mockReturnValue(
+      new Promise<typeof glLayer>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { unmount } = render(<MapView {...baseProps} locations={[]} tileLayerType="seamap" />);
+    await waitFor(() => expect(seamap.createSeamapLayer).toHaveBeenCalled());
+
+    unmount();
+    finish(glLayer);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(glLayer.addTo).not.toHaveBeenCalled();
+    expect(seamap.mountSeamapLayer).not.toHaveBeenCalled();
+  });
+
+  it('gives the barbs the light-base ring and the gradient the attenuated wash', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      {
+        latitude: 48,
+        longitude: -122,
+        wind_speed_knots: 12,
+        wind_direction_deg: 180,
+        temperature_f: 55,
+      },
+    ]);
+    const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+
+    render(
+      <MapView
+        {...baseProps}
+        locations={[]}
+        tileLayerType="seamap"
+        windOverlayVisible
+        windColorOverlayVisible
+        selectedGridPoint={{ latitude: 48, longitude: -122 }}
+      />,
+    );
+
+    await waitFor(() => expect(createdMarkers).toHaveLength(1));
+    const html = (createdMarkers[0].icon as { html: string }).html;
+    expect(html).toContain('data-barb-outline="true"');
+    expect(html).toContain('box-shadow:0 0 0 2px #161b22');
+
+    const canvas = currentMap().panes[WIND_COLOR_PANE].querySelector('canvas') as HTMLCanvasElement;
+    await waitFor(() => expect(canvas.style.opacity).toBe(String(WIND_COLOR_OPACITY_ON_CHART)));
+    context.mockRestore();
+  });
+
+  it('draws every grid barb on Seamap: the chart declutter is chart-only', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([
+      { latitude: 48.5, longitude: -122, wind_speed_knots: 12, wind_direction_deg: 180, temperature_f: 55 },
+      { latitude: 48, longitude: -121, wind_speed_knots: 20, wind_direction_deg: 90, temperature_f: 50 },
+    ]);
+    render(<MapView {...baseProps} locations={[]} tileLayerType="seamap" windOverlayVisible />);
+
+    const barbs = () =>
+      createdMarkers.filter((marker) =>
+        ((marker.icon as { html?: string }).html ?? '').includes('data-wind-barb'),
+      );
+    await waitFor(() => expect(barbs()).toHaveLength(2));
   });
 });
 

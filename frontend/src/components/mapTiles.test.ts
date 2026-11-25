@@ -23,6 +23,13 @@ import {
   NONNA_OPACITY,
   NONNA_PANE,
   nonnaLayerConfig,
+  isLightBase,
+  SEAMAP_ATTRIBUTION_TEXT,
+  SEAMAP_MAX_NATIVE_ZOOM,
+  SEAMAP_NOTICE,
+  SEAMAP_PANE,
+  SEAMAP_STYLE_URL,
+  seamapLayerConfig,
   SEAMARK_ATTRIBUTION_TEXT,
   SEAMARK_NOTICE,
   SEAMARK_PANE,
@@ -32,6 +39,44 @@ import {
   tileLayerConfig,
 } from './mapTiles';
 import { gridDimensions, MAX_GRID_DIM } from '../hooks/useWindGrid';
+
+describe('seamapLayerConfig (SCRUM-206)', () => {
+  it('hands MapLibre the vector style and records the z14 tile ceiling', () => {
+    const config = tileLayerConfig('seamap');
+    expect(config.kind).toBe('vector');
+    expect(config.url).toBe(SEAMAP_STYLE_URL);
+    expect(SEAMAP_STYLE_URL).toBe('https://tiles.openwaters.io/seamap/style.json');
+    expect(SEAMAP_MAX_NATIVE_ZOOM).toBe(14);
+    expect(config).toEqual(seamapLayerConfig());
+    // Above the base tiles (200), below the depth shading (208) and the seamarks (210).
+    expect(SEAMAP_PANE).toBe(CHART_PANE);
+  });
+
+  it('credits both licences and repeats the navigation notice in the settings and the footer', () => {
+    expect(SEAMAP_ATTRIBUTION_TEXT).toBe('© Open Waters: Seamap · © OpenStreetMap contributors');
+    expect(SEAMAP_NOTICE).toBe('Not for navigation');
+    expect(attributionText('seamap')).toBe(`${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`);
+    const config = seamapLayerConfig();
+    expect(config.kind === 'vector' && config.attribution).toContain('OpenStreetMap');
+  });
+
+  it('leaves the four existing attribution strings untouched', () => {
+    expect(attributionText('paper_chart')).toBe('© NOAA Office of Coast Survey · Not for navigation');
+    expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
+    expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
+    expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
+  });
+});
+
+describe('isLightBase (SCRUM-206)', () => {
+  it('marks both light sheets, and no dark base', () => {
+    expect(isLightBase('paper_chart')).toBe(true);
+    expect(isLightBase('seamap')).toBe(true);
+    for (const layer of ['carto_dark', 'osm_dark', 'osm_standard'] as const) {
+      expect(isLightBase(layer)).toBe(false);
+    }
+  });
+});
 
 describe('tileLayerConfig (SCRUM-92)', () => {
   it('uses the keyed CARTO URL only when a key is set', () => {
@@ -164,7 +209,8 @@ describe('paper chart tile config (SCRUM-203)', () => {
   });
 
   it('never puts the dark filter on a chart or a standard layer', () => {
-    for (const layer of ['paper_chart', 'osm_standard', 'carto_dark'] as const) {
+    expect(tileLayerConfig('paper_chart').options.className).not.toContain('osm-dark-tiles');
+    for (const layer of ['osm_standard', 'carto_dark'] as const) {
       expect(tileLayerConfig(layer).options.className ?? '').not.toContain('osm-dark-tiles');
     }
     expect(tileLayerConfig('osm_dark').options.className).toContain('osm-dark-tiles');

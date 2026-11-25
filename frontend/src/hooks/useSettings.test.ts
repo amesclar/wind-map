@@ -93,6 +93,16 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(result.current.cartoApiKey).toBe('server-key');
   });
 
+  it('restores Seamap, and a server CARTO key does not take it away (SCRUM-206)', () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'seamap');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.tileLayer).toBe('seamap');
+
+    act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
+    expect(result.current.tileLayer).toBe('seamap');
+    expect(result.current.cartoApiKey).toBe('server-key');
+  });
+
   it('uses a server CARTO key for the session only', () => {
     const { result } = renderHook(() => useMapSettings());
     act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));

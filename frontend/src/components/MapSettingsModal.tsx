@@ -8,6 +8,8 @@ import {
   NONNA_ATTRIBUTION_TEXT,
   NONNA_DERIVATIVE_NOTICE,
   NONNA_NOTICE,
+  SEAMAP_ATTRIBUTION_TEXT,
+  SEAMAP_NOTICE,
   SEAMARK_ATTRIBUTION_TEXT,
   SEAMARK_HIDDEN_ON_CHART,
   SEAMARK_NOTICE,
@@ -184,6 +186,35 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       </div>
                       <div className="text-[11px] text-gray-500 mt-1">
                         {NOAA_ATTRIBUTION_TEXT} · {NOAA_NOTICE}. {NOAA_COVERAGE_NOTICE}
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    data-testid="tile-layer-seamap"
+                    className="flex items-start gap-3 p-2.5 rounded-lg border border-dark-600 hover:bg-dark-700/50 cursor-pointer transition"
+                  >
+                    <input
+                      type="radio"
+                      name="tileLayer"
+                      checked={tileLayer === 'seamap'}
+                      onChange={() => onChangeTileLayer('seamap')}
+                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    />
+                    <div>
+                      <div className="text-xs font-medium text-gray-100 flex items-center gap-2">
+                        Open Waters Seamap
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
+                          Free • No Key Needed
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        Vector nautical detail: navigation aids and depth shading, not soundings.
+                        Its tiles stop at zoom 14 and overzoom beyond that.
+                      </div>
+                      <div className="text-[11px] text-gray-500 mt-1">
+                        {SEAMAP_ATTRIBUTION_TEXT} · {SEAMAP_NOTICE}. The wind gradient is drawn
+                        lighter here so the aids stay crisp; turning it off helps further.
                       </div>
                     </div>
                   </label>
