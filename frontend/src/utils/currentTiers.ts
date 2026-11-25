@@ -17,18 +17,29 @@ export interface CurrentTier {
   /** Inclusive lower bound in knots; the tier runs up to the next tier's `minKnots`. */
   minKnots: number;
   color: string;
-  opacity: number;
   /** Chevrons drawn in the glyph. */
   chevrons: 1 | 2;
   /** Heavier stroke for stronger water. */
   bold: boolean;
 }
 
+/**
+ * Dark rim under every chevron (SCRUM-237), like the wind barbs' `BARB_OUTLINES`: the fill carries
+ * the tier and the rim carries the contrast on light bases and over the wind gradient. One rim is
+ * used on every base, so the old chart-only white halo is gone.
+ */
+export const CURRENT_TIER_OUTLINE = '#0b1220';
+
+/**
+ * Fills are fully opaque and get brighter/warmer with the current, so the rim and the glyph's own
+ * shape do the separating. Extreme is a light pink rather than magenta: the darker #ff4fd8 fell
+ * below 3:1 over the wind gradient at both overlay opacities (SCRUM-237).
+ */
 export const CURRENT_TIERS: readonly CurrentTier[] = [
-  { id: 'light', label: 'Light', minKnots: 0, color: '#38bdf8', opacity: 0.6, chevrons: 1, bold: false },
-  { id: 'moderate', label: 'Moderate', minKnots: 0.5, color: '#06b6d4', opacity: 0.85, chevrons: 2, bold: false },
-  { id: 'strong', label: 'Strong', minKnots: 1.5, color: '#0284c7', opacity: 1, chevrons: 2, bold: true },
-  { id: 'extreme', label: 'Extreme', minKnots: 3, color: '#f59e0b', opacity: 1, chevrons: 2, bold: true },
+  { id: 'light', label: 'Light', minKnots: 0, color: '#e0f2fe', chevrons: 1, bold: false },
+  { id: 'moderate', label: 'Moderate', minKnots: 0.5, color: '#67e8f9', chevrons: 2, bold: false },
+  { id: 'strong', label: 'Strong', minKnots: 1.5, color: '#ffffff', chevrons: 2, bold: true },
+  { id: 'extreme', label: 'Extreme', minKnots: 3, color: '#ff9ceb', chevrons: 2, bold: true },
 ];
 
 /** The tier a speed falls in; negative or missing speeds read as light. */
