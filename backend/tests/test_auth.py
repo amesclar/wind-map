@@ -2,13 +2,16 @@
 
 import base64
 import logging
+import secrets
 
 import pytest
 
 from backend.app import config
 from backend.app.auth import parse_basic_auth, password_matches
 
-PASSWORD = "s3cret-pass"
+# Generated per run, never stored (SCRUM-254): a literal here is what a generic-password scan
+# reports on a public repository. The deployed password lives in Secret Manager, not in the tests.
+PASSWORD = secrets.token_hex(16)
 
 
 def basic_header(password: str, username: str = "wind") -> dict[str, str]:
