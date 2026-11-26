@@ -1,4 +1,4 @@
-"""scripts/jira_agent.py: Jira writes carry the agent service account's identity (SCRUM-310)."""
+"""scripts/jira_agent.py: Jira writes carry the calling bot's identity (SCRUM-310, SCRUM-313)."""
 
 import importlib.util
 import io
@@ -177,10 +177,44 @@ def test_a_rejection_names_the_fields_but_never_the_body():
 
 
 def test_a_missing_token_names_the_variable(monkeypatch):
-    monkeypatch.delenv(jira_agent.KEY_VARIABLE, raising=False)
+    monkeypatch.delenv(jira_agent.DEFAULT_KEY_VARIABLE, raising=False)
 
-    with pytest.raises(jira_agent.AgentError, match=jira_agent.KEY_VARIABLE):
+    with pytest.raises(jira_agent.AgentError, match=jira_agent.DEFAULT_KEY_VARIABLE):
         jira_agent.JiraAgent()
+
+
+def test_the_default_key_variable_is_freebuff():
+    assert jira_agent.DEFAULT_KEY_VARIABLE == "FREEBUFF_JIRA_KEY"
+    assert jira_agent.build_parser().parse_args(["myself"]).key_variable == "FREEBUFF_JIRA_KEY"
+
+
+def test_key_variable_selects_the_other_bot_token(monkeypatch):
+    monkeypatch.setenv("FREEBUFF_JIRA_KEY", "tok-freebuff")
+    monkeypatch.setenv("KIRO_JIRA_KEY", "tok-kiro")
+
+    def responder(request):
+        return httpx.Response(201, json={"key": "SCRUM-314"})
+
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        return responder(request)
+
+    agent = jira_agent.JiraAgent(
+        base_url=BASE, cloud=CLOUD, transport=httpx.MockTransport(handle), key_variable="KIRO_JIRA_KEY"
+    )
+    agent.create(project="SCRUM", summary="From Kiro")
+
+    assert calls[0].headers["Authorization"] == "Bearer tok-kiro"
+
+
+def test_a_missing_selected_variable_names_it(monkeypatch):
+    monkeypatch.setenv("FREEBUFF_JIRA_KEY", "tok-freebuff")
+    monkeypatch.delenv("KIRO_JIRA_KEY", raising=False)
+
+    with pytest.raises(jira_agent.AgentError, match="KIRO_JIRA_KEY"):
+        jira_agent.JiraAgent(key_variable="KIRO_JIRA_KEY")
 
 
 def test_the_cloud_id_is_looked_up_once_when_it_is_not_configured():
@@ -218,7 +252,7 @@ def test_main_prints_the_issue_key_and_url(monkeypatch, capsys):
             return {"key": "SCRUM-312", "url": f"{BASE}/browse/SCRUM-312"}
 
     stub = Stub()
-    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda: stub)
+    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda key_variable: stub)
     monkeypatch.setattr(jira_agent.sys, "stdin", io.StringIO("Description from stdin"))
 
     assert jira_agent.main(["create", "--summary", "Hello", "--points", "2", "--description-file", "-"]) == 0
@@ -233,7 +267,7 @@ def test_main_reports_an_error_and_exits_non_zero(monkeypatch, capsys):
         def comment(self, key, body):
             raise jira_agent.AgentError("Jira returned 403")
 
-    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda: Stub())
+    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda key_variable: Stub())
 
     assert jira_agent.main(["comment", "SCRUM-312", "--body", "hello"]) == 1
     captured = capsys.readouterr()
@@ -246,10 +280,24 @@ def test_main_rejects_fields_that_are_not_a_json_object(monkeypatch, capsys):
         def set_fields(self, key, fields):
             pytest.fail("no request expected")
 
-    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda: Stub())
+    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda key_variable: Stub())
 
     assert jira_agent.main(["set", "SCRUM-312", "--fields", "[1]"]) == 1
     assert "--fields must be a JSON object" in capsys.readouterr().err
+
+
+def test_main_forwards_the_selected_key_variable(monkeypatch):
+    seen = []
+
+    class Stub:
+        def myself(self):
+            return {"displayName": "Kiro", "emailAddress": "kiro@serviceaccount.atlassian.com", "accountId": "1"}
+
+    monkeypatch.setattr(jira_agent, "_agent_from_env", lambda key_variable: seen.append(key_variable) or Stub())
+
+    assert jira_agent.main(["myself", "--key-variable", "KIRO_JIRA_KEY"]) == 0
+    assert jira_agent.main(["myself"]) == 0
+    assert seen == ["KIRO_JIRA_KEY", "FREEBUFF_JIRA_KEY"]
 
 
 def test_text_file_that_cannot_be_read_is_reported(tmp_path):
