@@ -3,6 +3,7 @@ import {
   buildWaveArrowIcon,
   buildWavePopup,
   generateWaveArrowSvg,
+  generateWaveKeySvg,
   lineOffsets,
   travelDirection,
 } from './WaveArrow';
@@ -104,6 +105,30 @@ describe('counted wavy lines (SCRUM-292)', () => {
       Number(parse(generateWaveArrowSvg(heightM, 0)).querySelectorAll('g')[0].getAttribute('stroke-width'));
     expect(rim(0.5) - stroke(0.5)).toBeCloseTo(2);
     expect(rim(4.5) - stroke(4.5)).toBeCloseTo(1.6);
+  });
+});
+
+describe('generateWaveKeySvg (SCRUM-305)', () => {
+  const keySvg = (heightM: number) => parse(generateWaveKeySvg(heightM)).querySelector('svg')!;
+  const keyWidth = (heightM: number) => Number(keySvg(heightM).getAttribute('width'));
+
+  it('crops the key glyph to its ink, widening with the line count', () => {
+    expect(keyWidth(0.5)).toBeLessThan(keyWidth(1.5));
+    expect(keyWidth(1.5)).toBeLessThan(keyWidth(3));
+    expect(keyWidth(3)).toBeLessThan(keyWidth(4.5));
+
+    // Narrower than the old 20 px square at every tier, which is what pushed the values away.
+    expect(keyWidth(4.5)).toBeLessThan(20);
+    expect(keyWidth(0.5)).toBeLessThan(7);
+  });
+
+  it('draws the key glyph upright at 20 px, in the tier colour over the rim', () => {
+    const svg = keySvg(4.5);
+
+    expect(svg.getAttribute('height')).toBe('20');
+    expect(svg.innerHTML).not.toContain('rotate(');
+    expect(svg.innerHTML).toContain('#ef4444');
+    expect(svg.innerHTML).toContain(WAVE_TIER_OUTLINE);
   });
 });
 
