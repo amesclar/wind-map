@@ -14,14 +14,17 @@ The mask is GLOBE, the NOAA/NCEI Global Land One-km Base Elevation land/sea grid
   byte (numpy's `packbits(..., bitorder="little")`), compressed with zlib level 9;
 - `scripts/build-land-mask.py` rebuilds it from the `global-land-mask` package, which is a build
   dependency only: at runtime this module needs the standard library alone;
-- 1,282,678 bytes on disk, 116,640,000 bytes decompressed (about 125 MB resident while loaded,
-  against roughly 935 MB for loading the package's 21600 x 43200 boolean array at runtime).
+- 1,282,678 bytes on disk, 116,640,000 bytes decompressed: the process that inflates it peaks at
+  123.4 MB RSS (measured 2026-11-26), against roughly 935 MB for loading the package's
+  21600 x 43200 boolean array at runtime. `preload()` inflates it once at startup, off the event loop
+  (SCRUM-273), so no request pays for it.
 
 GLOBE is not subject to U.S. copyright and NOAA/NCEI asks for the citation
 doi:10.7289/V52R3PMS; `global-land-mask` is MIT. If the asset is missing or unreadable the mask
 fails open — no cell is called land — and logs once, so the wave layer keeps working.
 """
 
+import asyncio
 import logging
 import math
 import zlib
@@ -56,6 +59,17 @@ def _bits() -> bytes | None:
         )
         return None
     return raw
+
+
+async def preload() -> None:
+    """Inflate the mask at startup, off the event loop (SCRUM-273).
+
+    `is_land` used to inflate 116 MB synchronously on the first wave request, inside an `async def`
+    that calls it per cell, so the first grid after a start blocked every other request while the
+    asset decompressed. Warming it in `lifespan` means no request ever pays that cost, and a
+    missing or corrupt asset is logged once at startup instead of on a user's request.
+    """
+    await asyncio.to_thread(_bits)
 
 
 def is_land(latitude: float, longitude: float) -> bool:

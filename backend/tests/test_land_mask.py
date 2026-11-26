@@ -81,3 +81,15 @@ def test_a_truncated_asset_fails_open(monkeypatch, tmp_path):
     land_mask.reset_cache()
 
     assert land_mask.is_land(48.2083, -122.625) is False
+
+
+def test_startup_warms_the_mask_off_the_request_path():
+    # `is_land` used to inflate 116 MB inside the first wave request, on the event loop
+    # (SCRUM-273); startup now pays it once, in a worker thread.
+    from fastapi.testclient import TestClient
+
+    from backend.app.main import app
+
+    assert land_mask._bits.cache_info().currsize == 0
+    with TestClient(app):
+        assert land_mask._bits.cache_info().currsize == 1
