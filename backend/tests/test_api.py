@@ -192,7 +192,8 @@ def test_every_response_carries_the_security_headers(client):
     response = client.get("/api/health")
 
     assert response.headers["x-content-type-options"] == "nosniff"
-    assert response.headers["referrer-policy"] == "same-origin"
+    # The OSM tile policy requires a Referer from web pages and forbids `same-origin` (SCRUM-288).
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert response.headers["x-frame-options"] == "DENY"
     policy = response.headers["content-security-policy"]
     assert "default-src 'self'" in policy
