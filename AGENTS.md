@@ -83,6 +83,14 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - **A fitting epic wins:** if an existing epic already covers the work, put the children under it and create nothing new. Do not force the pieces into an unrelated epic just to avoid making one.
 - **Report** the epic, its children and their estimates in the summary.
 
+## Jira Writes Use the Agent's Own Account (SCRUM-310)
+- **Who writes:** every Jira write — issue, comment, transition, link, estimate, resolution — goes through `python scripts/jira_agent.py` (`create`, `comment`, `transition`, `set`, `link`, `myself`), authenticated as the service account, so the history shows what the agent did. Do not make these writes through the Jira integration, which acts as Fred.
+- **Reads** (search, get issue, permissions) may keep using the integration tools.
+- **Credentials:** the token is read from `FREEBUFF_JIRA_KEY` by default, or from the variable named with `--key-variable` (SCRUM-313): use `KIRO_JIRA_KEY` when Kiro is the tool writing, so each bot authors its own writes. Both live in the user's shell profile. Never write a token, or part of one, into the repository, a command line, a log or a ticket. The script resolves the cloud id from `JIRA_BASE_URL` because the tokens are only accepted at the `api.atlassian.com` gateway.
+- **Which identity:** `python scripts/jira_agent.py myself` (add `--key-variable KIRO_JIRA_KEY` for the second) prints the account a key belongs to; check it before claiming who authored something.
+- **Environment:** a non-interactive agent shell does not read the profile, so run it the way this repository runs other such scripts: `zsh -ic 'python scripts/jira_agent.py comment SCRUM-123 --body "Merged in abc1234"'`.
+- **Errors:** the script prints one line naming the rejected fields and exits non-zero; it never prints the token or Jira's response body.
+
 ## Jira Dependency Links (SCRUM-118)
 - **Make dependencies explicit:** When a ticket cannot start or finish before another one, create a Jira issue link in addition to mentioning it in the description. Text alone is not enough, because Jira boards and filters only see links.
 - **Blocks:** Use link type `Blocks` when one ticket must be done first. The blocker is the `inwardIssue` and the blocked ticket is the `outwardIssue` (`createJiraIssueLink`, run through `executeWrite`; use `discover` if the tool is not loaded). The blocked ticket then shows "is blocked by" the blocker.

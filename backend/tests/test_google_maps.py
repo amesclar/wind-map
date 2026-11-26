@@ -48,6 +48,15 @@ def test_google_session_success(client, monkeypatch):
         assert "key=test-gcp-key" in data["tile_url"]
         assert "Google" in data["attribution"]
         assert mock_post.await_count == 1
+        # Hybrid is satellite plus the roadmap layer, never mapType "hybrid" (a 400 from Google).
+        assert mock_post.await_args.kwargs["json"] == {
+            "mapType": "satellite",
+            "layerTypes": ["layerRoadmap"],
+            "overlay": False,
+            "language": "en-US",
+            "region": "US",
+        }
+        assert "key=test-gcp-key" in str(mock_post.await_args.args[0])
 
         # Second request should be served from memory cache without upstream call
         response2 = client.get("/api/map/google-session")

@@ -67,8 +67,12 @@ async def request_google_maps_session(api_key: str | None = None) -> GoogleMapsS
         raise ValueError("Google Maps API key not configured (GCP_MAP_KEY)")
 
     url = f"{config.GOOGLE_MAPS_CREATE_SESSION_URL}?key={key}"
+    # Map Tiles has no "hybrid" mapType (sending it is a 400 INVALID_ARGUMENT). The hybrid theme is
+    # satellite imagery with the roadmap layer drawn on top, not a separate overlay.
     payload = {
-        "mapType": "hybrid",
+        "mapType": "satellite",
+        "layerTypes": ["layerRoadmap"],
+        "overlay": False,
         "language": "en-US",
         "region": "US",
     }
