@@ -96,7 +96,11 @@ async def static_cache_policy(request: Request, call_next):
 # blob:/data: URLs the map export's canvas work uses.
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "same-origin",
+    # `same-origin` strips the Referer from the cross-origin tile requests the keyless base layers
+    # make, and the OpenStreetMap tile usage policy requires one (it forbids a restrictive policy
+    # outright); the volunteer servers answer such tiles with "Access blocked" (SCRUM-288). This
+    # sends only the origin, never the path, to other hosts.
+    "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Frame-Options": "DENY",
     "Content-Security-Policy": (
         "default-src 'self'; "
