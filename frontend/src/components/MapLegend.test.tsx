@@ -133,6 +133,18 @@ describe('MapLegend (SCRUM-263)', () => {
     );
   });
 
+  it('keeps the card wide and the type at 10 px so no row wraps (SCRUM-296)', () => {
+    const { container } = render(<MapLegend speedUnit="knots" unitSystem="imperial" currents waves />);
+    const card = screen.getByTestId('map-legend');
+
+    expect(card.className).toContain('max-w-[300px]');
+    expect(card.className).toContain('pointer-events-none');
+    // Every piece of key type moved up one step with the card; none may drift back to 9 px.
+    expect(container.innerHTML).toContain('text-[10px]');
+    expect(container.innerHTML).not.toContain('text-[9px]');
+    expect(screen.getByTestId('map-legend-waves').textContent).toContain('13+ ft');
+  });
+
   it('never takes pointer events, so it cannot block the map', () => {
     render(<MapLegend speedUnit="knots" unitSystem="metric" currents waves />);
 
