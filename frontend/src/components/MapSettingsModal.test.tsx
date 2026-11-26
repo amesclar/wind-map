@@ -19,6 +19,8 @@ const BASE_PROPS = {
   onToggleWindColorHighContrast: vi.fn(),
   waterCurrentsVisible: false,
   onToggleWaterCurrents: vi.fn(),
+  wavesVisible: false,
+  onToggleWaves: vi.fn(),
   seamarksVisible: false,
   onToggleSeamarks: vi.fn(),
   bcDepthVisible: false,
@@ -127,6 +129,27 @@ describe('MapSettingsModal B.C. depth toggle (SCRUM-205)', () => {
     expect(within(body).getByText(/Bathymetry © CHS NONNA/)).toBeTruthy();
     expect(within(body).getByText(/Canadian Hydrographic Service/)).toBeTruthy();
     expect(screen.getByTestId('bc-depth-toggle').getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('MapSettingsModal wave toggle (SCRUM-234)', () => {
+  it('is off by default and calls the handler with the flipped value', () => {
+    const onToggle = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} wavesVisible={false} onToggleWaves={onToggle} />);
+
+    const toggle = screen.getByTestId('waves-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('shows the pressed state and says waves can be shown with currents', () => {
+    render(<MapSettingsModal {...BASE_PROPS} wavesVisible />);
+
+    expect(screen.getByTestId('waves-toggle').getAttribute('aria-pressed')).toBe('true');
+    const body = screen.getByTestId('map-settings-body');
+    expect(within(body).getByText(/Show wave height and direction/)).toBeTruthy();
+    expect(within(body).getByText(/together with the currents/)).toBeTruthy();
   });
 });
 

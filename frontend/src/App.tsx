@@ -133,6 +133,7 @@ export const App: React.FC = () => {
     windColorOverlayVisible: mapSettings.windColorOverlayVisible,
     bcDepthVisible: mapSettings.bcDepthVisible,
     seamarksVisible: mapSettings.seamarksVisible,
+    wavesVisible: mapSettings.wavesVisible,
     weatherLoading: allWeather.loading,
   });
 
@@ -287,6 +288,7 @@ export const App: React.FC = () => {
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
             windColorHighContrast={mapSettings.windColorHighContrast}
             waterCurrentsVisible={mapSettings.waterCurrentsVisible}
+            wavesVisible={mapSettings.wavesVisible}
             seamarksVisible={mapSettings.seamarksVisible}
             bcDepthVisible={mapSettings.bcDepthVisible}
             selectedGridPoint={selectedGridPoint}
@@ -337,6 +339,8 @@ export const App: React.FC = () => {
         onToggleWindColorHighContrast={mapSettings.setWindColorHighContrast}
         waterCurrentsVisible={mapSettings.waterCurrentsVisible}
         onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
+        wavesVisible={mapSettings.wavesVisible}
+        onToggleWaves={mapSettings.setWavesVisible}
         seamarksVisible={mapSettings.seamarksVisible}
         onToggleSeamarks={mapSettings.setSeamarksVisible}
         bcDepthVisible={mapSettings.bcDepthVisible}

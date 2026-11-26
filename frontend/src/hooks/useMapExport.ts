@@ -61,6 +61,8 @@ export interface MapExportSettings {
   bcDepthVisible: boolean;
   /** Seamark overlay on: the exported footer credits OpenSeaMap (SCRUM-175). */
   seamarksVisible: boolean;
+  /** Wave layer on: the exported footer credits the Marine source (SCRUM-234). */
+  wavesVisible: boolean;
   /** True while the saved-location data for the shown hour is in flight. */
   weatherLoading: boolean;
 }
@@ -84,6 +86,7 @@ export function useMapExport({
   windColorOverlayVisible,
   bcDepthVisible,
   seamarksVisible,
+  wavesVisible,
   weatherLoading,
 }: MapExportSettings) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -145,6 +148,7 @@ export function useMapExport({
         bcDepth: bcDepthVisible,
         // The chart draws its own aids, so the credit goes with the hidden overlay (SCRUM-214).
         seamarks: seamarksShownFor(tileLayer, seamarksVisible),
+        waves: wavesVisible,
         version: APP_VERSION,
       }),
       barbs: barbLegendEntries(speedUnit),
@@ -164,6 +168,7 @@ export function useMapExport({
       windColorOverlayVisible,
       bcDepthVisible,
       seamarksVisible,
+      wavesVisible,
     ],
   );
 

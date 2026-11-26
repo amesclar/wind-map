@@ -159,6 +159,43 @@ export interface CurrentGridResponse {
   time: string | null;
 }
 
+/** One point of GET /api/waves/grid (SCRUM-234). */
+export interface WavePoint {
+  /** The Marine model cell the value came from, not the requested map point. */
+  latitude: number;
+  longitude: number;
+  /** Significant wave height in metres; the UI converts to feet for imperial. */
+  height_m: number;
+  /** Where the waves come **from**, meteorological convention; the arrow adds 180°. */
+  direction_deg: number;
+  /** Peak period in seconds. */
+  period_s: number;
+  /** Forecast hour these values describe; null or absent means current conditions. */
+  time?: string | null;
+}
+
+/** GET /api/waves/grid payload; inland nodes are absent rather than zero. */
+export interface WaveGridResponse {
+  points: WavePoint[];
+  time: string | null;
+}
+
+/** One hourly value of GET /api/waves/point (SCRUM-233). */
+export interface WaveSeriesPoint {
+  time: string;
+  height_m: number;
+  direction_deg: number;
+  period_s: number;
+}
+
+/** GET /api/waves/point payload: hourly waves from the current hour, empty inland. */
+export interface WavePointResponse {
+  latitude: number;
+  longitude: number;
+  horizon_hours: number;
+  points: WaveSeriesPoint[];
+}
+
 /** The grid point whose barb is selected (highlighted) on the map. */
 export type SelectedGridPoint = Pick<GridWindPoint, 'latitude' | 'longitude'>;
 

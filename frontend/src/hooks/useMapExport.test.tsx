@@ -39,6 +39,7 @@ function settings(overrides: Partial<MapExportSettings> = {}): MapExportSettings
     windColorOverlayVisible: false,
     bcDepthVisible: false,
     seamarksVisible: false,
+    wavesVisible: false,
     weatherLoading: false,
     ...overrides,
   };

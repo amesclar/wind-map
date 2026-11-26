@@ -77,6 +77,20 @@ describe('buildExportFooter (SCRUM-116)', () => {
     expect(both.indexOf('CHS NONNA')).toBeLessThan(both.indexOf('OpenSeaMap'));
   });
 
+  it('credits the Marine source only while the wave layer is on (SCRUM-234)', () => {
+    const base = {
+      unitSystem: 'imperial' as const,
+      speedUnit: 'knots' as const,
+      attribution: '© OpenStreetMap contributors',
+      version: '0.12.0',
+    };
+
+    expect(buildExportFooter(base)).not.toContain('Wave data');
+    const withWaves = buildExportFooter({ ...base, waves: true });
+    expect(withWaves).toContain('Wave data: Copernicus Marine (via Open-Meteo)');
+    expect(withWaves.endsWith('· Wind Map v0.12.0')).toBe(true);
+  });
+
   it('carries the units, attribution and app version', () => {
     expect(
       buildExportFooter({
