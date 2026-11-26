@@ -100,6 +100,8 @@ inventory Freebuff cannot discover on its own (skills and post-task hooks). If t
 - **When:** Right after a PR is merged into `develop` or `master` (and the branch is deleted, merge hash commented, and ticket transitioned), rebuild and restart the local Docker container so the user can verify changes on http://localhost:5005.
 - **Command:** Run `scripts/rebuild-container.sh`.
 - The script builds the `wind-map` image, restarts the `wind-map` container with the `wind_data` volume on port 5005, and waits for `GET /api/health` to respond.
+- **Environment (SCRUM-262):** the script forwards `CARTO_API_KEY`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` and the feedback limits only when they are already set in the invoking shell's environment. A non-interactive agent shell (bash, an IDE task, a Kiro or Devin hook) never reads `~/.zshrc`, so run the script through the user's interactive shell (`zsh -ic './scripts/rebuild-container.sh'`) or export the variables first. Never write the values or a profile path into these rules.
+- **Verify the environment survived (SCRUM-262):** after the rebuild, `GET /api/config` must still report `feedback_enabled: true` and a CARTO key when the user has them configured. A rebuild that answers `{"carto_api_key":"","feedback_enabled":false}` has lost them: restart the container with the variables and report that, instead of calling the build verified.
 - **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
 
 ## Google Cloud Deploys Are Deliberate (SCRUM-223)
