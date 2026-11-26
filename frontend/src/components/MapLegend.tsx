@@ -25,6 +25,13 @@ export const MAP_KEY_WIND_COLOR = '#cbd5e1';
 export const MAP_KEY_GLYPH_PX = 20;
 
 /**
+ * Wind barbs draw larger than the other key glyphs (SCRUM-304). At the shared 20 px a staff was
+ * about 1 px wide and the barb's ink 7.6 px tall against the chevron's 10 px, so the barbs read as
+ * the smallest thing in the key; at 28 px the ink matches the chevrons' height.
+ */
+export const MAP_KEY_WIND_GLYPH_PX = 28;
+
+/**
  * What each glyph's orientation means (SCRUM-294). One parallel line per layer, in the key and in
  * its `aria-label`: shape and colour say how much, but never which way the glyph points.
  */
@@ -39,7 +46,7 @@ function windKeySvg(speedKnots: number): string {
     speedKnots,
     directionDeg: 0,
     tempF: 50,
-    size: MAP_KEY_GLYPH_PX,
+    size: MAP_KEY_WIND_GLYPH_PX,
     showLabel: false,
     colorOverride: MAP_KEY_WIND_COLOR,
   });
@@ -78,7 +85,10 @@ export const MapLegend: React.FC<{
     >
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
 
-      <div data-testid="map-legend-wind" className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div
+        data-testid="map-legend-wind"
+        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-x-1.5 gap-y-1"
+      >
         <span className="text-[10px] leading-none text-gray-300">Wind (kt)</span>
         {MAP_KEY_WIND_KNOTS.map((knots) => (
           <span
@@ -88,7 +98,7 @@ export const MapLegend: React.FC<{
           >
             <span
               aria-hidden="true"
-              className="inline-flex"
+              className="inline-flex shrink-0"
               dangerouslySetInnerHTML={{ __html: windKeySvg(knots) }}
             />
             <span>{knots}</span>
@@ -105,7 +115,7 @@ export const MapLegend: React.FC<{
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Currents ({speedLabel})
           </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="grid grid-cols-4 items-center gap-x-1.5 gap-y-1">
             {CURRENT_TIERS.map((tier) => (
               <span
                 key={tier.id}
@@ -114,7 +124,7 @@ export const MapLegend: React.FC<{
               >
                 <span
                   aria-hidden="true"
-                  className="inline-flex"
+                  className="inline-flex shrink-0"
                   dangerouslySetInnerHTML={{
                     __html: generateCurrentChevronSvg(tier.minKnots, 0, MAP_KEY_GLYPH_PX),
                   }}
@@ -137,7 +147,7 @@ export const MapLegend: React.FC<{
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Waves ({waveUnit})
           </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="grid grid-cols-4 items-center gap-x-1.5 gap-y-1">
             {WAVE_TIERS.map((tier) => (
               <span
                 key={tier.id}
@@ -146,7 +156,7 @@ export const MapLegend: React.FC<{
               >
                 <span
                   aria-hidden="true"
-                  className="inline-flex"
+                  className="inline-flex shrink-0"
                   // 180° from is due north travel: the key shows an arrow pointing up.
                   dangerouslySetInnerHTML={{
                     __html: generateWaveArrowSvg(tier.minMetres, 180, MAP_KEY_GLYPH_PX),
