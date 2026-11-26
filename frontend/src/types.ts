@@ -90,7 +90,7 @@ export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
  * Base maps; `paper_chart` is the NOAA chart (SCRUM-203) and `seamap` the Open Waters vector style
  * (SCRUM-206). Both are light sheets and must not be darkened.
  */
-export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard' | 'paper_chart' | 'seamap';
+export type MapTileLayer = 'carto_dark' | 'osm_dark' | 'osm_standard' | 'paper_chart' | 'seamap' | 'google_satellite';
 
 /** Body of POST /api/locations. */
 export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' | 'admin1' | 'country'>;
@@ -100,6 +100,8 @@ export interface AppConfig {
   carto_api_key?: string;
   /** True when the server has Jira credentials, so the feedback button is shown (SCRUM-179). */
   feedback_enabled?: boolean;
+  /** True when GCP_MAP_KEY is set, enabling Google Satellite basemap (SCRUM-311). */
+  google_satellite_enabled?: boolean;
 }
 
 /** Feedback types accepted by POST /api/feedback (SCRUM-179). */

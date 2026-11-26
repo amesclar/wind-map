@@ -28,6 +28,10 @@ interface NavbarProps {
   onOpenExportDialog: () => void;
   /** True while an export is being captured. */
   savingMap: boolean;
+  /** True when export is disabled (SCRUM-311). */
+  exportDisabled?: boolean;
+  /** Tooltip when export is disabled (SCRUM-311). */
+  exportDisabledTooltip?: string;
   /** The server can file feedback in Jira, so the feedback button is shown (SCRUM-179). */
   feedbackEnabled: boolean;
   onOpenFeedback: () => void;
@@ -53,6 +57,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   hasCartoKey,
   onOpenExportDialog,
   savingMap,
+  exportDisabled = false,
+  exportDisabledTooltip,
   feedbackEnabled,
   onOpenFeedback,
   canRefresh = false,
@@ -199,7 +205,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
         {/* Export trigger: download icon beside Preferences (SCRUM-157) */}
-        <MapExportControl onOpen={onOpenExportDialog} busy={savingMap} />
+        <MapExportControl
+          onOpen={onOpenExportDialog}
+          busy={savingMap}
+          disabled={exportDisabled}
+          disabledTooltip={exportDisabledTooltip}
+        />
 
         {/* Preferences: timezone and units (SCRUM-107) */}
         <button

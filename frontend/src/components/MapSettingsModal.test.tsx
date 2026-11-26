@@ -159,7 +159,7 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
     render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
 
     const options = within(screen.getByTestId('map-settings-column-options'));
-    expect(options.getAllByRole('radio')).toHaveLength(5);
+    expect(options.getAllByRole('radio')).toHaveLength(6);
 
     const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
     expect((radio as HTMLInputElement).checked).toBe(false);
@@ -203,6 +203,35 @@ describe('MapSettingsModal Seamap radio (SCRUM-206)', () => {
 
     expect(
       (screen.getByTestId('tile-layer-seamap').querySelector('input') as HTMLInputElement).checked,
+    ).toBe(true);
+  });
+
+  it('selects Google Satellite (Hybrid) and displays the export restriction note (SCRUM-311)', () => {
+    const onChange = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
+
+    const option = screen.getByTestId('tile-layer-google-satellite');
+    expect(within(option).getByText(/Google Satellite \(Hybrid\)/)).toBeTruthy();
+    expect(within(option).getByText(/Export unavailable on Google Maps/)).toBeTruthy();
+
+    const radio = option.querySelector('input') as HTMLInputElement;
+    fireEvent.click(radio);
+    expect(onChange).toHaveBeenCalledWith('google_satellite');
+  });
+
+  it('hides Google Satellite when the server has no Google key (SCRUM-311)', () => {
+    render(<MapSettingsModal {...BASE_PROPS} googleSatelliteEnabled={false} />);
+
+    expect(screen.queryByTestId('tile-layer-google-satellite')).toBeNull();
+  });
+
+  it('reflects Google Satellite stored choice', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="google_satellite" />);
+
+    expect(
+      (
+        screen.getByTestId('tile-layer-google-satellite').querySelector('input') as HTMLInputElement
+      ).checked,
     ).toBe(true);
   });
 });

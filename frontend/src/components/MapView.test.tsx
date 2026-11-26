@@ -885,4 +885,13 @@ describe('MapView container ref (SCRUM-283)', () => {
 
     expect(assignments.length).toBe(afterMount);
   });
+
+  it('renders the Google logo badge when google_satellite is selected (SCRUM-311)', () => {
+    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="google_satellite" />);
+    const badge = screen.getByTestId('google-maps-badge');
+    expect(badge.querySelector('img')?.getAttribute('alt')).toBe('Google');
+
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    expect(screen.queryByTestId('google-maps-badge')).toBeNull();
+  });
 });

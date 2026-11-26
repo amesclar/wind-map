@@ -35,6 +35,7 @@ import {
 import { registerCaptureMap } from '../utils/captureReadiness';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 import { useBaseLayers } from '../hooks/useBaseLayers';
+import googleMapsLogo from '../assets/google-maps-logo.png';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -483,6 +484,15 @@ export const MapView: React.FC<MapViewProps> = ({
         timeLabel={validTimeLabel}
       />
       <WaveOverlay map={mapInstance} points={wavePoints} unitSystem={unitSystem} timeLabel={validTimeLabel} />
+      {/* Google branding requirement (SCRUM-311): the official Google logo badge, bottom-left */}
+      {tileLayerType === 'google_satellite' && (
+        <div
+          data-testid="google-maps-badge"
+          className="absolute bottom-2 left-2 z-[400] pointer-events-none px-1.5 py-1 rounded bg-black/60 shadow"
+        >
+          <img src={googleMapsLogo} alt="Google" className="h-3.5 w-auto select-none" />
+        </div>
+      )}
       {/* One key for every layer (SCRUM-263): wind always, currents and waves only while shown. */}
       <MapLegend
         speedUnit={speedUnit}

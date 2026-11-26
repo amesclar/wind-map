@@ -13,6 +13,10 @@ import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
 import { formatStepLabel } from './utils/forecastWindow';
 import { buildRefreshHint } from './utils/refreshHint';
+import {
+  GOOGLE_MAP_EXPORT_DISABLED_REASON,
+  GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP,
+} from './components/mapTiles';
 import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
@@ -142,6 +146,8 @@ export const App: React.FC = () => {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  // The server holds a Google Maps key, so the hybrid base map can be offered (SCRUM-311).
+  const [googleSatelliteEnabled, setGoogleSatelliteEnabled] = useState(false);
   // Open-Meteo quota warning: shown once per reset window, however many grid requests fail.
   const [quotaWarning, setQuotaWarning] = useState<{ resetAt: string | null } | null>(null);
   const warnedQuotaRef = useRef<string | null>(null);
@@ -178,6 +184,7 @@ export const App: React.FC = () => {
         // other two requests.
         applyServerConfig(config);
         setFeedbackEnabled(Boolean(config.feedback_enabled));
+        setGoogleSatelliteEnabled(Boolean(config.google_satellite_enabled));
         setModels(availableModels);
 
         const fallback = saved[0] ?? null;
@@ -272,6 +279,8 @@ export const App: React.FC = () => {
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
         onOpenExportDialog={mapExport.openDialog}
         savingMap={mapExport.savingMap}
+        exportDisabled={mapSettings.tileLayer === 'google_satellite'}
+        exportDisabledTooltip={GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP}
         feedbackEnabled={feedbackEnabled}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
         onRefresh={dataRefresh.refresh}
@@ -340,6 +349,7 @@ export const App: React.FC = () => {
         onChangeTileLayer={mapSettings.setTileLayer}
         cartoApiKey={mapSettings.cartoApiKey}
         onSaveCartoApiKey={mapSettings.saveCartoApiKey}
+        googleSatelliteEnabled={googleSatelliteEnabled}
         windOverlayVisible={mapSettings.windOverlayVisible}
         onToggleWindOverlay={mapSettings.setWindOverlayVisible}
         windColorOverlayVisible={mapSettings.windColorOverlayVisible}
@@ -389,6 +399,8 @@ export const App: React.FC = () => {
         error={mapExport.exportError}
         onCancelRange={mapExport.handleCancelRange}
         onSaveCaptured={mapExport.handleSaveCaptured}
+        disabled={mapSettings.tileLayer === 'google_satellite'}
+        disabledReason={GOOGLE_MAP_EXPORT_DISABLED_REASON}
       />
     </div>
   );

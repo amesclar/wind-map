@@ -306,4 +306,18 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
       hours: RANGE_HOURS.slice(0, 3),
     });
   });
+
+  it('disables the Export button and shows a banner when export is disabled (SCRUM-311)', () => {
+    renderDialog({
+      disabled: true,
+      disabledReason: 'Map image/PDF export is disabled on Google Maps due to licensing restrictions.',
+    });
+
+    const banner = screen.getByTestId('export-disabled-banner');
+    expect(banner.textContent).toContain('export is disabled on Google Maps');
+
+    const button = screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('title')).toContain('export is disabled on Google Maps');
+  });
 });

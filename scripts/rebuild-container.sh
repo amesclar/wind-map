@@ -27,7 +27,7 @@ docker rm wind-map >/dev/null 2>&1
 # Optional settings are forwarded by name (`-e NAME`), so their values never appear in the
 # command line. The Jira variables enable in-app feedback (SCRUM-179).
 app_env=()
-for name in CARTO_API_KEY JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_FEEDBACK_PROJECT FEEDBACK_MAX_PER_HOUR; do
+for name in CARTO_API_KEY GCP_MAP_KEY JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_FEEDBACK_PROJECT FEEDBACK_MAX_PER_HOUR; do
   if [ -n "${!name:-}" ]; then
     app_env+=(-e "$name")
   fi
