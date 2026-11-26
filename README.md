@@ -206,26 +206,132 @@ container does not use it. The password is never printed; read it with:
 gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
 ```
 
-### Self-Hosted Open-Meteo Fallback (prepared, not running)
+### Self-Hosted Open-Meteo Fallback
 
-The SCRUM-236 spike recommended a self-hosted Open-Meteo instance as a fallback for the free API
-(SCRUM-265). The setup is committed, but **nothing is created or billing** until you ask for it:
+The SCRUM-236 spike recommended a self-hosted Open-Meteo instance as a fallback for the free API,
+for when the 10,000-calls-a-day limit starts to bite (SCRUM-265). The setup is committed as code and
+**creates nothing on its own**: `plan` is the default command, and `create` and `delete` refuse to
+run without `--yes`, so no script or agent can start billing by accident.
 
 ```bash
-scripts/open-meteo-fallback.sh plan          # what would be created, and the cost; the default
-scripts/open-meteo-fallback.sh status        # read-only check of the instance and firewall rule
-scripts/open-meteo-fallback.sh create --yes  # bills about $58.92/month while it exists
-scripts/open-meteo-fallback.sh delete --yes  # returns the project to $0
+scripts/open-meteo-fallback.sh plan          # what would be created and what it costs (default)
+scripts/open-meteo-fallback.sh status        # read-only: does it exist, and is it running?
+scripts/open-meteo-fallback.sh create --yes  # creates it; about $58.92/month while it exists
+scripts/open-meteo-fallback.sh delete --yes  # deletes instance, disk and firewall; back to $0
 ```
 
-`create` builds one Compute Engine `e2-standard-2` in `us-west1-b` with a 100 GB boot disk that is
-also the Open-Meteo cache (`CACHE_SIZE=32GB`), running Container-Optimized OS. Its startup script
-starts the API pinned by digest plus a ten-minute warm-up loop for the default view, because the
-spike measured 133 s for a cold first request against 30 to 80 ms warm. Port 8080 is open only to
-the VPC connector's range; the instance's external address is for the outbound S3 download.
+#### 1. Before you start
 
-Reaching it from Cloud Run needs a Serverless VPC Access connector (about $9/month) and the
-app-side fallback, which SCRUM-266 adds. `plan` and `status` are safe to run at any time.
+`gcloud` must work and be authenticated against the project that holds the app:
+
+```bash
+gcloud auth login
+gcloud config set project wind-app-515017
+gcloud auth list          # the account must be active
+```
+
+`create` enables the Compute Engine API and creates an instance and a firewall rule, so the account
+needs `roles/compute.instanceAdmin.v1`, `roles/compute.securityAdmin` and
+`roles/serviceusage.serviceUsageAdmin` on the project (project owner or editor covers all three).
+If `gcloud` fails with a `certifi/cacert.pem` `FileNotFoundError`, the SDK installation is broken
+rather than Python: run `gcloud components reinstall` before going further.
+
+#### 2. Look before you leap
+
+```bash
+scripts/open-meteo-fallback.sh plan
+```
+
+This prints the zone, instance name, machine type, disk, firewall source range and the monthly
+estimate, and it makes no Google Cloud calls at all. What `create` would build:
+
+- one Compute Engine `e2-standard-2` (2 vCPU, 8 GB) in `us-west1-b`, the same region as Cloud Run;
+- a 100 GB `pd-balanced` boot disk that is also the Open-Meteo cache (`CACHE_SIZE=32GB`);
+- Container-Optimized OS running the Open-Meteo image pinned by digest, pointed at the public AWS
+data, with a ten-minute warm-up loop for the default Oak Harbor view;
+- a firewall rule opening `tcp:8080` only to the Serverless VPC Access connector's range
+(`10.8.0.0/28`); the instance's own external address exists only for its outbound S3 download, and
+nothing on the internet can reach the API.
+
+Override any of it with environment variables, e.g.
+`OPEN_METEO_INSTANCE=open-meteo-dev OPEN_METEO_SOURCE_RANGES=10.9.0.0/28`; see
+`scripts/open-meteo-fallback.sh --help`.
+
+#### 3. Create it
+
+```bash
+scripts/open-meteo-fallback.sh create --yes
+```
+
+It creates the firewall rule before the instance, so port 8080 is never briefly open to the world,
+and it is idempotent: resources that already exist are left alone. The command ends by printing the
+verification steps below. Expect the first forecast request to take up to about two minutes while
+the VM pulls model metadata from S3; after that the same area answers in tens of milliseconds.
+
+#### 4. Verify it
+
+No public port is open, so reach it through an IAP tunnel:
+
+```bash
+gcloud compute ssh open-meteo-fallback --project=wind-app-515017 --zone=us-west1-b \
+  --tunnel-through-iap -- -N -L 8080:localhost:8080 &
+
+curl -fsS 'http://127.0.0.1:8080/v1/forecast?latitude=48.2939&longitude=-122.6064&current=temperature_2m,wind_speed_10m' \
+  | head -c 300
+```
+
+Then check both containers on the VM itself (the API, and the warm-up loop that keeps the default
+view fast):
+
+```bash
+gcloud compute ssh open-meteo-fallback --project=wind-app-515017 --zone=us-west1-b \
+  --tunnel-through-iap --command 'sudo docker ps; sudo docker logs --tail 20 open-meteo-warm'
+```
+
+A healthy instance shows `open-meteo` and `open-meteo-warm` as `Up`, and the warm log repeats
+`warm request failed` only while the API is still starting. `scripts/open-meteo-fallback.sh status`
+reports whether the instance exists and its state.
+
+#### 5. What it costs, and how to stop paying
+
+About **$58.92 a month** at us-west1 list prices: `e2-standard-2` $48.92 and the 100 GB disk
+$10.00. Leaving the VM stopped would still bill the disk, so the zero-cost state is deletion:
+
+```bash
+scripts/open-meteo-fallback.sh delete --yes
+```
+
+That removes the instance (with its boot disk, and with it the cache) and the firewall rule.
+Creating it again re-downloads what it needs. The Serverless VPC Access connector that lets Cloud
+Run reach it is **not** created here: it costs about $9 a month and belongs with the app-side
+fallback in SCRUM-266.
+
+#### 6. Using it from the app
+
+Not wired up yet. SCRUM-264 adds `OPEN_METEO_BASE_URL` and `OPEN_METEO_MARINE_BASE_URL`, and
+SCRUM-266 adds the connector plus the switch to the fallback on 429/503. At that point the app
+points at the instance's internal IP (printed by `status`) and the pre-warmed cache makes the first
+fallback request usable rather than cold.
+
+#### 7. Troubleshooting
+
+- **`gcloud` fails before doing anything** with `lib/third_party/requests/...` and
+  `certifi/cacert.pem`: the SDK is broken, not Python. `gcloud components reinstall`.
+- **`status` says the instance is absent after `create`**: the script and the previous command may
+  be looking at different projects or zones; check `GCP_PROJECT`, `GCP_ZONE` and
+  `gcloud config list`.
+- **Cloud Run cannot reach port 8080**: the firewall's source range must match the connector's
+  range, and the connector does not exist until SCRUM-266.
+- **The first request is very slow** (up to 133 s in the spike): the cache is cold. The warm-up
+  loop covers the default view every ten minutes; a new area pays a few seconds, and an S3
+  background update can still cost around 11 s.
+- **Disk full**: the cache is capped at 32 GB inside 100 GB, and container logs rotate at 50 MB × 3.
+
+#### Licence
+
+The Open-Meteo image is AGPL-3.0, so offering the app as a service requires offering its
+corresponding source even when the image is unmodified; the weather data is CC BY 4.0, which the
+app already attributes.
 
 ### Google Cloud Run Deployment
 
