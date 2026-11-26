@@ -4,6 +4,10 @@ Current values come from Open-Meteo's `current` block; a requested hour comes fr
 series for that UTC day (SCRUM-115). Rows are cached per (rounded lat, lon, model, hour), and one
 forecast-hour request stores every hour of that day from the same response (SCRUM-166), so a
 multi-hour range reads the rest of the day from SQLite instead of calling Open-Meteo again.
+
+The grid's samples sit on a lattice shared by every view of the same zoom (`grid_box.grid_points`,
+SCRUM-267), so panning asks Open-Meteo for the strip it revealed and the cached rows are merged
+back into the requested order.
 """
 
 import time
@@ -62,14 +66,29 @@ async def get_grid_wind(
         # No DB connection is held during the HTTP call.
         fetched = await _fetch_current(missing, model)
         _store_series({hour: fetched}, model, now)
-        return results + fetched
+        return _merge(points, results, fetched)
 
     # One response already carries the whole UTC day, so cache every hour of it. The rest of a
     # multi-hour range is then served from SQLite instead of repeating the Open-Meteo call
     # (SCRUM-166), which used to trip its rate limit.
     series = await _fetch_hourly_day(missing, model, at)
     _store_series(series, model, now)
-    return results + series[hour]
+    return _merge(points, results, series[hour])
+
+
+def _merge(
+    points: list[tuple[float, float]],
+    cached: list[GridWindPoint],
+    fetched: list[GridWindPoint],
+) -> list[GridWindPoint]:
+    """A partial hit as one list in the caller's row-major order (SCRUM-267).
+
+    Appending the fetched points after the cached ones put the two halves out of order, so the
+    overlays could no longer read the response as a row-major grid. A point the model has no
+    coverage for (an RRFS edge) stays absent rather than being invented.
+    """
+    by_coord = {(point.latitude, point.longitude): point for point in (*cached, *fetched)}
+    return [by_coord[point] for point in points if point in by_coord]
 
 
 def _read_cached_points(

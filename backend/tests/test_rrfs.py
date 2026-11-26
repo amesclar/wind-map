@@ -88,13 +88,13 @@ def test_grid_endpoint_returns_only_covered_points_across_the_edge(client, open_
 
     resp = client.get(
         "/api/weather/grid",
-        params=grid_params(model=RRFS, min_lon=-145.0, max_lon=-135.0),
+        params=grid_params(model=RRFS, min_lon=-150.0, max_lon=-140.0),
     )
 
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body) == 2  # the -135 column, both rows
-    assert all(point["longitude"] == -135.0 for point in body)
+    assert len(body) == 2  # the -140 column, both rows: the -150 one is off-domain
+    assert all(point["longitude"] == -140.0 for point in body)
 
 
 def test_grid_endpoint_outside_coverage_returns_empty_200(client, open_meteo, monkeypatch):
