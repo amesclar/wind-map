@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from backend.app.main import cache_control_for, resolve_static_file
+from backend.app.main import cache_control_for, resolve_static_file, spa_response
 
 
 def test_serves_a_file_inside_the_build(tmp_path: Path):
@@ -57,3 +57,35 @@ def test_the_shell_must_be_revalidated():
 
 def test_api_responses_keep_their_own_policy():
     assert cache_control_for("/api/health", "application/json") is None
+
+
+def test_an_unknown_api_path_answers_json_not_the_shell(tmp_path: Path):
+    # The catch-all matches /api too, so a missing endpoint used to answer the shell with 200
+    # (SCRUM-277): a typo looked like a working route and monitoring never saw a 404.
+    (tmp_path / "index.html").write_text("<html>shell</html>", encoding="utf-8")
+
+    for path in ("api/nope", "api/weather/nope", "api"):
+        response = spa_response(path, tmp_path)
+        assert response.status_code == 404, path
+        assert response.media_type == "application/json", path
+
+
+def test_client_routes_and_the_root_still_serve_the_shell(tmp_path: Path):
+    (tmp_path / "index.html").write_text("<html>shell</html>", encoding="utf-8")
+
+    for path in ("", "map", "some/client/route"):
+        response = spa_response(path, tmp_path)
+        assert response.status_code == 200, path
+        assert Path(response.path).name == "index.html", path
+
+
+def test_a_built_file_is_served_instead_of_the_shell(tmp_path: Path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html>shell</html>", encoding="utf-8")
+    asset = tmp_path / "assets" / "app.js"
+    asset.write_text("console.log('wind');", encoding="utf-8")
+
+    response = spa_response("assets/app.js", tmp_path)
+
+    assert response.status_code == 200
+    assert Path(response.path) == asset.resolve()
