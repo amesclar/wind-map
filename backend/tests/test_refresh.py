@@ -8,6 +8,7 @@ import pytest
 from backend.app.database import db_connection
 from backend.app.services import grid_weather_service, model_availability, weather_service
 from backend.app.services.forecast_cache import is_stale
+from backend.app.services.grid_box import grid_points
 from backend.app.units import coord_key
 from factories import forecast_payload, grid_item, grid_payload
 
@@ -176,7 +177,9 @@ def _prime_grid(client, open_meteo) -> None:
 def test_a_grid_refresh_refetches_only_the_stale_point(client, open_meteo, monkeypatch):
     _prime_grid(client, open_meteo)
     now = time.time()
-    stale = coord_key(47.0, -123.0)
+    # The grid samples a lattice (SCRUM-267); age its first sample, whatever that coordinate is.
+    first = grid_points(47.0, 49.0, -123.0, -121.0, 2, 2)[0]
+    stale = coord_key(*first)
     with db_connection() as conn:
         conn.execute("UPDATE grid_weather_cache SET cached_at=?", (now + 600,))
         conn.execute(
@@ -191,7 +194,7 @@ def test_a_grid_refresh_refetches_only_the_stale_point(client, open_meteo, monke
     assert response.status_code == 200
     assert open_meteo.call_count == 2
     # Exactly one coordinate went upstream, and it is the stale one.
-    assert open_meteo.last_params["latitude"] == "47.0"
+    assert open_meteo.last_params["latitude"] == str(first[0])
     points = response.json()
     assert len(points) == 4
     assert [p["wind_speed_knots"] for p in points].count(25.0) == 1

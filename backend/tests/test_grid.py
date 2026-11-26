@@ -9,6 +9,7 @@ import pytest
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
 from backend.app.config import GRID_MAX_DIM, GRID_REQUEST_MAX_POINTS
 from backend.app.services import grid_weather_service
+from backend.app.services.grid_box import grid_points
 from backend.app.services.grid_weather_service import get_grid_wind
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import coord_key as _cache_key
@@ -320,18 +321,21 @@ def test_grid_endpoint_returns_correct_point_count(client, open_meteo):
     assert len(resp.json()) == 6  # 3 cols × 2 rows
 
 
-def test_grid_endpoint_point_coordinates_span_bbox(client, open_meteo):
-    """Corner points should coincide with the requested bounding box."""
+def test_grid_endpoint_samples_stay_within_half_a_cell_of_the_bbox(client, open_meteo):
+    """Samples sit on a lattice anchored at 0, so they land within half a cell of the box (SCRUM-267)."""
     open_meteo.respond([grid_item()] * 4)
 
     resp = client.get("/api/weather/grid", params=grid_params())
 
     assert resp.status_code == 200
     data = resp.json()
-    lats = {round(p["latitude"], 2) for p in data}
-    lons = {round(p["longitude"], 2) for p in data}
-    assert 47.0 in lats and 49.0 in lats
-    assert -123.0 in lons and -121.0 in lons
+    lats = sorted({p["latitude"] for p in data})
+    lons = sorted({p["longitude"] for p in data})
+    assert len(lats) == 2 and len(lons) == 2  # cols × rows still describes the response
+    assert lats[1] - lats[0] == pytest.approx(2.0)  # (49 - 47) / (2 - 1): the spacing is unchanged
+    assert lons[1] - lons[0] == pytest.approx(2.0)
+    assert abs(lats[0] - 47.0) <= 1.0 and abs(lats[-1] - 49.0) <= 1.0  # half a cell of drift
+    assert abs(lons[0] + 123.0) <= 1.0 and abs(lons[-1] + 121.0) <= 1.0
 
 
 def test_grid_endpoint_response_schema(client, open_meteo):
@@ -671,3 +675,69 @@ async def test_a_forecast_hour_grid_writes_in_one_transaction(open_meteo, monkey
     await get_grid_wind([(48.0, -122.0)], "best_match", datetime(2026, 11, 25, 12, tzinfo=UTC))
 
     assert len(opens) == 2  # one read, one write — not one per hour of the day
+
+
+# ---------------------------------------------------------------------------
+# SCRUM-267: a panned view reuses the points it already has
+# ---------------------------------------------------------------------------
+
+
+def test_grid_points_share_one_lattice_across_a_pan():
+    """Every coordinate the two views overlap in is identical, so it can come from cache (SCRUM-267)."""
+    before = grid_points(47.0, 49.0, -123.0, -121.0, 10, 10)
+    after = grid_points(47.0, 49.0, -122.6, -120.6, 10, 10)  # panned 0.4° east
+
+    assert len(before) == len(after) == 100
+    # 9 of the 10 columns are the same coordinates; the pan revealed one new column.
+    assert len(set(before) & set(after)) == 90
+
+
+def test_grid_points_keep_the_spacing_the_view_asked_for():
+    """Snapping moves where the samples land, never how far apart they are (SCRUM-267)."""
+    points = grid_points(47.0, 49.0, -123.0, -121.0, 5, 4)
+    lats = sorted({lat for lat, _ in points})
+    lons = sorted({lon for _, lon in points})
+
+    assert len(points) == 20
+    assert all(b - a == pytest.approx(2.0 / 3.0) for a, b in zip(lats, lats[1:], strict=False))
+    assert all(b - a == pytest.approx(0.5) for a, b in zip(lons, lons[1:], strict=False))
+
+
+def test_a_panned_view_fetches_only_the_strip_it_revealed(client, open_meteo):
+    """The overlap is served from SQLite, so a pan costs one request for its new columns (SCRUM-267)."""
+    view = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0, "cols": 10, "rows": 10}
+    settled = grid_points(view["min_lat"], view["max_lat"], view["min_lon"], view["max_lon"], 10, 10)
+    open_meteo.respond([grid_item(9.0, 180.0)] * len(settled))
+    assert client.get("/api/weather/grid", params=view).status_code == 200
+    assert open_meteo.call_count == 1  # a 100-point view is one request
+
+    panned = {**view, "min_lon": -122.6, "max_lon": -120.6}
+    revealed = [
+        point
+        for point in grid_points(panned["min_lat"], panned["max_lat"], panned["min_lon"], panned["max_lon"], 10, 10)
+        if point not in set(settled)
+    ]
+    open_meteo.respond([grid_item(11.0, 180.0)] * len(revealed))
+
+    resp = client.get("/api/weather/grid", params=panned)
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == 100  # the whole view comes back, cached and fetched together
+    assert open_meteo.call_count == 2  # one request for the strip, not three for the view
+    fetched = len(open_meteo.last_params["latitude"].split(","))
+    assert fetched == len(revealed) < 100
+    assert {round(p["wind_speed_knots"], 1) for p in resp.json()} == {9.0, 11.0}  # both halves present
+
+
+@pytest.mark.asyncio
+async def test_a_partial_hit_keeps_the_order_the_view_asked_for(open_meteo):
+    """Cached and fetched points merge back into row-major order (SCRUM-267)."""
+    points = [(47.0, -123.0), (47.0, -122.0), (48.0, -123.0), (48.0, -122.0)]
+    insert_grid_row(47.0, -122.0, speed=7.0)
+    insert_grid_row(48.0, -122.0, speed=8.0)
+    open_meteo.respond(grid_payload(grid_item(20.0, 180.0), grid_item(21.0, 180.0)))
+
+    result = await get_grid_wind(points, "best_match")
+
+    assert [(p.latitude, p.longitude) for p in result] == points
+    assert [p.wind_speed_knots for p in result] == [20.0, 7.0, 21.0, 8.0]
