@@ -74,17 +74,17 @@ export const MapLegend: React.FC<{
       data-testid="map-legend"
       role="img"
       aria-label={parts.join('; ')}
-      className="absolute left-3 top-3 z-[750] pointer-events-none max-w-[248px] rounded-lg border border-dark-600/70 bg-dark-900/85 px-2.5 py-2 backdrop-blur-xs"
+      className="absolute left-3 top-3 z-[750] pointer-events-none max-w-[300px] rounded-lg border border-dark-600/70 bg-dark-900/85 px-2.5 py-2 backdrop-blur-xs"
     >
-      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
 
       <div data-testid="map-legend-wind" className="flex items-end gap-1.5">
-        <span className="mb-2 text-[9px] leading-none text-gray-300">Wind (kt)</span>
+        <span className="mb-2 text-[10px] leading-none text-gray-300">Wind (kt)</span>
         {MAP_KEY_WIND_KNOTS.map((knots) => (
           <span
             key={knots}
             data-testid={`map-legend-wind-${knots}`}
-            className="flex flex-col items-center gap-0.5 text-[9px] leading-none text-gray-300"
+            className="flex flex-col items-center gap-0.5 text-[10px] leading-none text-gray-300"
           >
             <span
               aria-hidden="true"
@@ -95,14 +95,14 @@ export const MapLegend: React.FC<{
           </span>
         ))}
       </div>
-      <div data-testid="map-legend-wind-note" className="mt-1 text-[9px] leading-tight text-gray-400">
+      <div data-testid="map-legend-wind-note" className="mt-1 text-[10px] leading-tight text-gray-400">
         <div data-testid="map-legend-wind-direction">{MAP_KEY_ORIENTATION.wind}</div>
         <div>colour = temperature</div>
       </div>
 
       {currents && (
         <div data-testid="map-legend-currents" className="mt-1.5 border-t border-dark-600/60 pt-1.5">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Currents ({speedLabel})
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -110,7 +110,7 @@ export const MapLegend: React.FC<{
               <span
                 key={tier.id}
                 data-testid={`map-legend-current-${tier.id}`}
-                className="flex items-center gap-1 text-[9px] leading-none text-gray-300"
+                className="flex items-center gap-1 text-[10px] leading-none text-gray-300"
               >
                 <span
                   aria-hidden="true"
@@ -125,7 +125,7 @@ export const MapLegend: React.FC<{
           </div>
           <div
             data-testid="map-legend-currents-note"
-            className="mt-1 text-[9px] leading-tight text-gray-400"
+            className="mt-1 text-[10px] leading-tight text-gray-400"
           >
             {MAP_KEY_ORIENTATION.currents}
           </div>
@@ -134,7 +134,7 @@ export const MapLegend: React.FC<{
 
       {waves && (
         <div data-testid="map-legend-waves" className="mt-1.5 border-t border-dark-600/60 pt-1.5">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Waves ({waveUnit})
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -142,7 +142,7 @@ export const MapLegend: React.FC<{
               <span
                 key={tier.id}
                 data-testid={`map-legend-wave-${tier.id}`}
-                className="flex items-center gap-1 text-[9px] leading-none text-gray-300"
+                className="flex items-center gap-1 text-[10px] leading-none text-gray-300"
               >
                 <span
                   aria-hidden="true"
@@ -158,7 +158,7 @@ export const MapLegend: React.FC<{
           </div>
           <div
             data-testid="map-legend-waves-note"
-            className="mt-1 text-[9px] leading-tight text-gray-400"
+            className="mt-1 text-[10px] leading-tight text-gray-400"
           >
             {MAP_KEY_ORIENTATION.waves}
           </div>
