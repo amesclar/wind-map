@@ -673,3 +673,28 @@ describe('App map integration (SCRUM-126)', () => {
     expect(badge.textContent?.trim()).toBe(`v${APP_VERSION}`);
   });
 });
+
+describe('startup (SCRUM-284)', () => {
+  it('starts the independent requests together instead of in series', async () => {
+    // The config request is held open: a serial startup would not call fetchModels until it
+    // answered, so the wait below is the assertion.
+    let releaseConfig: () => void = () => {};
+    const configPending = new Promise<void>((resolve) => {
+      releaseConfig = resolve;
+    });
+    (api.fetchAppConfig as any).mockImplementation(async () => {
+      await configPending;
+      return {};
+    });
+    (api.fetchModels as any).mockResolvedValue([]);
+    (api.fetchLocations as any).mockResolvedValue([]);
+
+    render(<App />);
+
+    await waitFor(() => expect(api.fetchModels).toHaveBeenCalled());
+    await waitFor(() => expect(api.fetchLocations).toHaveBeenCalled());
+    expect(api.fetchAppConfig).toHaveBeenCalledTimes(1);
+
+    releaseConfig();
+  });
+});
