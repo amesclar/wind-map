@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MapSettingsModal } from './MapSettingsModal';
+import { isLightTileLayer } from './mapTiles';
+import type { MapTileLayer } from '../types';
 
 const BASE_PROPS = {
   isOpen: true,
@@ -282,6 +284,81 @@ describe('MapSettingsModal high contrast gradient (SCRUM-213)', () => {
         /always does this so its soundings stay readable/,
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
+  it.each([
+    ['osm_dark', 'dark'],
+    ['carto_dark', 'dark'],
+    ['seamap', 'dark'],
+    ['osm_standard', 'light'],
+    ['paper_chart', 'light'],
+  ] as const)('themes %s as %s', (layer, expected) => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer={layer} />);
+    expect(screen.getByTestId('map-settings-panel').getAttribute('data-theme')).toBe(expected);
+  });
+
+  it('restyles while open when the base changes', () => {
+    const { rerender } = render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_dark" />);
+    expect(screen.getByTestId('map-settings-panel').getAttribute('data-theme')).toBe('dark');
+
+    rerender(<MapSettingsModal {...BASE_PROPS} tileLayer="paper_chart" />);
+    expect(screen.getByTestId('map-settings-panel').getAttribute('data-theme')).toBe('light');
+
+    rerender(<MapSettingsModal {...BASE_PROPS} tileLayer="seamap" />);
+    expect(screen.getByTestId('map-settings-panel').getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('uses light surfaces and readable text on a light base', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_standard" />);
+
+    const panel = screen.getByTestId('map-settings-panel');
+    expect(panel.className).toContain('bg-slate-50');
+    expect(panel.className).not.toContain('bg-dark-800');
+    const description = within(screen.getByTestId('map-settings-body')).getByText(
+      /Clean, high-contrast dark theme/,
+    );
+    expect(description.className).toContain('text-slate-600');
+  });
+
+  it('keeps the dark surfaces on a dark base', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="carto_dark" />);
+
+    const panel = screen.getByTestId('map-settings-panel');
+    expect(panel.className).toContain('bg-dark-800');
+    expect(panel.className).not.toContain('bg-slate-50');
+  });
+
+  it('draws every description at 12 px and no 11 px text anywhere in the body', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const body = screen.getByTestId('map-settings-body');
+    expect(body.innerHTML).not.toContain('text-[11px]');
+    const description = within(body).getByText(/Clean, high-contrast dark theme/);
+    expect(description.className).toContain('text-xs');
+    expect(within(body).getByText(/6 to 9 km/).className).toContain('text-xs');
+    expect(within(body).getByText(/Canadian border/).className).toContain('text-xs');
+  });
+
+  it('keeps each option name visibly above its description', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const body = screen.getByTestId('map-settings-body');
+    expect(within(body).getByText('Show wind barbs across map').className).toContain('text-sm');
+    expect(within(body).getByText('High contrast gradient').className).toContain('text-sm');
+  });
+});
+
+describe('isLightTileLayer (SCRUM-221)', () => {
+  it.each([
+    ['osm_dark', false],
+    ['carto_dark', false],
+    ['seamap', false],
+    ['osm_standard', true],
+    ['paper_chart', true],
+  ] as const)('returns %s for %s', (layer, expected) => {
+    expect(isLightTileLayer(layer as MapTileLayer)).toBe(expected);
   });
 });
 
