@@ -132,6 +132,7 @@ AVAILABLE_MODELS = [
     {"id": "ecmwf_ifs", "name": "ECMWF IFS HRES 9 km"},
     {"id": "ecmwf_aifs025_single", "name": "ECMWF AIFS (AI)"},
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
+    {"id": "ncep_rrfs_north_america", "name": "RRFS (North America)"},
     {"id": "gem_seamless", "name": "CMC GEM Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
     {"id": NWS_MODEL, "name": "NOAA NWS NDFD"},
@@ -167,6 +168,11 @@ MODEL_METADATA: dict[str, dict[str, object]] = {
     "ecmwf_aifs025_single": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
     # https://open-meteo.com/en/docs/gfs-api — GFS, 6-hourly, 16 days.
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
+    # https://open-meteo.com/en/docs/gfs-api — NOAA RRFS North America (SCRUM-231), NOAA's
+    # successor to HRRR/NAM: 13 km, hourly values on 6-hourly cycles, documented 84 h. The last
+    # hours can still be null until the next cycle publishes (measured 79 h on 2026-11-26), and
+    # the grid only covers North America (SCRUM-229); the label says so.
+    "ncep_rrfs_north_america": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 84},
     # https://open-meteo.com/en/docs/gem-api — seamless blend (SCRUM-228) of the 12-hourly global
     # GEM with the 6-hourly regional RDPS and HRDPS runs; Open-Meteo caps the API at 10 days.
     "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
