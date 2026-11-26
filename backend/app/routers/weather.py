@@ -10,8 +10,10 @@ from backend.app import locations_repo
 from backend.app.config import MODEL_ALIASES, MODEL_IDS
 from backend.app.dependencies import model_param, timezone_param
 from backend.app.models import ModelAvailabilityInfo, WeatherForecastResponse, WeatherModelInfo
+from backend.app.routers.errors import quota_exhausted
 from backend.app.services import model_availability, nws
 from backend.app.services.model_info import model_infos
+from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.services.time_window import validate_forecast_time
 from backend.app.services.weather_service import get_location_forecast, get_point_forecast
 
@@ -93,6 +95,11 @@ async def get_location_weather(
         return await get_location_forecast(location, model=model, timezone=timezone, at=at, refresh=refresh)
     except nws.NwsCoverageError as exc:
         raise coverage_error() from exc
+    except QuotaExceededError as exc:
+        # Before the generic handler: the quota error subclasses httpx.HTTPError, and an exhausted
+        # upstream is a 503 with its reset time, not a 502 (SCRUM-278).
+        logger.warning("Open-Meteo quota exhausted for location %s; reset at %s", location_id, exc.reset_at)
+        raise quota_exhausted(exc) from exc
     except httpx.HTTPError as exc:
         logger.exception("Weather forecast request failed for location %s", location_id)
         raise upstream_error("Failed to fetch weather forecast") from exc
@@ -112,6 +119,11 @@ async def get_all_locations_weather(
             results.append(
                 await get_location_forecast(location, model=model, timezone=timezone, at=at, refresh=refresh)
             )
+        except QuotaExceededError as exc:
+            # The quota is global, not per location: abort the loop rather than answer 200 with
+            # locations silently missing (SCRUM-278).
+            logger.warning("Open-Meteo quota exhausted; aborting the all-locations fetch")
+            raise quota_exhausted(exc) from exc
         except httpx.HTTPError:
             # One failing location must not hide the others; it is logged, not swallowed. An NDFD
             # point outside the US lands here too, so its marker shows "No data" (SCRUM-245).
@@ -138,6 +150,9 @@ async def get_point_weather(
         return await get_point_forecast(lat, lon, model=model, timezone=timezone, at=at, refresh=refresh)
     except nws.NwsCoverageError as exc:
         raise coverage_error() from exc
+    except QuotaExceededError as exc:
+        logger.warning("Open-Meteo quota exhausted for the point; reset at %s", exc.reset_at)
+        raise quota_exhausted(exc) from exc
     except httpx.HTTPError as exc:
         # The exception type, never logger.exception: httpx's message carries the request URL, and
         # the point with it (SCRUM-253).

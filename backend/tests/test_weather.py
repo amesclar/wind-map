@@ -1,5 +1,6 @@
 """Weather service and caching tests."""
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import httpx
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 from backend.app.database import get_db_connection
 from backend.app.main import app
 from backend.app.services.forecast_parser import build_weather_point
+from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import deg_to_cardinal
 from factories import forecast_payload, upstream_error, upstream_status_error
 
@@ -371,3 +373,36 @@ def test_a_valid_timezone_still_reaches_the_upstream(client, open_meteo):
 
     assert response.status_code == 200
     assert open_meteo.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "path, params",
+    [
+        ("/api/weather", {"location_id": 1}),
+        ("/api/weather/all", {}),
+        ("/api/weather/point", {"lat": 48.29, "lon": -122.61}),
+    ],
+)
+def test_quota_exhaustion_answers_503_with_its_reset(client, open_meteo, path, params):
+    # QuotaExceededError subclasses httpx.HTTPError, so it used to be caught by the generic
+    # handler and answered 502 with no reset time (SCRUM-278).
+    reset = datetime(2026, 11, 26, 3, 0, tzinfo=UTC)
+    open_meteo.fail(QuotaExceededError("limit reached", reset_at=reset))
+
+    response = client.get(path, params=params)
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert detail["code"] == "open_meteo_quota_exhausted"
+    assert detail["reset_at"] == reset.isoformat()
+    assert int(response.headers["retry-after"]) >= 0
+
+
+def test_all_locations_aborts_instead_of_dropping_locations_on_quota(client, open_meteo):
+    # A swallowed quota error looked like a normal 200 with locations missing (SCRUM-278).
+    open_meteo.fail(QuotaExceededError("limit reached", reset_at=None))
+
+    response = client.get("/api/weather/all")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["reset_at"] is None
