@@ -3,13 +3,7 @@
 import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION
-from backend.app.units import as_float, c_to_f, coord_key, deg_to_cardinal, knots_to_units
-
-
-def test_as_float_treats_none_as_default():
-    assert as_float(None) == 0.0
-    assert as_float(None, 5.0) == 5.0
-    assert as_float(3) == 3.0
+from backend.app.units import c_to_f, coord_key, deg_to_cardinal, knots_to_units
 
 
 @pytest.mark.parametrize("c, f", [(0, 32.0), (100, 212.0), (12.3, 54.1), (-40, -40.0), (None, None)])

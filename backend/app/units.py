@@ -26,11 +26,6 @@ CARDINALS = (
 )
 
 
-def as_float(value: float | None, default: float = 0.0) -> float:
-    """Open-Meteo returns null for missing values; treat them as `default`."""
-    return default if value is None else float(value)
-
-
 def as_optional_float(value: float | None) -> float | None:
     """Keep a missing value missing, where 0 would be a lie (an unknown gust is not calm)."""
     return None if value is None else float(value)
