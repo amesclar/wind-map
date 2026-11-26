@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 
-from backend.app.config import CURRENT_HORIZON_HOURS, model_horizon_hours
+from backend.app.config import CURRENT_HORIZON_HOURS, WAVES_HORIZON_HOURS, model_horizon_hours
 from backend.app.services.model_info import floor_hour
 
 
@@ -60,6 +60,14 @@ def validate_current_time(
 ) -> datetime | None:
     """Currents have their own 10-day horizon, independent of the selected weather model."""
     return _validate_hour(at, CURRENT_HORIZON_HOURS, "ocean current horizon", now)
+
+
+def validate_wave_time(
+    at: datetime | None,
+    now: datetime | None = None,
+) -> datetime | None:
+    """Waves have their own 10-day horizon, independent of the selected weather model (SCRUM-233)."""
+    return _validate_hour(at, WAVES_HORIZON_HOURS, "ocean wave horizon", now)
 
 
 def hour_key(at: datetime | None) -> str:

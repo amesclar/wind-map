@@ -231,6 +231,15 @@ GRID_REQUEST_MAX_POINTS = 150
 # which is the layer's horizon regardless of the selected weather model.
 CURRENT_HORIZON_HOURS = 240
 
+# Ocean waves (SCRUM-233): the Marine API's wave fields cover the same 10 days hourly, again
+# independent of the selected weather model. An inland request is snapped to the nearest sea
+# cell, so a value farther than half the grid spacing from the requested point is treated as
+# no waves; a single point has no spacing, so it uses a fixed tolerance. The floor keeps a very
+# fine grid from discarding coastal cells that the coarse wave models legitimately answer with.
+WAVES_HORIZON_HOURS = 240
+WAVES_POINT_LAND_TOLERANCE_KM = 5.0
+WAVES_MIN_LAND_TOLERANCE_KM = 3.0
+
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
 
