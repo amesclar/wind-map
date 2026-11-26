@@ -6,7 +6,7 @@ import secrets
 
 import pytest
 
-from backend.app import config
+from backend.app import auth, config
 from backend.app.auth import parse_basic_auth, password_matches
 
 # Generated per run, never stored (SCRUM-254): a literal here is what a generic-password scan
@@ -123,3 +123,63 @@ def test_password_matches_compares_only_the_password():
     assert not password_matches(header, "wrong")
     assert not password_matches(header, "")
     assert not password_matches(None, "right")
+
+
+# ---------------------------------------------------------------------------
+# Slowing repeated failures (SCRUM-282)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _fresh_failures():
+    auth.reset_failures()
+    yield
+    auth.reset_failures()
+
+
+def test_repeated_failures_are_slowed_down(client, protected):
+    for _ in range(auth.FAILURE_LIMIT):
+        assert client.get("/api/locations", headers=basic_header("wrong")).status_code == 401
+
+    response = client.get("/api/locations", headers=basic_header("wrong"))
+
+    assert response.status_code == 429
+    assert int(response.headers["retry-after"]) > 0
+
+
+def test_a_correct_password_clears_the_failures(client, protected):
+    for _ in range(auth.FAILURE_LIMIT - 1):
+        client.get("/api/locations", headers=basic_header("wrong"))
+
+    assert client.get("/api/locations", headers=basic_header(protected)).status_code == 200
+
+    for _ in range(auth.FAILURE_LIMIT - 1):
+        assert client.get("/api/locations", headers=basic_header("wrong")).status_code == 401
+
+
+def test_the_cooldown_expires(monkeypatch, client, protected):
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(auth, "monotonic", lambda: clock["now"])
+    for _ in range(auth.FAILURE_LIMIT):
+        client.get("/api/locations", headers=basic_header("wrong"))
+    assert client.get("/api/locations", headers=basic_header("wrong")).status_code == 429
+
+    clock["now"] += auth.COOLDOWN_SECONDS
+
+    assert client.get("/api/locations", headers=basic_header(protected)).status_code == 200
+
+
+def test_health_stays_open_while_a_client_cools_down(client, protected):
+    for _ in range(auth.FAILURE_LIMIT):
+        client.get("/api/locations", headers=basic_header("wrong"))
+
+    assert client.get("/api/health").status_code == 200
+
+
+def test_the_cooldown_logs_no_secret(client, protected, caplog):
+    caplog.set_level(logging.WARNING)
+    for _ in range(auth.FAILURE_LIMIT + 1):
+        client.get("/api/locations", headers=basic_header("attempted-secret"))
+
+    assert "attempted-secret" not in caplog.text
+    assert PASSWORD not in caplog.text
