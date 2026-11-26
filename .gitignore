@@ -41,6 +41,9 @@ yarn-error.log*
 *.sqlite3
 data/
 /data/
+# ...except the 1 km land mask the backend ships (SCRUM-263): a derived asset, not user data.
+!backend/app/data/
+!backend/app/data/**
 
 # OS / Editor
 .DS_Store

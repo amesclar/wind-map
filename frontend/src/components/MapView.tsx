@@ -13,9 +13,8 @@ import { BARB_OUTLINES, hasWindData, WindOverlay } from './WindOverlay';
 import { windColorOpacity, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
-import { CurrentLegend } from './CurrentLegend';
 import { WaveOverlay } from './WaveOverlay';
-import { WaveLegend } from './WaveLegend';
+import { MapLegend } from './MapLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
@@ -689,9 +688,14 @@ export const MapView: React.FC<MapViewProps> = ({
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
       />
-      {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       <WaveOverlay map={mapInstance} points={wavePoints} unitSystem={unitSystem} timeLabel={validTimeLabel} />
-      {wavesVisible && <WaveLegend unitSystem={unitSystem} stacked={waterCurrentsVisible} />}
+      {/* One key for every layer (SCRUM-263): wind always, currents and waves only while shown. */}
+      <MapLegend
+        speedUnit={speedUnit}
+        unitSystem={unitSystem}
+        currents={waterCurrentsVisible}
+        waves={wavesVisible}
+      />
       {windColorOverlayVisible && (
         <>
           <WindColorOverlay
