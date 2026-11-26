@@ -78,18 +78,18 @@ export const MapLegend: React.FC<{
     >
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
 
-      <div data-testid="map-legend-wind" className="flex items-end gap-1.5">
-        <span className="mb-2 text-[10px] leading-none text-gray-300">Wind (kt)</span>
+      <div data-testid="map-legend-wind" className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[10px] leading-none text-gray-300">Wind (kt)</span>
         {MAP_KEY_WIND_KNOTS.map((knots) => (
           <span
             key={knots}
             data-testid={`map-legend-wind-${knots}`}
-            className="flex flex-col items-center gap-0.5 text-[10px] leading-none text-gray-300"
+            className="inline-flex items-center gap-1 text-[10px] leading-none text-gray-300"
           >
             <span
               aria-hidden="true"
               className="inline-flex"
-                dangerouslySetInnerHTML={{ __html: windKeySvg(knots) }}
+              dangerouslySetInnerHTML={{ __html: windKeySvg(knots) }}
             />
             <span>{knots}</span>
           </span>
