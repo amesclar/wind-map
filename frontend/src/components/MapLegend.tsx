@@ -5,7 +5,7 @@ import { CURRENT_TIERS, tierRangeLabel } from '../utils/currentTiers';
 import { WAVE_TIERS, waveRangeLabel } from '../utils/waveTiers';
 import { generateWindBarbSvg } from './WindBarb';
 import { generateCurrentChevronSvg } from './WaterCurrentChevron';
-import { generateWaveArrowSvg } from './WaveArrow';
+import { generateWaveKeySvg } from './WaveArrow';
 
 /**
  * Examples drawn in the key: a half barb (5 kt), a full plus a half (15 kt) and three fulls plus a
@@ -85,10 +85,7 @@ export const MapLegend: React.FC<{
     >
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
 
-      <div
-        data-testid="map-legend-wind"
-        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-x-1.5 gap-y-1"
-      >
+      <div data-testid="map-legend-wind" className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-[10px] leading-none text-gray-300">Wind (kt)</span>
         {MAP_KEY_WIND_KNOTS.map((knots) => (
           <span
@@ -115,7 +112,7 @@ export const MapLegend: React.FC<{
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Currents ({speedLabel})
           </div>
-          <div className="grid grid-cols-4 items-center gap-x-1.5 gap-y-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {CURRENT_TIERS.map((tier) => (
               <span
                 key={tier.id}
@@ -147,7 +144,7 @@ export const MapLegend: React.FC<{
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Waves ({waveUnit})
           </div>
-          <div className="grid grid-cols-4 items-center gap-x-1.5 gap-y-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {WAVE_TIERS.map((tier) => (
               <span
                 key={tier.id}
@@ -157,9 +154,9 @@ export const MapLegend: React.FC<{
                 <span
                   aria-hidden="true"
                   className="inline-flex shrink-0"
-                  // 180° from is due north travel: the key shows an arrow pointing up.
+                  // Cropped to its own ink with the heads up, so the value sits against the symbol.
                   dangerouslySetInnerHTML={{
-                    __html: generateWaveArrowSvg(tier.minMetres, 180, MAP_KEY_GLYPH_PX),
+                    __html: generateWaveKeySvg(tier.minMetres, MAP_KEY_GLYPH_PX),
                   }}
                 />
                 {waveRangeLabel(tier, unitSystem)}

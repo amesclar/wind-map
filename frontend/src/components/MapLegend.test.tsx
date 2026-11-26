@@ -49,27 +49,34 @@ describe('MapLegend (SCRUM-263)', () => {
       expect(item.firstElementChild?.className).toContain('shrink-0');
     });
 
-    // The row is a column grid, not a flow that shifts with each label's width.
+    // The row packs its examples rather than holding columns open.
     const row = screen.getByTestId('map-legend-wind');
-    expect(row.className).toContain('grid');
-    expect(row.className).not.toContain('flex-wrap');
+    expect(row.className).toContain('flex-wrap');
   });
 
-  it('aligns every row on a column grid with fixed glyph slots (SCRUM-304)', () => {
+  it('gives every glyph a fixed slot so its value sits against it (SCRUM-304, SCRUM-305)', () => {
     render(<MapLegend speedUnit="knots" unitSystem="metric" currents waves />);
 
-    for (const rowId of ['map-legend-currents', 'map-legend-waves']) {
-      const row = screen.getByTestId(rowId);
-      expect(row.querySelector('[class*="grid-cols-4"]')).toBeTruthy();
-      [...row.querySelectorAll('svg')].forEach((svg) => {
+    for (const rowId of ['map-legend-wind', 'map-legend-currents', 'map-legend-waves']) {
+      const block = screen.getByTestId(rowId);
+      // Wind's test id is the row itself; the other two sit on the block that holds the heading.
+      const row = block.className.includes('flex-wrap')
+        ? block
+        : block.querySelector<HTMLElement>('.flex-wrap');
+
+      expect(row).toBeTruthy();
+      [...block.querySelectorAll('svg')].forEach((svg) => {
         expect(svg.parentElement?.className).toContain('shrink-0');
       });
     }
 
-    // Wind keeps its inline label in the first cell, then three equal value columns.
-    expect(screen.getByTestId('map-legend-wind').className).toContain(
-      'grid-cols-[auto_repeat(3,minmax(0,1fr))]',
+    // The waves glyphs are cropped to their own ink, so their widths differ instead of each
+    // sitting in a 20 px box with its value floating away from the line.
+    const waveWidths = [...screen.getByTestId('map-legend-waves').querySelectorAll('svg')].map(
+      (svg) => Number(svg.getAttribute('width')),
     );
+    expect(new Set(waveWidths).size).toBe(4);
+    expect(Math.max(...waveWidths)).toBeLessThan(MAP_KEY_GLYPH_PX);
   });
 
   it('draws the wind barbs larger than the other key glyphs (SCRUM-304)', () => {
