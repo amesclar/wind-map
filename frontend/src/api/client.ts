@@ -9,6 +9,8 @@ import {
   NewLocation,
   SavedLocation,
   TidePointResponse,
+  WaveGridResponse,
+  WavePointResponse,
   WeatherForecastResponse,
   WeatherModelInfo,
 } from '../types';
@@ -229,6 +231,37 @@ export function fetchCurrentGrid(
   const query: Params = { ...box };
   if (time) query.time = time;
   return request('/currents/grid', 'Failed to fetch ocean current grid', { params: query, signal });
+}
+
+export function fetchWaveGrid(
+  params: {
+    min_lat: number;
+    max_lat: number;
+    min_lon: number;
+    max_lon: number;
+    cols: number;
+    rows: number;
+    /** ISO 8601 hour inside the 240-hour wave horizon; omitted means live values. */
+    time?: string | null;
+  },
+  { signal }: RequestOptions = {},
+): Promise<WaveGridResponse> {
+  const { time, ...box } = params;
+  const query: Params = { ...box };
+  if (time) query.time = time;
+  return request('/waves/grid', 'Failed to fetch wave grid', { params: query, signal });
+}
+
+/** Up to 48 hourly wave values from the current hour, for the wave pop-up (SCRUM-234). */
+export function fetchPointWaves(
+  latitude: number,
+  longitude: number,
+  { signal }: RequestOptions = {},
+): Promise<WavePointResponse> {
+  return request('/waves/point', 'Failed to load wave data', {
+    params: { lat: latitude, lon: longitude },
+    signal,
+  });
 }
 
 export function fetchPointWeather(

@@ -14,6 +14,8 @@ import { windColorOpacity, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
 import { CurrentLegend } from './CurrentLegend';
+import { WaveOverlay } from './WaveOverlay';
+import { WaveLegend } from './WaveLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
@@ -22,6 +24,7 @@ import { POPUP_OPTIONS, placePopupInView } from '../utils/popupPlacement';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
+import { useWaveGrid } from '../hooks/useWaveGrid';
 import {
   CHART_BOUNDS,
   CHART_COVERAGE_MAX_LAT,
@@ -68,6 +71,8 @@ interface MapViewProps {
   bcDepthVisible?: boolean;
   /** Ocean-current chevrons (SCRUM-99); off unless turned on. */
   waterCurrentsVisible?: boolean;
+  /** Ocean-wave arrows (SCRUM-234); off unless turned on. */
+  wavesVisible?: boolean;
   selectedGridPoint: SelectedGridPoint | null;
   onGridPointSelect: (pt: GridWindPoint) => void;
   /** Popup units follow the user's settings (SCRUM-92); default imperial / knots. */
@@ -185,6 +190,7 @@ export const MapView: React.FC<MapViewProps> = ({
   windColorOverlayVisible,
   windColorHighContrast = false,
   waterCurrentsVisible = false,
+  wavesVisible = false,
   seamarksVisible = false,
   bcDepthVisible = false,
   selectedGridPoint,
@@ -250,6 +256,8 @@ export const MapView: React.FC<MapViewProps> = ({
   // Currents have their own fetch and horizon: the layer follows the same selected hour
   // (SCRUM-99) but not the weather model or the wind layers.
   const currentPoints = useCurrentGrid(mapInstance, waterCurrentsVisible, validTime);
+  // Waves mirror the currents: their own field, horizon and fetch, following the same hour.
+  const wavePoints = useWaveGrid(mapInstance, wavesVisible, validTime);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -682,6 +690,8 @@ export const MapView: React.FC<MapViewProps> = ({
         timeLabel={validTimeLabel}
       />
       {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
+      <WaveOverlay map={mapInstance} points={wavePoints} unitSystem={unitSystem} timeLabel={validTimeLabel} />
+      {wavesVisible && <WaveLegend unitSystem={unitSystem} stacked={waterCurrentsVisible} />}
       {windColorOverlayVisible && (
         <>
           <WindColorOverlay

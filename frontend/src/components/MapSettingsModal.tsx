@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Anchor, Layers } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, MoveRight, Anchor, Layers } from 'lucide-react';
 import { MapTileLayer } from '../types';
 import {
   isLightTileLayer,
@@ -33,6 +33,9 @@ interface MapSettingsModalProps {
   /** Ocean-current chevrons (SCRUM-100), independent of the wind layers. */
   waterCurrentsVisible: boolean;
   onToggleWaterCurrents: (visible: boolean) => void;
+  /** Ocean-wave arrows (SCRUM-234), independent of the currents and the wind layers. */
+  wavesVisible?: boolean;
+  onToggleWaves?: (visible: boolean) => void;
   /** Nautical seamark overlay (SCRUM-175), off by default. */
   seamarksVisible: boolean;
   onToggleSeamarks: (visible: boolean) => void;
@@ -130,6 +133,8 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onToggleWindColorHighContrast,
   waterCurrentsVisible,
   onToggleWaterCurrents,
+  wavesVisible = false,
+  onToggleWaves = () => {},
   seamarksVisible,
   onToggleSeamarks,
   bcDepthVisible,
@@ -524,7 +529,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <label
                   className={`block text-xs font-semibold ${theme.label} uppercase tracking-wider mb-2 flex items-center gap-1.5`}
                 >
-                  <Waves className={`w-3.5 h-3.5 ${theme.icon}`} />
+                  <MoveRight className={`w-3.5 h-3.5 ${theme.icon}`} />
                   Water Currents
                 </label>
                 <div
@@ -561,6 +566,44 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   Currents come from a model with cells of about 6 to 9 km, so narrow waters such as
                   Port Susan may show no current.
                 </p>
+              </div>
+
+              {/* Ocean Waves Toggle (SCRUM-234) */}
+              <div className={`pt-2 border-t ${theme.headerBorder}`}>
+                <label
+                  className={`block text-xs font-semibold ${theme.label} uppercase tracking-wider mb-2 flex items-center gap-1.5`}
+                >
+                  <Waves className={`w-3.5 h-3.5 ${theme.icon}`} />
+                  Ocean Waves
+                </label>
+                <div
+                  className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
+                >
+                  <div>
+                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                      Show wave height and direction
+                    </div>
+                    <div className={`text-xs ${theme.description} mt-0.5`}>
+                      Arrows point where the waves travel, sized and coloured by height, and follow
+                      the selected forecast hour. They can be shown together with the currents.
+                    </div>
+                  </div>
+                  <button
+                    data-testid="waves-toggle"
+                    type="button"
+                    onClick={() => onToggleWaves(!wavesVisible)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-hidden ml-3 ${
+                      wavesVisible ? 'bg-sky-500' : theme.toggleOff
+                    }`}
+                    aria-pressed={wavesVisible}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        wavesVisible ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
 
               {/* Nautical Seamarks Toggle (SCRUM-175) */}
