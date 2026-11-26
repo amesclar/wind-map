@@ -39,6 +39,16 @@ def _client() -> httpx.AsyncClient:
     return client
 
 
+def shared_client() -> httpx.AsyncClient:
+    """The pooled client, for a caller that needs its own headers or timeout (SCRUM-285).
+
+    NWS used to open a client per request and so paid a handshake for each of the two documents a
+    forecast needs, with no connection ever reused. The pool is keyed by loop, so this is the same
+    object `get_json` uses and `close_client` closes at shutdown.
+    """
+    return _client()
+
+
 async def close_client() -> None:
     """Close the shared client for the running loop (app shutdown). Safe to call twice."""
     client = _CLIENTS.pop(asyncio.get_running_loop(), None)
