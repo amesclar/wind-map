@@ -7,6 +7,7 @@ multi-hour range reads the rest of the day from SQLite instead of calling Open-M
 """
 
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import httpx
@@ -26,6 +27,11 @@ from backend.app.services.time_window import hour_key
 from backend.app.units import as_optional_float, c_to_f, coord_key
 
 GRID_VARIABLES = ("wind_speed_10m", "wind_gusts_10m", "wind_direction_10m", "temperature_2m")
+
+# A regional model (RRFS) rejects a whole batch when one point is outside its domain (SCRUM-229).
+# Splitting a chunk in half finds its covered points; this caps what a single chunk may spend so
+# a view straddling a jagged edge cannot turn into hundreds of requests (SCRUM-231).
+COVERAGE_SPLIT_MAX_REQUESTS = 24
 
 
 async def get_grid_wind(
@@ -239,24 +245,63 @@ def _point_from_hourly(lat: float, lon: float, item: dict, index: int, hour: str
     )
 
 
+async def _covered_items(
+    chunk: list[tuple[float, float]],
+    params_for: Callable[[list[tuple[float, float]]], dict],
+    budget: list[int],
+) -> list[tuple[float, float, dict]]:
+    """Items for the covered points of `chunk`, splitting a coverage 400 in half (SCRUM-231).
+
+    Open-Meteo fails the whole batch with `No data is available for this location` when one
+    point is outside a regional model's domain. Halving the chunk finds the covered points in
+    `O(log n)` extra requests per boundary crossing and needs no projected polygon: the
+    SCRUM-229 probe measured that the published RRFS grid box misclassifies island and edge
+    points. A point that still answers the coverage 400 on its own is simply no data.
+
+    `budget` is this chunk's request allowance (a one-item list, so the recursion can spend
+    from it); an exhausted budget reports the rest as no data rather than failing the view.
+    """
+    if not chunk or budget[0] <= 0:
+        return []
+    budget[0] -= 1
+    try:
+        data = await open_meteo.get_json(
+            OPEN_METEO_FORECAST_URL,
+            params_for(chunk),
+            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+        )
+    except open_meteo.CoverageError:
+        if len(chunk) == 1:
+            return []
+        middle = len(chunk) // 2
+        left = await _covered_items(chunk[:middle], params_for, budget)
+        right = await _covered_items(chunk[middle:], params_for, budget)
+        return left + right
+    items = _as_list(data, len(chunk))
+    return [(lat, lon, item) for (lat, lon), item in zip(chunk, items, strict=True)]
+
+
 async def _fetch_current(
     points: list[tuple[float, float]],
     model: str,
 ) -> list[GridWindPoint]:
-    """Live values for every point, in chunked batched requests (SCRUM-192)."""
+    """Live values for the covered points, in chunked batched requests (SCRUM-192).
+
+    A point outside a regional model's domain (RRFS) is absent from the result, not zeroed
+    (SCRUM-231): the caller returns the covered points and the map leaves the rest blank.
+    """
     fetched: list[GridWindPoint] = []
     for chunk in _chunks(points):
-        data = await open_meteo.get_json(
-            OPEN_METEO_FORECAST_URL,
-            {
-                **_batch_params(chunk, model),
+
+        def params_for(subset: list[tuple[float, float]]) -> dict:
+            return {
+                **_batch_params(subset, model),
                 "current": ",".join(GRID_VARIABLES),
                 "forecast_days": 1,
-            },
-            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
-        )
-        items = _as_list(data, len(chunk))
-        fetched.extend(_point_from_current(lat, lon, item, None) for (lat, lon), item in zip(chunk, items, strict=True))
+            }
+
+        covered = await _covered_items(chunk, params_for, [COVERAGE_SPLIT_MAX_REQUESTS])
+        fetched.extend(_point_from_current(lat, lon, item, None) for lat, lon, item in covered)
     return fetched
 
 
@@ -275,28 +320,32 @@ async def _fetch_hourly_day(
     day = at.astimezone(UTC).strftime("%Y-%m-%d")
     series: dict[str, list[GridWindPoint]] = {}
     for chunk in _chunks(points):
-        data = await open_meteo.get_json(
-            OPEN_METEO_FORECAST_URL,
-            {
-                **_batch_params(chunk, model),
+
+        def params_for(subset: list[tuple[float, float]]) -> dict:
+            return {
+                **_batch_params(subset, model),
                 "hourly": ",".join(GRID_VARIABLES),
                 "start_date": day,
                 "end_date": day,
                 "timezone": "UTC",
-            },
-            timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
-        )
-        items = _as_list(data, len(chunk))
-        times = _series_times(items)
+            }
+
+        covered = await _covered_items(chunk, params_for, [COVERAGE_SPLIT_MAX_REQUESTS])
+        if not covered:
+            continue
+        times = _series_times([item for _, _, item in covered])
         for stamp in times:
             series.setdefault(_series_hour(stamp), [])
-        for (lat, lon), item in zip(chunk, items, strict=True):
+        for lat, lon, item in covered:
             for index, stamp in enumerate(times):
                 series_hour = _series_hour(stamp)
                 series[series_hour].append(_point_from_hourly(lat, lon, item, index, series_hour))
 
     requested = hour_key(at)
     if requested not in series:
+        if not series:
+            # Every point was outside the model's domain: no data, not an upstream failure.
+            return {requested: []}
         raise httpx.HTTPError(f"Open-Meteo response did not include the requested hour {requested}")
     return series
 

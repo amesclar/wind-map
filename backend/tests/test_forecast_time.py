@@ -98,6 +98,12 @@ def test_models_expose_cadence_horizon_and_run_times(client):
     assert gem["update_hours"] == 6
     assert gem["update_cycles_utc"] == [0, 6, 12, 18]
 
+    rrfs = models["ncep_rrfs_north_america"]
+    assert rrfs["name"] == "RRFS (North America)"
+    assert rrfs["horizon_hours"] == 84
+    assert rrfs["update_hours"] == 6
+    assert rrfs["update_cycles_utc"] == [0, 6, 12, 18]
+
 
 def test_model_metadata_is_the_source_of_truth():
     """Cadence and horizon live in config now that the static guide table is gone (SCRUM-232)."""
@@ -121,6 +127,7 @@ def test_model_metadata_is_the_source_of_truth():
         ("ecmwf_aifs025_single", 15),
         ("gfs_seamless", 16),
         ("gem_seamless", 10),
+        ("ncep_rrfs_north_america", 4),
         ("icon_seamless", 8),
     ],
 )
@@ -192,6 +199,15 @@ def test_grid_time_serves_that_hours_values_and_caches_per_hour(client, open_met
 
     # Other hours of that day are cached by the same response (SCRUM-166); the same-day cases
     # and the cross-day boundary are covered in test_grid.py.
+
+
+def test_grid_time_rejects_an_hour_past_rrfs_horizon(client):
+    """RRFS stops at 84 h even though the endpoint allows longer windows (SCRUM-231)."""
+    resp = client.get(
+        "/api/weather/grid", params=grid_params(time=iso(future_hour(hours=90)), model="ncep_rrfs_north_america")
+    )
+    assert resp.status_code == 422
+    assert "horizon" in resp.json()["detail"]
 
 
 def test_grid_time_rejects_an_hour_past_gems_horizon(client):
