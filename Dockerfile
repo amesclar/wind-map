@@ -8,9 +8,10 @@ WORKDIR /build
 ARG GIT_SHA=""
 ENV GIT_SHA=${GIT_SHA}
 
-# Install dependencies
+# Install dependencies. `npm ci` installs exactly what frontend/package-lock.json pins, so the
+# image cannot resolve transitive versions CI never tested (SCRUM-280).
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 
 # Build static assets. VERSION sits one level above the frontend sources,
 # matching the repo layout that frontend/appVersion.ts expects (SCRUM-91).
