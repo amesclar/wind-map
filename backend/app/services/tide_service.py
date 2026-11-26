@@ -5,8 +5,10 @@ about 8 km, 10 days, updated once a day. The value is sea level *including tides
 global mean sea level, not a chart datum, and Open-Meteo calls it unsuitable for navigation, so
 responses name the datum and the pop-up repeats the caveat.
 
-A pop-up needs the selected hour plus the nearest high and low around it, so one request covers
-the previous, selected and following UTC day and every hour of that window is cached. Extremes
+A pop-up needs the selected hour plus the nearest high and low around it, so the previous,
+selected and following UTC day are read and every hour of that window is cached. Only the days
+that are actually missing are fetched (SCRUM-286), and a cold point still costs one request
+because its three missing days form one contiguous range. Extremes
 are found by neighbour comparison (which also says high or low unambiguously) and refined with a
 three-point parabola, which turns hourly samples into a time to the minute and a peak height.
 """
@@ -70,8 +72,9 @@ async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> 
     moment = (at or floor_hour(datetime.now(UTC))).astimezone(UTC)
     hours = window_hours(moment)
     cached = _read_window(lat, lon, hours)
-    if any(hour not in cached for hour in hours):
-        cached = await _fetch_window(lat, lon, moment)
+    missing = [hour for hour in hours if hour not in cached]
+    if missing:
+        cached = {**cached, **await _fetch_missing(lat, lon, missing)}
 
     samples = [Height(_parse(hour), height) for hour in hours if (height := cached.get(hour)) is not None]
     last, following, after = derive_extremes(samples, moment)
@@ -156,10 +159,35 @@ def _store(lat: float, lon: float, values: dict[str, float | None], now: float) 
         )
 
 
-async def _fetch_window(lat: float, lon: float, moment: datetime) -> dict[str, float | None]:
-    """One marine request for the three-day window, cached per hour."""
-    start = _window_start(moment)
-    end = start + timedelta(days=2)
+def _missing_ranges(missing: list[str]) -> list[tuple[datetime, datetime]]:
+    """The UTC days that own the missing hours, grouped into contiguous ranges.
+
+    Grouping keeps a cold point at one request: its three missing days are one range (SCRUM-286).
+    """
+    days = sorted({_parse(hour).replace(hour=0, minute=0) for hour in missing})
+    ranges: list[tuple[datetime, datetime]] = []
+    for day in days:
+        if ranges and ranges[-1][1] + timedelta(days=1) == day:
+            ranges[-1] = (ranges[-1][0], day)
+        else:
+            ranges.append((day, day))
+    return ranges
+
+
+async def _fetch_missing(lat: float, lon: float, missing: list[str]) -> dict[str, float | None]:
+    """Fetch and cache only the days that have missing hours, not the whole window.
+
+    One expired row used to re-request all three days and rewrite all 72 rows; the currents and
+    waves services already fetch only the UTC days they lack (SCRUM-286).
+    """
+    values: dict[str, float | None] = {}
+    for start, end in _missing_ranges(missing):
+        values.update(await _fetch_window(lat, lon, start, end))
+    return values
+
+
+async def _fetch_window(lat: float, lon: float, start: datetime, end: datetime) -> dict[str, float | None]:
+    """One marine request for the given UTC days, cached per hour."""
     data = await open_meteo.get_json(
         OPEN_METEO_MARINE_URL,
         {
