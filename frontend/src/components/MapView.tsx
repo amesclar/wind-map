@@ -25,27 +25,16 @@ import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
 import { useWaveGrid } from '../hooks/useWaveGrid';
 import {
-  CHART_BOUNDS,
-  CHART_COVERAGE_MAX_LAT,
   CHART_EDGE_NOTICE,
-  CHART_EDGE_PANE,
   CHART_MIN_ZOOM,
-  CHART_PANE,
   CHART_TILE_FAILURE_NOTICE,
-  CHART_TILE_FAILURE_THRESHOLD,
-  CHART_TILE_FAILURE_WINDOW_MS,
   isLightBase,
-  nonnaLayerConfig,
-  NONNA_PANE,
   NOAA_COVERAGE_NOTICE,
-  seamarkLayerConfig,
   seamarksShownFor,
-  SEAMARK_PANE,
-  tileLayerConfig,
 } from './mapTiles';
 import { registerCaptureMap } from '../utils/captureReadiness';
-import { createSeamapLayer, mountSeamapLayer, type SeamapLayer } from './seamapLayer';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
+import { useBaseLayers } from '../hooks/useBaseLayers';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -209,21 +198,22 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef(new Map<number, LocationMarker>());
 
-  // SCRUM-203: the NOAA paper chart is a base map, not an overlay, and it is clipped to its
-  // coverage, so the notice below has to follow pans and zooms.
-  const chartBase = tileLayerType === 'paper_chart';
   // SCRUM-206: Seamap is a light sheet too, so barbs, currents and the gradient get the same
   // light-base treatment as the paper chart; only the chart's own coverage rules are chart-only.
   const lightBase = isLightBase(tileLayerType);
   // SCRUM-214: the chart carries its own aids, so the seamark overlay is suppressed on it without
   // changing the stored toggle; it returns as soon as another base is chosen.
   const seamarksShown = seamarksShownFor(tileLayerType, seamarksVisible);
-  const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
-  // SCRUM-215: a view that crosses the clip shows where the chart ends instead of an unexplained cut.
-  const [chartStraddlesEdge, setChartStraddlesEdge] = useState(false);
-  // SCRUM-217: the chart service failing is a state of its own, separate from being out of range.
-  const [chartTilesFailed, setChartTilesFailed] = useState(false);
-  const [chartRetryCount, setChartRetryCount] = useState(0);
+
+  // Expose the live map instance to child components via state so React
+  // re-renders WindOverlay once the map is ready.
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+
+  // SCRUM-275: the base map, the paper chart and its edge rule, the Seamap style, the seamarks and
+  // the depth shading live in their own hook. What stays here is the map itself, the markers and
+  // pop-ups, and the wind, current and wave layers.
+  const { chartBase, chartOutsideCoverage, chartStraddlesEdge, chartTilesFailed, retryChart } =
+    useBaseLayers(mapInstance, { tileLayerType, cartoApiKey, seamarksShown, bcDepthVisible });
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
   const onSelectLocationRef = useLatest(onSelectLocation);
@@ -236,9 +226,6 @@ export const MapView: React.FC<MapViewProps> = ({
     [locations],
   );
 
-  // Expose the live map instance to child components via state so React
-  // re-renders WindOverlay once the map is ready.
-  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
 
   // One grid fetch per view change, shared by every layer that draws it (SCRUM-122);
   // either layer keeps it alive (SCRUM-124).
@@ -323,202 +310,6 @@ export const MapView: React.FC<MapViewProps> = ({
       mapInstance.off('popupopen', onPopupOpen);
     };
   }, [mapInstance, unitSystem, validTime, validTimeLabel]);
-
-  // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
-  // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
-  // service's coverage, so the clip edge reveals a working map instead of a blank canvas.
-  // SCRUM-217: the chart layer's tile failures are counted here, and Retry remounts this effect.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const layers: L.Layer[] = [];
-    // Counted per tile batch, not per tile: one stray tile from a pan is not an outage.
-    let failures = 0;
-    let windowStartedAt = 0;
-    const noteTileError = () => {
-      const now = Date.now();
-      if (now - windowStartedAt > CHART_TILE_FAILURE_WINDOW_MS) {
-        failures = 0;
-        windowStartedAt = now;
-      }
-      failures += 1;
-      if (failures >= CHART_TILE_FAILURE_THRESHOLD) setChartTilesFailed(true);
-    };
-    const noteBatchLoaded = () => {
-      // Only a batch with no failures clears the notice: the load that follows an outage's failed
-      // tiles must not hide it again immediately, but a recovered service clears it with no click.
-      if (failures === 0) setChartTilesFailed(false);
-      failures = 0;
-      windowStartedAt = 0;
-    };
-
-    if (tileLayerType === 'paper_chart') {
-      const substrate = tileLayerConfig('osm_dark');
-      if (substrate.kind === 'xyz') {
-        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
-      }
-      if (!map.getPane(CHART_PANE)) {
-        const pane = map.createPane(CHART_PANE);
-        pane.style.zIndex = '205';
-        // Tiles only paint here: clicks must still reach the map and the barbs.
-        pane.style.pointerEvents = 'none';
-      }
-      const chart = tileLayerConfig('paper_chart');
-      if (chart.kind === 'wms') {
-        const chartLayer = L.tileLayer.wms(chart.url, {
-          ...chart.options,
-          pane: CHART_PANE,
-          minZoom: CHART_MIN_ZOOM,
-          bounds: L.latLngBounds(
-            [CHART_BOUNDS.south, CHART_BOUNDS.west],
-            [CHART_BOUNDS.north, CHART_BOUNDS.east],
-          ),
-        });
-        chartLayer.on('tileerror', noteTileError);
-        chartLayer.on('load', noteBatchLoaded);
-        layers.push(chartLayer.addTo(map));
-      }
-    } else if (tileLayerType === 'seamap') {
-      // SCRUM-206: a keyless dark substrate under a lazily loaded MapLibre style. The pane is the
-      // chart's (205): above the base tiles, below the depth shading and the seamarks.
-      const substrate = tileLayerConfig('osm_dark');
-      if (substrate.kind === 'xyz') {
-        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(map));
-      }
-      if (!map.getPane(CHART_PANE)) {
-        const pane = map.createPane(CHART_PANE);
-        pane.style.zIndex = '205';
-        pane.style.pointerEvents = 'none';
-      }
-      // The first selection downloads MapLibre; switching away, or a map React StrictMode already
-      // replaced, while it loads must leave no layer behind, so the layer is only mounted on a
-      // map that is still this effect's own.
-      let disposed = false;
-      let seamapLayer: SeamapLayer | null = null;
-      let unregisterVector = () => {};
-      void createSeamapLayer()
-        .then((created) => {
-          if (disposed) return;
-          unregisterVector = mountSeamapLayer(map, created);
-          seamapLayer = created;
-        })
-        .catch((err) => {
-          // The substrate still shows, so the map stays usable; the console names the cause.
-          console.error('The Seamap base style could not be loaded:', err);
-        });
-      return () => {
-        disposed = true;
-        unregisterVector();
-        seamapLayer?.remove();
-        layers.forEach((layer) => layer.remove());
-      };
-    } else {
-      const base = tileLayerConfig(tileLayerType, cartoApiKey);
-      if (base.kind === 'xyz') layers.push(L.tileLayer(base.url, base.options).addTo(map));
-    }
-
-    return () => {
-      layers.forEach((layer) => layer.remove());
-    };
-  }, [tileLayerType, cartoApiKey, chartRetryCount]);
-
-  // The chart draws only inside the clip; outside it the substrate shows, which is accurate but
-  // needs saying, because the service has no "no chart here" tile to speak for itself.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !chartBase) {
-      setChartOutsideCoverage(false);
-      setChartStraddlesEdge(false);
-      setChartTilesFailed(false);
-      return;
-    }
-    // The app opens below the chart's zoom floor, so selecting the mode would otherwise show a
-    // notice and no chart at all; zoom to the floor once, which the user can undo.
-    if (map.getZoom() < CHART_MIN_ZOOM) map.setZoom(CHART_MIN_ZOOM);
-    const update = () => {
-      const bounds = map.getBounds();
-      const belowFloor = map.getZoom() < CHART_MIN_ZOOM;
-      setChartOutsideCoverage(bounds.getSouth() > CHART_BOUNDS.north || belowFloor);
-      setChartStraddlesEdge(
-        !belowFloor && bounds.getSouth() <= CHART_BOUNDS.north && bounds.getNorth() > CHART_BOUNDS.north,
-      );
-    };
-    update();
-    map.on('moveend', update);
-    map.on('zoomend', update);
-    return () => {
-      map.off('moveend', update);
-      map.off('zoomend', update);
-    };
-  }, [chartBase, mapInstance]);
-
-  // SCRUM-215: draw the 49.6 N clip as a rule, so the chart does not simply stop in the middle of
-  // the water. It spans the chart's own coverage box and only paints while the chart base is on.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !chartBase) return;
-    if (!map.getPane(CHART_EDGE_PANE)) {
-      const pane = map.createPane(CHART_EDGE_PANE);
-      pane.style.zIndex = '206';
-      pane.style.pointerEvents = 'none';
-    }
-    const boundary = L.polyline(
-      [
-        [CHART_COVERAGE_MAX_LAT, CHART_BOUNDS.west],
-        [CHART_COVERAGE_MAX_LAT, CHART_BOUNDS.east],
-      ],
-      {
-        pane: CHART_EDGE_PANE,
-        color: '#161b22',
-        weight: 1.2,
-        opacity: 0.5,
-        dashArray: '6 6',
-        interactive: false,
-      },
-    ).addTo(map);
-    return () => {
-      boundary.remove();
-    };
-  }, [chartBase, mapInstance, chartRetryCount]);
-
-  // Nautical seamark overlay (SCRUM-175): its own pane, so the base map, the seamarks and the
-  // wind layers stack in a fixed order however they are toggled.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !seamarksShown) return;
-    if (!map.getPane(SEAMARK_PANE)) {
-      const pane = map.createPane(SEAMARK_PANE);
-      pane.style.zIndex = '210';
-      // Tiles only paint here: clicks must still reach the map and the barbs.
-      pane.style.pointerEvents = 'none';
-    }
-    const { url, options } = seamarkLayerConfig();
-    const layer = L.tileLayer(url, options).addTo(map);
-    return () => {
-      layer.remove();
-    };
-    // The map is created by the effect above, before this one runs, so the ref is current; adding
-    // the map instance as a dependency would add the layer twice on the first render.
-  }, [seamarksShown]);
-
-  // CHS NONNA bathymetry (SCRUM-205): its own pane above the chart and under the seamarks, so the
-  // depth shading never covers the aids it gives context to, whichever toggle ran last.
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !bcDepthVisible) return;
-    if (!map.getPane(NONNA_PANE)) {
-      const pane = map.createPane(NONNA_PANE);
-      pane.style.zIndex = '208';
-      // Tiles only paint here: clicks must still reach the map and the barbs.
-      pane.style.pointerEvents = 'none';
-    }
-    const config = nonnaLayerConfig();
-    if (config.kind !== 'wms') return;
-    const layer = L.tileLayer.wms(config.url, config.options).addTo(map);
-    return () => {
-      layer.remove();
-    };
-  }, [bcDepthVisible]);
 
   // Saved-location markers, updated in place by location id (SCRUM-92): only added or
   // removed locations create or remove markers; the rest get a new icon and popup.
@@ -641,10 +432,7 @@ export const MapView: React.FC<MapViewProps> = ({
               <button
                 type="button"
                 data-testid="chart-retry"
-                onClick={() => {
-                  setChartTilesFailed(false);
-                  setChartRetryCount((count) => count + 1);
-                }}
+                onClick={retryChart}
                 className="mt-1.5 rounded-md border border-sky-500/60 bg-sky-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-sky-500"
               >
                 Retry chart tiles
