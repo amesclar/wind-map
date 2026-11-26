@@ -61,15 +61,14 @@ async def get_grid_wind(
     if at is None:
         # No DB connection is held during the HTTP call.
         fetched = await _fetch_current(missing, model)
-        _store_points(fetched, model, hour, now)
+        _store_series({hour: fetched}, model, now)
         return results + fetched
 
     # One response already carries the whole UTC day, so cache every hour of it. The rest of a
     # multi-hour range is then served from SQLite instead of repeating the Open-Meteo call
     # (SCRUM-166), which used to trip its rate limit.
     series = await _fetch_hourly_day(missing, model, at)
-    for series_hour, hour_points in series.items():
-        _store_points(hour_points, model, series_hour, now)
+    _store_series(series, model, now)
     return results + series[hour]
 
 
@@ -128,9 +127,15 @@ def _read_cached_points(
     return results, missing
 
 
-def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: float) -> None:
-    # A no-data point is not cached (SCRUM-225): a temporary upstream gap must not be served
-    # as calm wind for the whole TTL, and `_read_cached_points` only reads rows with a value.
+def _store_series(series: dict[str, list[GridWindPoint]], model: str, now: float) -> None:
+    """Write every hour of one fetched day in a single transaction (SCRUM-274).
+
+    A forecast-hour request used to call the store once per hour, so one grid request paid 24
+    connect/commit/close cycles and each of them could collide with a reader.
+
+    A no-data point is not cached (SCRUM-225): a temporary upstream gap must not be served as calm
+    wind for the whole TTL, and `_read_cached_points` only reads rows with a value.
+    """
     rows = [
         (
             *coord_key(p.latitude, p.longitude),
@@ -143,7 +148,8 @@ def _store_points(fetched: list[GridWindPoint], model: str, hour: str, now: floa
             p.wind_direction_deg,
             p.temperature_f,
         )
-        for p in fetched
+        for hour, hour_points in series.items()
+        for p in hour_points
         if p.wind_speed_knots is not None and p.temperature_f is not None
     ]
     if not rows:
