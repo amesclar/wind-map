@@ -94,7 +94,7 @@ jobs:
             --no-cpu-throttling \
             --allow-unauthenticated \
             --set-env-vars="LITESTREAM_BUCKET=$LITESTREAM_BUCKET,JIRA_BASE_URL=$JIRA_BASE_URL,JIRA_EMAIL=$JIRA_EMAIL" \
-            --set-secrets="APP_PASSWORD=APP_PASSWORD:latest,CARTO_API_KEY=CARTO_API_KEY:latest,JIRA_API_TOKEN=JIRA_API_TOKEN:latest" \
+            --set-secrets="APP_PASSWORD=APP_PASSWORD:latest,CARTO_API_KEY=CARTO_API_KEY:latest,JIRA_API_TOKEN=JIRA_API_TOKEN:latest,GCP_MAP_KEY=GCP_MAP_KEY:latest" \
             --quiet
 
       - name: Smoke test the deployment

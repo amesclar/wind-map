@@ -356,7 +356,7 @@ The workflow applies these settings:
 | :--- | :--- |
 | Image | `us-west1-docker.pkg.dev/wind-app-515017/wind-map/wind-map:VERSION-<sha>` |
 | Service account | `wind-map-runner@wind-app-515017.iam.gserviceaccount.com` |
-| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `JIRA_BASE_URL`, `JIRA_EMAIL`; `APP_PASSWORD`, `CARTO_API_KEY` and `JIRA_API_TOKEN` from Secret Manager |
+| Env and secret | `LITESTREAM_BUCKET=wind-map-litestream-wind-app-515017`, `JIRA_BASE_URL`, `JIRA_EMAIL`; `APP_PASSWORD`, `CARTO_API_KEY`, `JIRA_API_TOKEN` and `GCP_MAP_KEY` from Secret Manager |
 | Scaling | `--max-instances=1 --min-instances=0 --no-cpu-throttling` (one writer, CPU always allocated) |
 | Access | `--allow-unauthenticated`; the app's Basic Auth is the gate, not IAM |
 
