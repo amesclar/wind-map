@@ -62,7 +62,8 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   const [format, setFormat] = useState<MapExportFormat>('png');
   const [jpegQuality, setJpegQuality] = useState<number>(DEFAULT_JPEG_QUALITY);
   const [pageSize, setPageSize] = useState<PdfPageSize>('letter');
-  const [orientation, setOrientation] = useState<PdfOrientation>('portrait');
+  // A map view is wide, so a PDF opens on landscape (SCRUM-243); Portrait stays one click away.
+  const [orientation, setOrientation] = useState<PdfOrientation>('landscape');
   const [start, setStart] = useState<string>(rangeHours[0] ?? '');
   const [end, setEnd] = useState<string>(rangeHours[Math.min(2, Math.max(0, rangeHours.length - 1))] ?? '');
   const [intervalHours, setIntervalHours] = useState<RangeIntervalHours>(1);

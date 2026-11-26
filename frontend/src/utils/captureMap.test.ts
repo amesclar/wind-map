@@ -11,6 +11,7 @@ import {
   type CaptureContent,
 } from './captureChrome';
 import { DEFAULT_JPEG_QUALITY } from './download';
+import { barbLegendEntries } from './mapExport';
 
 function fakeContext() {
   return {
@@ -48,6 +49,8 @@ const content: CaptureContent = {
     { knots: 0, caption: 'calm' },
     { knots: 5, caption: '5 kt' },
     { knots: 10, caption: '10 kt' },
+    { knots: 15, caption: '15 kt' },
+    { knots: 20, caption: '20 kt' },
     { knots: 50, caption: '50 kt' },
   ],
   temperatures: [
@@ -218,6 +221,56 @@ describe('captureMapCanvas (SCRUM-116)', () => {
     for (const stop of scale.stops) {
       expect(gradient.addColorStop).toHaveBeenCalledWith(stop.offset, stop.color);
     }
+  });
+
+  it('draws every barb example from the legend list (SCRUM-240)', async () => {
+    const barbs = barbLegendEntries('knots');
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+
+    await captureMapCanvas(element, { ...content, barbs }, { domToCanvas, tileTimeoutMs: 0 });
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    expect(barbs).toHaveLength(6);
+    for (const entry of barbs) expect(texts).toContain(entry.caption);
+  });
+
+  it('keeps all six captions at the narrowest export width (SCRUM-240)', async () => {
+    mapCanvas = { width: 360, height: 600 } as HTMLCanvasElement;
+    const barbs = barbLegendEntries('kmh');
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+
+    await captureMapCanvas(element, { ...content, barbs }, { domToCanvas, tileTimeoutMs: 0 });
+
+    const texts = ctx.fillText.mock.calls.map((call) => call[0] as string);
+    for (const entry of barbs) expect(texts).toContain(entry.caption);
+  });
+
+  it('draws the barb row and the footer line larger (SCRUM-258)', async () => {
+    const element = document.createElement('div');
+    const domToCanvas = vi.fn().mockResolvedValue(mapCanvas);
+    const fonts: string[] = [];
+    let font = '';
+    Object.defineProperty(ctx, 'font', {
+      configurable: true,
+      get: () => font,
+      set: (value: string) => {
+        font = value;
+        fonts.push(value);
+      },
+    });
+
+    await captureMapCanvas(element, content, { domToCanvas, tileTimeoutMs: 0 });
+
+    // Barb title and six captions, plus the two header lines, at 10 CSS px; footer at 10.5 CSS
+    // px. The context is 2x, so the font strings carry the doubled sizes.
+    expect(fonts.filter((value) => value === 'normal 20px sans-serif')).toHaveLength(9);
+    expect(fonts).toContain('normal 21px sans-serif');
+
+    // The footer baseline sits inside the taller 34 px band.
+    const footerCall = ctx.fillText.mock.calls.find((call) => call[0] === content.footer)!;
+    expect(footerCall[2]).toBe(600 + (HEADER_PX + LEGEND_PX) * 2 + 21 * 2);
   });
 
   it('keeps the barb and temperature rows when the gradient is off (SCRUM-165)', async () => {

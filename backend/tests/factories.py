@@ -115,6 +115,17 @@ def upstream_error(msg: str = "secret-host.internal refused") -> httpx.ConnectEr
     return httpx.ConnectError(msg, request=httpx.Request("GET", FORECAST_URL))
 
 
+def upstream_status_error(url: str, status: int = 503) -> httpx.HTTPStatusError:
+    """An upstream failure whose message embeds `url`, the way httpx's `raise_for_status` does.
+
+    That message is what `logger.exception` appends to a log record, which is how a request's
+    coordinates used to reach the log (SCRUM-253).
+    """
+    request = httpx.Request("GET", url)
+    response = httpx.Response(status_code=status, json={}, request=request)
+    return httpx.HTTPStatusError(f"{status} Service Unavailable for url '{url}'", request=request, response=response)
+
+
 def insert_grid_row(
     lat: float,
     lon: float,

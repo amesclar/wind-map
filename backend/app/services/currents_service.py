@@ -5,6 +5,9 @@ Values come from Open-Meteo's Marine API (MeteoFrance SMOC via Copernicus Marine
 
 - It returns `null` over land and outside the model domain. Those nodes are dropped from responses
   and cached as empty rows, so an inland view is not fetched again on every pan.
+- It answers each requested point with its nearest sea cell and returns that cell's coordinates.
+  Values are placed at the cell, not the request (SCRUM-238), so a coastal point never gets a
+  chevron on land; points sharing a cell share one chevron.
 - Velocity is converted to knots by the request itself (`wind_speed_unit=kn`), matching the wind
   endpoints; no km/h maths happens here.
 
@@ -12,13 +15,19 @@ The cache is keyed by (rounded lat, lon, hour), and one hourly request stores ev
 UTC day from the same response, as the wind grid does (SCRUM-166).
 """
 
+import logging
+import sqlite3
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx
 
 from backend.app.config import (
     CACHE_TTL_SECONDS,
+    LAND_ELEVATION_THRESHOLD_M,
+    OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+    OPEN_METEO_ELEVATION_URL,
     OPEN_METEO_MARINE_TIMEOUT_SECONDS,
     OPEN_METEO_MARINE_URL,
 )
@@ -29,13 +38,30 @@ from backend.app.services.model_info import floor_hour
 from backend.app.services.time_window import hour_key
 from backend.app.units import coord_key
 
+logger = logging.getLogger(__name__)
+
 CURRENT_VARIABLES = ("ocean_current_velocity", "ocean_current_direction")
+# Open-Meteo's elevation endpoint accepts a bounded coordinate list; grids are chunked like the
+# marine fetch.
+ELEVATION_BATCH_SIZE = 100
 # The marine API converts current velocity to knots when asked; verified against the live API.
 MARINE_PARAMS = {"wind_speed_unit": "kn"}
 POINT_SERIES_HOURS = 48
 
-# A cached value pair, or None when the point has no current there (land / outside the domain).
-Value = tuple[float, float] | None
+
+@dataclass(frozen=True)
+class CurrentValue:
+    """A current value and the Marine model cell it came from (SCRUM-238)."""
+
+    latitude: float
+    longitude: float
+    velocity_knots: float
+    direction_deg: float
+
+
+# A cached value with its cell, or None when the point has no current there (land / outside
+# the domain).
+Value = CurrentValue | None
 
 
 async def get_grid_currents(
@@ -59,6 +85,7 @@ async def get_grid_currents(
 
     if at is None:
         values = await _fetch_current(missing)
+        values = _drop_land(values, await _land_cells(values))
         _store(missing, values, hour, now)
         for point, value in zip(missing, values, strict=True):
             cached[coord_key(*point)] = value
@@ -66,8 +93,9 @@ async def get_grid_currents(
 
     # One response already carries the whole UTC day, so cache every hour of it (SCRUM-166).
     series = await _fetch_hourly(missing, at, at)
+    land = await _land_cells([value for values in series.values() for value in values if value is not None])
     for series_hour, values in series.items():
-        _store(missing, values, series_hour, now)
+        _store(missing, _drop_land(values, land), series_hour, now)
     requested = hour_key(at)
     if requested not in series:
         raise httpx.HTTPError(f"Open-Meteo marine response did not include the requested hour {requested}")
@@ -93,9 +121,10 @@ async def get_point_currents(
     for day in missing_days:
         day_start = datetime.fromisoformat(day).replace(tzinfo=UTC)
         series = await _fetch_hourly([(lat, lon)], day_start, day_start)
+        land = await _land_cells([value for values in series.values() for value in values if value is not None])
         stamp = time.time()
         for series_hour, values in series.items():
-            _store([(lat, lon)], values, series_hour, stamp)
+            _store([(lat, lon)], _drop_land(values, land), series_hour, stamp)
     if missing_days:
         cached = _read_series(lat, lon, [hour_key(moment) for moment in wanted])
 
@@ -107,11 +136,25 @@ async def get_point_currents(
         result.append(
             CurrentSeriesPoint(
                 time=hour_key(moment),
-                velocity_knots=value[0],
-                direction_deg=value[1],
+                velocity_knots=value.velocity_knots,
+                direction_deg=value.direction_deg,
             )
         )
     return result
+
+
+def _cached_value(row: sqlite3.Row) -> Value:
+    """One cached value with its cell, or None for an empty row ("checked, no current")."""
+    if row["velocity_knots"] is None:
+        return None
+    # The stored cell places the chevron exactly as the live response did (SCRUM-238). The key
+    # is a fallback for a row written before the schema bump; the migration replaces those.
+    return CurrentValue(
+        latitude=row["cell_lat"] if row["cell_lat"] is not None else row["lat_key"],
+        longitude=row["cell_lon"] if row["cell_lon"] is not None else row["lon_key"],
+        velocity_knots=row["velocity_knots"],
+        direction_deg=row["direction_deg"],
+    )
 
 
 def _read_cached_points(
@@ -125,16 +168,12 @@ def _read_cached_points(
     placeholders = ",".join("?" for _ in lat_keys)
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT lat_key, lon_key, velocity_knots, direction_deg FROM grid_currents_cache "  # noqa: S608
+            "SELECT lat_key, lon_key, velocity_knots, direction_deg, cell_lat, cell_lon "  # noqa: S608
+            "FROM grid_currents_cache "
             f"WHERE hour=? AND expires_at>? AND lat_key IN ({placeholders})",
             (hour, now, *lat_keys),
         ).fetchall()
-    return {
-        (row["lat_key"], row["lon_key"]): (
-            None if row["velocity_knots"] is None else (row["velocity_knots"], row["direction_deg"])
-        )
-        for row in rows
-    }
+    return {(row["lat_key"], row["lon_key"]): _cached_value(row) for row in rows}
 
 
 def _read_series(
@@ -149,14 +188,12 @@ def _read_series(
     placeholders = ",".join("?" for _ in hours)
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT hour, velocity_knots, direction_deg FROM grid_currents_cache "  # noqa: S608
+            "SELECT hour, lat_key, lon_key, velocity_knots, direction_deg, cell_lat, cell_lon "  # noqa: S608
+            "FROM grid_currents_cache "
             f"WHERE lat_key=? AND lon_key=? AND hour IN ({placeholders}) AND expires_at>?",
             (lat_key, lon_key, *hours, time.time()),
         ).fetchall()
-    return {
-        row["hour"]: (None if row["velocity_knots"] is None else (row["velocity_knots"], row["direction_deg"]))
-        for row in rows
-    }
+    return {row["hour"]: _cached_value(row) for row in rows}
 
 
 def _points_from(
@@ -164,18 +201,28 @@ def _points_from(
     cached: dict[tuple[float, float], Value],
     hour: str,
 ) -> list[CurrentPoint]:
-    """Requested coordinates with data, in request order; points without a current are dropped."""
+    """One point per model cell with data, in request order (SCRUM-238).
+
+    Points without a current are dropped. Several requested points can snap to the same cell,
+    especially at high zoom, so each cell is returned once and carries its own coordinates: the
+    chevron sits on water and its pop-up names the true source of the value.
+    """
     result: list[CurrentPoint] = []
+    seen: set[tuple[float, float]] = set()
     for lat, lon in points:
         value = cached.get(coord_key(lat, lon))
         if value is None:
             continue
+        cell = (round(value.latitude, 6), round(value.longitude, 6))
+        if cell in seen:
+            continue
+        seen.add(cell)
         result.append(
             CurrentPoint(
-                latitude=lat,
-                longitude=lon,
-                velocity_knots=value[0],
-                direction_deg=value[1],
+                latitude=value.latitude,
+                longitude=value.longitude,
+                velocity_knots=value.velocity_knots,
+                direction_deg=value.direction_deg,
                 time=None if hour == "current" else hour,
             )
         )
@@ -193,19 +240,26 @@ def _store(
     rows = []
     for (lat, lon), value in zip(points, values, strict=True):
         lat_key, lon_key = coord_key(lat, lon)
-        velocity, direction = (None, None) if value is None else value
-        rows.append((lat_key, lon_key, hour, now, expires_at, velocity, direction))
+        if value is None:
+            velocity, direction, cell_lat, cell_lon = None, None, None, None
+        else:
+            velocity, direction = value.velocity_knots, value.direction_deg
+            cell_lat, cell_lon = value.latitude, value.longitude
+        rows.append((lat_key, lon_key, hour, now, expires_at, velocity, direction, cell_lat, cell_lon))
     with db_connection() as conn:
         conn.executemany(
             """
             INSERT INTO grid_currents_cache
-                (lat_key, lon_key, hour, cached_at, expires_at, velocity_knots, direction_deg)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (lat_key, lon_key, hour, cached_at, expires_at, velocity_knots, direction_deg,
+                 cell_lat, cell_lon)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(lat_key, lon_key, hour) DO UPDATE SET
                 cached_at=excluded.cached_at,
                 expires_at=excluded.expires_at,
                 velocity_knots=excluded.velocity_knots,
-                direction_deg=excluded.direction_deg
+                direction_deg=excluded.direction_deg,
+                cell_lat=excluded.cell_lat,
+                cell_lon=excluded.cell_lon
             """,
             rows,
         )
@@ -229,11 +283,82 @@ def _as_list(data: object, expected: int) -> list[dict]:
     return items  # type: ignore[return-value]
 
 
-def _value(velocity: object, direction: object) -> Value:
-    """A value pair, or None when the API has no current for that point or hour."""
+def _cell(item: dict, fallback: tuple[float, float]) -> tuple[float, float]:
+    """The model cell Open-Meteo answered with; the request is the fallback if it omits it."""
+    lat = item.get("latitude")
+    lon = item.get("longitude")
+    if lat is None or lon is None:
+        return fallback
+    return (float(lat), float(lon))
+
+
+def _cell_of(value: CurrentValue) -> tuple[float, float]:
+    """The rounded cell key used for deduplication and the land test."""
+    return (round(value.latitude, 6), round(value.longitude, 6))
+
+
+async def _elevations(cells: list[tuple[float, float]]) -> dict[tuple[float, float], float]:
+    """Elevation in metres for each unique cell, or {} when Open-Meteo cannot say.
+
+    One batched request per 100 cells. A failed lookup is not fatal: without a verdict the
+    values are kept, because hiding real water is worse than a rare chevron over land while
+    the elevation service is down.
+    """
+    unique = list(dict.fromkeys(cells))
+    result: dict[tuple[float, float], float] = {}
+    for start in range(0, len(unique), ELEVATION_BATCH_SIZE):
+        chunk = unique[start : start + ELEVATION_BATCH_SIZE]
+        try:
+            data = await open_meteo.get_json(
+                OPEN_METEO_ELEVATION_URL,
+                {
+                    "latitude": ",".join(str(lat) for lat, _ in chunk),
+                    "longitude": ",".join(str(lon) for _, lon in chunk),
+                },
+                timeout=OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("Elevation lookup failed; keeping current cells: %s", exc)
+            return result
+        values = data.get("elevation") if isinstance(data, dict) else None
+        if not isinstance(values, list) or len(values) != len(chunk):
+            logger.warning("Elevation lookup returned an unexpected payload; keeping current cells")
+            return result
+        for cell, elevation in zip(chunk, values, strict=True):
+            if isinstance(elevation, (int, float)):
+                result[cell] = float(elevation)
+    return result
+
+
+async def _land_cells(values: list[Value]) -> set[tuple[float, float]]:
+    """Cells whose centre sits above sea level, so a chevron there would be on land (SCRUM-238).
+
+    The Marine model's land mask is coarser than the chart: Whidbey is about one cell wide, so
+    cells it considers sea can still fall on the island. Elevation is the check that keeps the
+    chevron on water; a cell at or below the threshold is treated as sea.
+    """
+    cells = [_cell_of(value) for value in values if value is not None]
+    if not cells:
+        return set()
+    elevations = await _elevations(cells)
+    return {cell for cell, elevation in elevations.items() if elevation > LAND_ELEVATION_THRESHOLD_M}
+
+
+def _drop_land(values: list[Value], land: set[tuple[float, float]]) -> list[Value]:
+    """Null the values whose cell is on land, so they are cached as empty rows."""
+    return [None if value is not None and _cell_of(value) in land else value for value in values]
+
+
+def _value(velocity: object, direction: object, cell: tuple[float, float]) -> Value:
+    """A value at its model cell, or None when the API has no current for that point or hour."""
     if velocity is None or direction is None:
         return None
-    return (float(velocity), float(direction))  # type: ignore[arg-type]
+    return CurrentValue(
+        latitude=cell[0],
+        longitude=cell[1],
+        velocity_knots=float(velocity),  # type: ignore[arg-type]
+        direction_deg=float(direction),  # type: ignore[arg-type]
+    )
 
 
 async def _fetch_current(points: list[tuple[float, float]]) -> list[Value]:
@@ -252,8 +377,9 @@ async def _fetch_current(points: list[tuple[float, float]]) -> list[Value]:
         _value(
             (item.get("current") or {}).get("ocean_current_velocity"),
             (item.get("current") or {}).get("ocean_current_direction"),
+            _cell(item, point),
         )
-        for item in items
+        for item, point in zip(items, points, strict=True)
     ]
 
 
@@ -288,10 +414,11 @@ async def _fetch_hourly(
         timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
     )
     items = _as_list(data, len(points))
+    cells = [_cell(item, point) for item, point in zip(items, points, strict=True)]
     series: dict[str, list[Value]] = {}
     for index, stamp in enumerate(_series_times(items)):
         values: list[Value] = []
-        for item in items:
+        for item, cell in zip(items, cells, strict=True):
             hourly = item.get("hourly") or {}
             velocity = hourly.get("ocean_current_velocity") or []
             direction = hourly.get("ocean_current_direction") or []
@@ -299,6 +426,7 @@ async def _fetch_hourly(
                 _value(
                     velocity[index] if index < len(velocity) else None,
                     direction[index] if index < len(direction) else None,
+                    cell,
                 )
             )
         series[_series_hour(stamp)] = values

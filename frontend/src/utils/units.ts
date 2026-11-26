@@ -8,14 +8,18 @@ export const SPEED_UNIT_LABEL: Record<WindSpeedUnit, string> = {
   ms: 'm/s',
 };
 
+/** Shown wherever a value is missing (SCRUM-225): a fabricated 0 or 32 would read as calm. */
+export const NO_DATA = 'No data';
+
 type SpeedPoint = Pick<
   WeatherForecastPoint,
   `wind_${'speed' | 'gust'}_${WindSpeedUnit}`
 >;
 
-/** Wind speed or gust in the chosen unit, e.g. "14 kt" or "25.9 km/h". */
+/** Wind speed or gust in the chosen unit, e.g. "14 kt" or "25.9 km/h"; "No data" when missing. */
 export function formatSpeed(pt: SpeedPoint, kind: 'speed' | 'gust', unit: WindSpeedUnit): string {
-  return `${pt[`wind_${kind}_${unit}`]} ${SPEED_UNIT_LABEL[unit]}`;
+  const value = pt[`wind_${kind}_${unit}`];
+  return typeof value === 'number' ? `${value} ${SPEED_UNIT_LABEL[unit]}` : NO_DATA;
 }
 
 /** Knots per one unit of each display unit (1 kt = 1.852 km/h = 1.15078 mph = 0.514444 m/s). */
@@ -39,12 +43,13 @@ export function formatKnotsInUnit(knots: number, unit: WindSpeedUnit): string {
   return `${Number(knotsToUnit(knots, unit).toFixed(1))} ${SPEED_UNIT_LABEL[unit]}`;
 }
 
-/** Temperature rounded to a whole degree, e.g. "54°F" or "12°C". */
+/** Temperature rounded to a whole degree, e.g. "54°F" or "12°C"; "No data" when missing. */
 export function formatTemperature(
   pt: Pick<WeatherForecastPoint, 'temperature_f' | 'temperature_c'>,
   system: UnitSystem,
 ): string {
-  return system === 'imperial' ? `${Math.round(pt.temperature_f)}°F` : `${Math.round(pt.temperature_c)}°C`;
+  const value = system === 'imperial' ? pt.temperature_f : pt.temperature_c;
+  return typeof value === 'number' ? `${Math.round(value)}°${system === 'imperial' ? 'F' : 'C'}` : NO_DATA;
 }
 
 /** Temperature from a source that only carries °F, e.g. "54°F" or "12°C" (SCRUM-126). */
@@ -68,7 +73,8 @@ export function formatDegreesTrue(deg: number): string {
   return `${rounded >= 360 ? 0 : rounded}°T`;
 }
 
-/** Cardinal plus degrees, e.g. "SW (220°)". */
+/** Cardinal plus degrees, e.g. "SW (220°)"; "No data" when the direction is missing. */
 export function formatDirection(pt: Pick<WeatherForecastPoint, 'wind_direction_cardinal' | 'wind_direction_deg'>): string {
+  if (typeof pt.wind_direction_deg !== 'number' || pt.wind_direction_cardinal === null) return NO_DATA;
   return `${pt.wind_direction_cardinal} (${Math.round(pt.wind_direction_deg)}°)`;
 }

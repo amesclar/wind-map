@@ -45,6 +45,7 @@ vi.mock('./api/client', () => ({
   addLocation: vi.fn(),
   deleteLocation: vi.fn(),
   fetchModels: vi.fn(),
+  fetchModelAvailability: vi.fn(),
   fetchAllWeather: vi.fn(),
   fetchAppConfig: vi.fn(),
   searchGeocode: vi.fn(),
@@ -130,6 +131,13 @@ describe('App map integration (SCRUM-126)', () => {
         next_run_utc: '2026-11-23T18:00:00Z',
       },
     ]);
+    // best_match has no single upstream run, so the run line keeps the derived cycle (SCRUM-256).
+    (api.fetchModelAvailability as any).mockResolvedValue({
+      model: 'best_match',
+      run_utc: null,
+      available_utc: null,
+      next_available_utc: null,
+    });
     (api.fetchAppConfig as any).mockResolvedValue({});
     (api.fetchAllWeather as any).mockResolvedValue([oakForecast, seattleForecast]);
     vi.mocked(api.parseQuotaExhausted).mockReturnValue(null);
@@ -144,18 +152,53 @@ describe('App map integration (SCRUM-126)', () => {
     vi.mocked(saveRangePdf).mockClear();
   });
 
-  it('marks the first saved location as selected on initial load', async () => {
+  it('opens without selecting a location or opening a pop-up (SCRUM-248)', async () => {
     render(<App />);
 
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
-    await waitFor(() => expect(iconHtml(markerAt(oak.latitude, oak.longitude))).toContain('scale-110'));
+    // Without geolocation the first saved location is only focused, never selected.
+    await waitFor(() =>
+      expect(currentMap().flyTo).toHaveBeenCalledWith([oak.latitude, oak.longitude], 9, expect.any(Object)),
+    );
+    expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
     expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).not.toContain('scale-110');
+    expect(markerAt(oak.latitude, oak.longitude)!.openPopup).not.toHaveBeenCalled();
+    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).not.toHaveBeenCalled();
 
     // The timeline drawer is gone (SCRUM-126).
     expect(screen.queryByTestId('timeline-drawer')).toBeNull();
 
     const mapWrapper = screen.getByTestId('map-canvas').parentElement as HTMLElement;
     expect(mapWrapper.className.split(/\s+/)).toContain('isolate');
+  });
+
+  it('centres on the current location without selecting it (SCRUM-248)', async () => {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
+      value: {
+        getCurrentPosition: (ok: (position: unknown) => void) =>
+          ok({ coords: { latitude: 48.1, longitude: -122.4 } }),
+      },
+      configurable: true,
+      writable: true,
+    });
+    const here = makeLocation({
+      id: 3,
+      name: 'My Current Location',
+      latitude: 48.1,
+      longitude: -122.4,
+      is_default: false,
+    });
+    vi.mocked(api.addLocation).mockResolvedValue(here);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(currentMap().flyTo).toHaveBeenCalledWith([48.1, -122.4], 9, expect.any(Object)),
+    );
+    await waitFor(() => expect(markerAt(48.1, -122.4)).toBeDefined());
+    expect(markerAt(48.1, -122.4)!.openPopup).not.toHaveBeenCalled();
+    expect(iconHtml(markerAt(48.1, -122.4))).not.toContain('scale-110');
+    expect(markerAt(oak.latitude, oak.longitude)!.openPopup).not.toHaveBeenCalled();
   });
 
   it('shows the feedback button only when the server enables it, and opens the form (SCRUM-179)', async () => {
@@ -199,13 +242,13 @@ describe('App map integration (SCRUM-126)', () => {
   it('selects a location from the saved-locations modal', async () => {
     render(<App />);
     await waitFor(() => expect(markerAt(seattle.latitude, seattle.longitude)).toBeDefined());
-    expect(iconHtml(markerAt(oak.latitude, oak.longitude))).toContain('scale-110');
 
     fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
     fireEvent.click(await screen.findByText('Seattle, WA'));
 
     await waitFor(() => expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).toContain('scale-110'));
     expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
+    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).toHaveBeenCalledTimes(1);
   });
 
   it('selects a saved location when its map marker is clicked', async () => {
@@ -216,6 +259,7 @@ describe('App map integration (SCRUM-126)', () => {
 
     await waitFor(() => expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).toContain('scale-110'));
     expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
+    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).toHaveBeenCalledTimes(1);
   });
 
   it('highlights the clicked barb and opens its pop-up without another request (SCRUM-88)', async () => {
@@ -307,7 +351,7 @@ describe('App map integration (SCRUM-126)', () => {
     expect(content.header.lines[0].startsWith('Forecast hour')).toBe(true);
     expect(content.header.lines[1]).toContain('Open-Meteo');
     expect(content.footer).toContain('Wind Map v');
-    expect(content.barbs).toHaveLength(4);
+    expect(content.barbs.map((entry) => entry.knots)).toEqual([0, 5, 10, 15, 20, 50]);
     expect(content.temperatures.length).toBeGreaterThan(0);
     expect(content.windColorScale).toBeUndefined(); // the gradient is off by default
     // The dialog closes once the file is handed to the browser.
@@ -533,17 +577,22 @@ describe('App map integration (SCRUM-126)', () => {
     expect(L.marker.mock.calls.length).toBe(markerCalls);
   });
 
-  it('selects the next location when the selected one is deleted (SCRUM-92)', async () => {
+  it('clears the selection when the selected location is deleted (SCRUM-248)', async () => {
     vi.mocked(api.deleteLocation).mockResolvedValue(undefined);
     render(<App />);
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
+
+    markerAt(oak.latitude, oak.longitude)!.fire('click');
     await waitFor(() => expect(iconHtml(markerAt(oak.latitude, oak.longitude))).toContain('scale-110'));
 
     fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
     fireEvent.click(await screen.findByLabelText('Remove Oak Harbor, WA'));
 
-    await waitFor(() => expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).toContain('scale-110'));
+    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)!.remove).toHaveBeenCalled());
+    // Deleting never selects the location that becomes first.
+    expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).not.toContain('scale-110');
+    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).not.toHaveBeenCalled();
     expect(api.deleteLocation).toHaveBeenCalledWith(1);
-    expect(markerAt(oak.latitude, oak.longitude)!.remove).toHaveBeenCalled();
   });
 
   it('adds a location from the search box and selects it (SCRUM-92)', async () => {
@@ -574,6 +623,7 @@ describe('App map integration (SCRUM-126)', () => {
     fireEvent.click(await screen.findByText('Miami'));
 
     await waitFor(() => expect(iconHtml(markerAt(geocode.latitude, geocode.longitude))).toContain('scale-110'));
+    expect(markerAt(geocode.latitude, geocode.longitude)!.openPopup).toHaveBeenCalledTimes(1);
     expect(api.addLocation).toHaveBeenCalledTimes(1);
     // Selecting a location no longer triggers a per-location forecast request (SCRUM-126).
     expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
@@ -614,18 +664,6 @@ describe('App map integration (SCRUM-126)', () => {
     expect(screen.getByLabelText('Timezone')).toBeTruthy();
     fireEvent.click(screen.getByText('Done'));
     expect(screen.queryByLabelText('Timezone')).toBeNull();
-  });
-
-  it('opens and closes the model update frequency guide from the navbar (SCRUM-110)', async () => {
-    render(<App />);
-    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
-    expect(screen.queryByText('NOAA HRRR')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Model Update Cycles & Frequency' }));
-    expect(await screen.findByText('NOAA HRRR')).toBeTruthy();
-
-    fireEvent.click(screen.getByText('Done'));
-    expect(screen.queryByText('NOAA HRRR')).toBeNull();
   });
 
   it('shows the app version from the VERSION file in the navbar (SCRUM-91)', async () => {

@@ -1,18 +1,15 @@
 """Tests for forecast-time support (SCRUM-115): model metadata, `time` validation and hourly data."""
 
-import re
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
-from backend.app.config import MODEL_METADATA, model_horizon_days, model_horizon_hours
+from backend.app.config import MODEL_IDS, MODEL_METADATA, model_horizon_days, model_horizon_hours
 from backend.app.services.model_info import floor_hour, last_run_utc, next_run_utc
 from backend.app.services.time_window import hour_key
 from factories import forecast_payload_for_hour, grid_hourly_item, grid_payload
 
 BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
-MODEL_TABLE = Path(__file__).resolve().parents[2] / "frontend" / "src" / "assets" / "weather-models.md"
 
 
 def grid_params(**overrides) -> dict:
@@ -91,39 +88,41 @@ def test_models_expose_cadence_horizon_and_run_times(client):
     assert gfs["last_run_utc"].endswith("Z") and gfs["next_run_utc"].endswith("Z")
     assert gfs["last_run_utc"] < gfs["next_run_utc"]
 
+    aifs = models["ecmwf_aifs025_single"]
+    assert aifs["horizon_hours"] == 360
+    assert aifs["update_hours"] == 6
+    assert aifs["update_cycles_utc"] == [0, 6, 12, 18]
 
-def test_model_table_horizons_match_config():
-    """The bundled model table is the source of truth for cadence and horizon (SCRUM-115)."""
-    rows = {}
-    for line in MODEL_TABLE.read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith("|"):
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            rows[cells[0]] = cells
+    gem = models["gem_seamless"]
+    assert gem["horizon_hours"] == 240
+    assert gem["update_hours"] == 6
+    assert gem["update_cycles_utc"] == [0, 6, 12, 18]
 
-    def hours(cell: str) -> int:
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(days?|d|hours?|h)", cell, re.IGNORECASE)
-        assert match, cell
-        value = float(match[1])
-        return round(value * 24 if match[2].lower().startswith("d") else value)
 
-    expected_rows = {
-        "ecmwf_ifs04": "ECMWF IFS (HRES 9 km)",
-        "gfs_seamless": "NOAA GFS",
-        "icon_seamless": "DWD ICON Global",
-    }
-    for model_id, row_name in expected_rows.items():
-        cells = rows[row_name]
-        assert hours(cells[4]) == model_horizon_hours(model_id), row_name
-        cadence = int(re.search(r"(\d+)", cells[2])[1])
-        assert cadence == MODEL_METADATA[model_id]["update_hours"], row_name
+def test_model_metadata_is_the_source_of_truth():
+    """Cadence and horizon live in config now that the static guide table is gone (SCRUM-232)."""
+    assert set(MODEL_METADATA) == MODEL_IDS
 
-    # best_match is a composite: Open-Meteo's documented 7-day default, not a single row.
+    # best_match is a composite: Open-Meteo's documented 7-day default, not a single model.
     assert model_horizon_hours("best_match") == 168
+
+    for model_id, meta in MODEL_METADATA.items():
+        assert int(meta["update_hours"]) >= 1, model_id
+        cycles = [int(c) for c in meta["update_cycles_utc"]]  # type: ignore[union-attr]
+        assert cycles and all(0 <= cycle < 24 for cycle in cycles), model_id
+        assert model_horizon_hours(model_id) > 0, model_id
 
 
 @pytest.mark.parametrize(
     ("model", "days"),
-    [("best_match", 7), ("ecmwf_ifs04", 15), ("gfs_seamless", 16), ("icon_seamless", 8)],
+    [
+        ("best_match", 7),
+        ("ecmwf_ifs", 15),
+        ("ecmwf_aifs025_single", 15),
+        ("gfs_seamless", 16),
+        ("gem_seamless", 10),
+        ("icon_seamless", 8),
+    ],
 )
 def test_horizon_days_cover_the_window(model, days):
     assert model_horizon_days(model) == days
@@ -193,6 +192,14 @@ def test_grid_time_serves_that_hours_values_and_caches_per_hour(client, open_met
 
     # Other hours of that day are cached by the same response (SCRUM-166); the same-day cases
     # and the cross-day boundary are covered in test_grid.py.
+
+
+def test_grid_time_rejects_an_hour_past_gems_horizon(client):
+    """GEM seamless stops at 10 days even though the endpoint allows longer windows (SCRUM-228)."""
+    far = future_hour(hours=250)
+    resp = client.get("/api/weather/grid", params=grid_params(time=iso(far), model="gem_seamless"))
+    assert resp.status_code == 422
+    assert "horizon" in resp.json()["detail"]
 
 
 def test_grid_without_time_still_serves_current_conditions(client, open_meteo):

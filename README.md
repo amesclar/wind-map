@@ -19,14 +19,17 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Water Currents:** A grid of chevrons over the water, pointing where the surface current flows and coloured by speed — light (under 0.5 kt), moderate (0.5–1.5 kt), strong (1.5–3 kt) and extreme (3 kt and above). A chevron is drawn only where the point is at sea, so the land stays clear; clicking one opens a pop-up with its speed, compass direction and where it flows toward, in your units, naming the source and the selected forecast hour. The field comes from Open-Meteo Marine (Copernicus Marine, ~8 km), is independent of the selected weather model, follows the same forecast-time selector on its own 240-hour horizon, and retries and the quota 503 behave exactly as on the wind grid. Toggled in Map Settings (default: off); with it on, a compact key at the map's top-left lists the four tiers with their ranges in your speed unit.
 - **Clickable Barbs:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
 - **Forecast Time Selector:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
-- **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
-- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 16 for NOAA GFS, 7.5 for DWD ICON), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
+- **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. The barb row shows six examples — calm, 5, 10, 15, 20 and 50 kt — so the additive mid-range glyphs (a full barb plus a half, two full barbs) can be read too, and a narrow export shrinks the glyph rather than the caption (SCRUM-240). Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
+- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 15 for ECMWF AIFS, 16 for NOAA GFS, 10 for CMC GEM, 7.5 for DWD ICON, 7 for NOAA NWS NDFD), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
-  - *ECMWF IFS 0.4°*
+  - *ECMWF IFS HRES 9 km*
+  - *ECMWF AIFS (AI)*
   - *NOAA GFS Seamless*
+  - *CMC GEM Seamless*
   - *DWD ICON Seamless*
-- **Weather Model Guide:** a refresh-icon button beside the model selector opens a reference table of the supported models with their update cadence, time horizon and run times, bundled at build time from `frontend/src/assets/weather-models.md`.
+  - *NOAA NWS NDFD* (US only; the forecaster-edited grids from `api.weather.gov`)
+- **Tide Pop-ups:** clicking a saved location or a wind barb also shows the tide there — height above mean sea level for the selected hour, plus the nearest low and high with their times. Tides come from Open-Meteo's Marine model, independent of the weather model, and the block is labelled *Not for navigation* because mean sea level is not a chart datum.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
 - **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
@@ -59,11 +62,12 @@ wind-map/
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, geocode, feedback)
+│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, tides, geocode, feedback)
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
 │   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+│   │                            # tide_service.py (sea level, high & low),
 │   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
@@ -74,7 +78,7 @@ wind-map/
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
-    │   │                        # SavedLocationsModal, WeatherModelGuideModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
+    │   │                        # SavedLocationsModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
     │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
     │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
@@ -88,9 +92,9 @@ wind-map/
     │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
     │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
     │   │                        # currentTiers.ts (tier table behind chevrons and legend),
-    │   │                        # modelGuide.ts (model table), html.ts (escaping)
+    │   │                        # html.ts (escaping)
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
-    │   ├── assets/              # weather-models.md, icon artwork
+    │   ├── assets/              # icon artwork
     │   ├── constants.ts         # Defaults, timezone list, storage keys
     │   ├── types.ts             # TypeScript interfaces
     │   ├── version.ts           # Injected __APP_VERSION__
@@ -130,7 +134,7 @@ docker run -d -p 5005:5005 \
   -e JIRA_FEEDBACK_PROJECT="SCRUM" \
   -v wind_data:/app/data --name wind-map wind-map
 ```
-Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP.
+Keep the email and token in your shell environment or a secret store, never in the repository. Without all three of `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` the button is hidden and `POST /api/feedback` returns 503. `FEEDBACK_MAX_PER_HOUR` (default 5) caps submissions per client IP. Up to three files can ride along in the same request — 4 MB each, 12 MB in total, and only images (PNG, JPEG, GIF, WebP), PDF or plain text — so the whole request stays under 12.5 MB, well below Cloud Run's 32 MiB limit; anything larger or of another type is refused with a short reason and nothing is filed. A screenshot can also be pasted into the open form; one over 4 MB is shrunk to JPEG automatically so it fits.
 
 Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
@@ -339,6 +343,8 @@ To upgrade everything to the latest allowed versions, add `--upgrade` to both `p
 
 Cross-origin API access is off by default. If you call the API from another origin, set `CORS_ORIGINS` (comma-separated), e.g. `CORS_ORIGINS=http://localhost:3000`.
 
+`NWS_USER_AGENT` identifies the app to NOAA's NDFD API (`api.weather.gov`, the *NOAA NWS NDFD* model). NWS asks every client to send an application name and a contact address and answers `403` to an empty User-Agent, so set it to something like `NWS_USER_AGENT="wind-map/0.11 (you@example.com)"`. When it is unset the app sends `wind-map (+https://github.com/amesclar/wind-map)` and logs a warning at startup naming the variable, so a missing contact shows up in `docker logs` instead of in NOAA's traffic.
+
 ---
 
 ## REST API Reference
@@ -358,10 +364,14 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
-| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue (needs the Jira variables below; 503 otherwise) |
+| `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue, with up to 3 attachments (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
-The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Open-Meteo failures return 502 with a short message; details are in the server log.
+The weather endpoints accept `model` (one of the ids from `/api/weather/models`; anything else is a 422) and `timezone` (IANA name, default `America/Los_Angeles`). Provider failures return 502 with a short message; details are in the server log, and a transient 5xx/429 is retried twice before it gets that far.
+
+All four also accept an optional `refresh=true` (SCRUM-113): the forecast and grid caches serve a row as usual unless it predates the model's newest published run, so a click refetches only stale data and a stale tab sending the flag by hand cannot spend a pointless Open-Meteo call. A grid refresh asks upstream for the stale points only. The app's refresh button enables itself exactly when such a newer run exists, and a styled hover hint on the disabled icon names the next run — or says the time is unknown when the model publishes no next one.
+
+With `model=nws_ndfd` the forecast comes from NOAA's NDFD grids instead of Open-Meteo. NDFD covers the US only, so a location outside it answers **404** with a fixed message rather than a forecast, and `/api/weather/all` leaves that location out so its marker shows no data. The wind grid, the colour gradient and the currents stay on Open-Meteo whatever model is selected, because NDFD needs one request per point.
 
 The exception is exhausted quota. When Open-Meteo keeps answering 429 after the retries, `/api/weather/grid` returns **503** with `{"code": "open_meteo_quota_exhausted", "message": ..., "reset_at": <ISO 8601 or null>}` and, when the reset instant is known, a `Retry-After` header with the seconds remaining. The frontend turns that into the quota warning described above.
 

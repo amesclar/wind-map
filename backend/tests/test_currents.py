@@ -8,7 +8,7 @@ import pytest
 from backend.app.models import CurrentSeriesPoint
 from backend.app.services.currents_service import get_grid_currents, get_point_currents
 from backend.app.services.open_meteo import QuotaExceededError
-from factories import upstream_error
+from factories import upstream_error, upstream_status_error
 
 BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
 HOUR = datetime(2026, 11, 25, 12, tzinfo=UTC)
@@ -27,33 +27,40 @@ def iso(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def current_item(velocity, direction):
-    """One point of a `current` response; both null means land."""
+def current_item(velocity, direction, cell=(47.9, -124.6)):
+    """One point of a `current` response; both null means land. `cell` is the model cell the
+    API snapped the request to (SCRUM-238)."""
     return {
+        "latitude": cell[0],
+        "longitude": cell[1],
         "current": {
             "time": "2026-11-25T12:00",
             "ocean_current_velocity": velocity,
             "ocean_current_direction": direction,
-        }
+        },
     }
 
 
-def hourly_payload(*series, day: datetime, hours: int = 24) -> list[dict]:
+def hourly_payload(*series, day: datetime, hours: int = 24, cells=None) -> list[dict]:
     """One response per point, with 24 hourly values from the UTC midnight of `day`.
 
     Each `series` item is a list of per-hour `(velocity, direction)` pairs, or None for no data.
+    `cells` gives the model cell per point; the default spreads them so points stay distinct.
     """
     start = hourly(day)
     stamps = [(start + timedelta(hours=step)).strftime("%Y-%m-%dT%H:00") for step in range(hours)]
+    cell_list = cells or [(round(47.0 + 0.1 * index, 3), -124.6) for index in range(len(series))]
     return [
         {
+            "latitude": cell[0],
+            "longitude": cell[1],
             "hourly": {
                 "time": stamps,
                 "ocean_current_velocity": [None if value is None else value[0] for value in point],
                 "ocean_current_direction": [None if value is None else value[1] for value in point],
-            }
+            },
         }
-        for point in series
+        for point, cell in zip(series, cell_list, strict=True)
     ]
 
 
@@ -86,6 +93,117 @@ async def test_fetch_single_point_dict_response(open_meteo):
 
 
 @pytest.mark.asyncio
+async def test_chevron_uses_the_model_cell_not_the_requested_point(open_meteo):
+    """A coastal point borrows its nearest sea cell; the chevron belongs on that cell (SCRUM-238)."""
+    open_meteo.respond(current_item(0.9, 90.0, cell=(48.208, -122.542)))
+
+    result = await get_grid_currents([(48.19, -122.51)])
+
+    assert [(point.latitude, point.longitude) for point in result] == [(48.208, -122.542)]
+
+
+@pytest.mark.asyncio
+async def test_points_sharing_a_cell_return_one_chevron(open_meteo):
+    """At high zoom several map points snap to one model cell; it is drawn once (SCRUM-238)."""
+    open_meteo.respond(
+        [
+            current_item(0.9, 90.0, cell=(48.208, -122.542)),
+            current_item(0.9, 90.0, cell=(48.208, -122.542)),
+            current_item(1.4, 270.0, cell=(48.2, -122.4)),
+        ]
+    )
+
+    result = await get_grid_currents([(48.19, -122.51), (48.19, -122.49), (48.18, -122.40)])
+
+    assert [(point.latitude, point.longitude, point.velocity_knots) for point in result] == [
+        (48.208, -122.542, 0.9),
+        (48.2, -122.4, 1.4),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cached_points_keep_the_cell(open_meteo):
+    """A cache hit must place the chevron exactly where the live response did (SCRUM-238)."""
+    open_meteo.respond(current_item(1.1, 45.0, cell=(48.208, -122.542)))
+    points = [(48.19, -122.51)]
+
+    first = await get_grid_currents(points)
+    second = await get_grid_currents(points)
+
+    assert open_meteo.call_count == 1
+    assert (second[0].latitude, second[0].longitude) == (48.208, -122.542)
+    assert second == first
+
+
+@pytest.mark.asyncio
+async def test_cell_on_land_is_dropped(open_meteo):
+    """The Marine mask calls Whidbey sea; elevation puts the cell on the island (SCRUM-238)."""
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+
+
+@pytest.mark.asyncio
+async def test_sea_level_cell_is_kept(open_meteo):
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.20834, -122.54166)))
+    open_meteo.respond_elevation(0.0)
+
+    result = await get_grid_currents([(48.19, -122.51)])
+
+    assert (result[0].latitude, result[0].longitude) == (48.20834, -122.54166)
+
+
+@pytest.mark.asyncio
+async def test_elevation_is_looked_up_once_per_cell(open_meteo):
+    open_meteo.respond(
+        [
+            current_item(0.4, 90.0, cell=(48.29166, -122.62499)),
+            current_item(0.5, 90.0, cell=(48.29166, -122.62499)),
+            current_item(0.6, 90.0, cell=(48.20834, -122.54166)),
+        ]
+    )
+    open_meteo.respond_elevation([21.0, 0.0])
+
+    result = await get_grid_currents([(48.30, -122.65), (48.29, -122.63), (48.19, -122.51)])
+
+    assert [(point.latitude, point.longitude) for point in result] == [(48.20834, -122.54166)]
+    assert len(open_meteo.elevation_calls) == 1
+    assert open_meteo.elevation_calls[0]["params"]["latitude"] == "48.29166,48.20834"
+
+
+@pytest.mark.asyncio
+async def test_land_cells_are_cached_without_another_lookup(open_meteo):
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+    assert await get_grid_currents([(48.30, -122.65)]) == []
+
+    assert open_meteo.call_count == 1
+    assert len(open_meteo.elevation_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_elevation_failure_keeps_the_cell(open_meteo):
+    """Without a land verdict, keep the current: hiding real water is worse than the rare miss."""
+    open_meteo.respond(current_item(0.4, 90.0, cell=(48.29166, -122.62499)))
+    open_meteo.fail_elevation(upstream_error("elevation down"))
+
+    result = await get_grid_currents([(48.30, -122.65)])
+
+    assert [(point.latitude, point.longitude) for point in result] == [(48.29166, -122.62499)]
+
+
+@pytest.mark.asyncio
+async def test_hourly_land_cells_are_dropped(open_meteo):
+    open_meteo.respond(*hourly_payload([(1.0, 90.0)] * 24, day=HOUR, cells=[(48.29166, -122.62499)]))
+    open_meteo.respond_elevation(21.0)
+
+    assert await get_grid_currents([(48.30, -122.65)], at=HOUR) == []
+
+
+@pytest.mark.asyncio
 async def test_fetch_requests_knots_and_the_current_variables(open_meteo):
     open_meteo.respond(current_item(3.0, 350.0))
 
@@ -109,7 +227,7 @@ async def test_land_nodes_are_dropped(open_meteo):
 
 @pytest.mark.asyncio
 async def test_cache_hit_makes_no_upstream_call(open_meteo):
-    open_meteo.respond([current_item(1.0, 10.0), current_item(2.0, 20.0)])
+    open_meteo.respond([current_item(1.0, 10.0, cell=(47.9, -124.6)), current_item(2.0, 20.0, cell=(48.2, -125.0))])
     points = [(47.9, -124.6), (48.2, -125.0)]
 
     first = await get_grid_currents(points)
@@ -250,7 +368,7 @@ def test_grid_endpoint_returns_points_and_echoes_the_hour(client, open_meteo):
 
 
 def test_grid_endpoint_live_values_have_no_time(client, open_meteo):
-    open_meteo.respond([current_item(2.0, 300.0)] * 4)
+    open_meteo.respond([current_item(2.0, 300.0, cell=(round(47.0 + 0.1 * index, 3), -124.0)) for index in range(4)])
 
     body = client.get("/api/currents/grid", params=grid_params()).json()
 
@@ -385,3 +503,32 @@ def test_point_endpoint_rejects_invalid_coordinates(client, open_meteo):
 
     assert resp.status_code == 422
     assert open_meteo.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_point_endpoint_upstream_failure_logs_no_coordinates(client, open_meteo, caplog):
+    open_meteo.fail(upstream_status_error("https://marine-api.open-meteo.com/v1/marine?latitude=47.9&longitude=-124.6"))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.currents"):
+        resp = client.get("/api/currents/point", params={"lat": 47.9, "lon": -124.6})
+
+    assert resp.status_code == 502
+    assert "HTTPStatusError" in caplog.text
+    assert "47.9" not in caplog.text
+    assert "-124.6" not in caplog.text
+
+
+def test_point_endpoint_quota_logs_the_reset_time_but_not_the_point(client, open_meteo, caplog):
+    open_meteo.fail(QuotaExceededError("Open-Meteo request limit reached", reset_at=None))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.currents"):
+        resp = client.get("/api/currents/point", params={"lat": 47.9, "lon": -124.6})
+
+    assert resp.status_code == 503
+    assert "quota exhausted" in caplog.text
+    assert "47.9" not in caplog.text
+    assert "-124.6" not in caplog.text

@@ -1,5 +1,7 @@
 """Pydantic models and schemas for API requests and responses."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -31,20 +33,25 @@ class GeocodeResult(BaseModel):
 
 
 class WeatherForecastPoint(BaseModel):
+    """One forecast slice. Wind and temperature stay null when Open-Meteo has no value
+    (SCRUM-225); 0 kn or 32 °F would be displayed as a real calm."""
+
     time: str
-    temperature_c: float
-    temperature_f: float
-    wind_speed_knots: float
-    wind_speed_kmh: float
-    wind_speed_mph: float
-    wind_speed_ms: float
-    wind_gust_knots: float
-    wind_gust_kmh: float
-    wind_gust_mph: float
-    wind_gust_ms: float
-    wind_direction_deg: float
-    wind_direction_cardinal: str
-    humidity: float
+    temperature_c: float | None
+    temperature_f: float | None
+    wind_speed_knots: float | None
+    wind_speed_kmh: float | None
+    wind_speed_mph: float | None
+    wind_speed_ms: float | None
+    wind_gust_knots: float | None
+    wind_gust_kmh: float | None
+    wind_gust_mph: float | None
+    wind_gust_ms: float | None
+    wind_direction_deg: float | None
+    wind_direction_cardinal: str | None
+    # Null when the provider has no value for the hour: NDFD's humidity grid can gap, and 0 %
+    # would read as a real measurement (SCRUM-106). Nothing renders it today.
+    humidity: float | None = None
     weather_code: int
 
 
@@ -72,17 +79,23 @@ class GridWindPoint(BaseModel):
 
     latitude: float
     longitude: float
-    wind_speed_knots: float
+    # SCRUM-225: all three stay null when Open-Meteo has no value for the point; a 0 kn /
+    # 0° / 32 °F point would read as a real calm.
+    wind_speed_knots: float | None
     # Gust for the same moment (SCRUM-210); null when Open-Meteo has none for the point.
     wind_gust_knots: float | None = None
-    wind_direction_deg: float
+    wind_direction_deg: float | None
     temperature_f: float | None = None
     # Forecast hour these values describe (SCRUM-115); null means current conditions.
     time: str | None = None
 
 
 class CurrentPoint(BaseModel):
-    """A single ocean-current observation for the map layer (SCRUM-96)."""
+    """A single ocean-current observation for the map layer (SCRUM-96).
+
+    The coordinates are the Marine model cell the value came from (SCRUM-238), not the map
+    point that was requested: Open-Meteo snaps each request to its nearest sea cell.
+    """
 
     latitude: float
     longitude: float
@@ -116,6 +129,54 @@ class CurrentPointResponse(BaseModel):
     longitude: float
     horizon_hours: int
     points: list[CurrentSeriesPoint]
+
+
+class TideSample(BaseModel):
+    """One hourly sea-level sample (SCRUM-195)."""
+
+    # UTC minute stamp, e.g. 2026-11-25T12:00.
+    time: str
+    # Metres above global mean sea level.
+    height_m: float
+
+
+class TideExtreme(BaseModel):
+    """A high or low tide with its refined time and height (SCRUM-195)."""
+
+    type: Literal["high", "low"]
+    time: str
+    height_m: float
+
+
+class TidePointResponse(BaseModel):
+    """GET /api/tides/point payload; `points` is empty over land."""
+
+    latitude: float
+    longitude: float
+    # The reference the heights use: global mean sea level, not a chart datum.
+    datum: str
+    unit: str
+    hour: str
+    points: list[TideSample]
+    last_extreme: TideExtreme | None = None
+    next_extreme: TideExtreme | None = None
+    # The extreme after the next one, so a pop-up can show a fourth reading (SCRUM-250).
+    next_extreme_after: TideExtreme | None = None
+
+
+class ModelAvailabilityInfo(BaseModel):
+    """GET /api/weather/models/{model}/availability (SCRUM-256).
+
+    Nulls mean the model has no single upstream run to ask about (`best_match`, the seamless
+    blends, NDFD), not that the lookup failed; the UI then keeps the derived cycle clock.
+    """
+
+    model: str
+    # Initialisation of the newest run, the moment it became downloadable, and when the next one
+    # is expected. ISO 8601 UTC.
+    run_utc: str | None = None
+    available_utc: str | None = None
+    next_available_utc: str | None = None
 
 
 class WeatherModelInfo(BaseModel):

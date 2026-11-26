@@ -5,20 +5,24 @@ import { DEFAULT_MODEL } from './constants';
 import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
 import { type Selection, useAllWeather } from './hooks/useForecast';
+import { useDataRefresh } from './hooks/useDataRefresh';
 import { useMapExport } from './hooks/useMapExport';
+import { useModelAvailability } from './hooks/useModelAvailability';
 import { Navbar } from './components/Navbar';
 import { MapView } from './components/MapView';
 import { ForecastTimeSelector } from './components/ForecastTimeSelector';
 import { formatStepLabel } from './utils/forecastWindow';
+import { buildRefreshHint } from './utils/refreshHint';
 import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
-import { WeatherModelGuideModal } from './components/WeatherModelGuideModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
+/** Longest a refresh click keeps the button busy waiting for its responses (SCRUM-113). */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /** Resolve with the user's position, or null if unavailable/denied/timed out. */
 function getCurrentPosition(): Promise<GeolocationPosition | null> {
@@ -42,16 +46,77 @@ export const App: React.FC = () => {
   // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
   const [selection, setSelection] = useState<Selection | null>(null);
 
+  // Where the map looks at startup, separate from what is selected (SCRUM-248): the app opens
+  // centred on the current location, but no marker is highlighted and no pop-up opens.
+  const [focus, setFocus] = useState<SavedLocation | null>(null);
+
   // Selected forecast hour (null = now). Memory only: the app opens at "now" (SCRUM-127).
   const [forecastTime, setForecastTime] = useState<string | null>(null);
 
   // The map element, captured when the user saves an image (SCRUM-116).
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  const allWeather = useAllWeather(selectedModel, timezone, forecastTime);
+  // One-shot refresh (SCRUM-113): a click bumps this, and the fetches below send `refresh` once.
+  const [refreshSeq, setRefreshSeq] = useState(0);
+  const allWeather = useAllWeather(selectedModel, timezone, forecastTime, refreshSeq);
 
   const selectedModelInfo = models.find((m) => m.id === selectedModel) ?? null;
+  // Publication times of the selected model, when Open-Meteo exposes them (SCRUM-256).
+  const modelAvailability = useModelAvailability(selectedModel);
   const validTimeLabel = forecastTime ? formatStepLabel(forecastTime, timezone) : null;
+
+  // The gate reads the newest server `cached_at` among the responses on screen, so it never
+  // trusts the browser's clock about how old the data is (SCRUM-113).
+  const dataAsOf = useMemo(() => {
+    const stamps = Object.values(allWeather.weatherMap).map((w) => w.cached_at * 1000);
+    return stamps.length ? Math.max(...stamps) : null;
+  }, [allWeather.weatherMap]);
+  // The published run is the real clock; the derived cycle is the fallback (SCRUM-256).
+  const refreshRunUtc = modelAvailability?.available_utc ?? selectedModelInfo?.last_run_utc ?? null;
+  const nextRunUtc = modelAvailability?.next_available_utc ?? selectedModelInfo?.next_run_utc ?? null;
+
+  const pendingRefresh = useRef<{ sawLoading: boolean; timer: ReturnType<typeof setTimeout>; resolve: () => void } | null>(
+    null,
+  );
+  const finishRefresh = useCallback(() => {
+    const pending = pendingRefresh.current;
+    if (!pending) return;
+    pendingRefresh.current = null;
+    clearTimeout(pending.timer);
+    pending.resolve();
+  }, []);
+  // Resolves when the refreshed responses have landed, so the button stays busy meanwhile.
+  const handleRefresh = useCallback((): Promise<void> => {
+    if (pendingRefresh.current) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(finishRefresh, REFRESH_TIMEOUT_MS);
+      pendingRefresh.current = { sawLoading: false, timer, resolve };
+      setRefreshSeq((seq) => seq + 1);
+    });
+  }, [finishRefresh]);
+
+  const dataRefresh = useDataRefresh({ dataAsOf, runUtc: refreshRunUtc, onRefresh: handleRefresh });
+
+  useEffect(() => {
+    const pending = pendingRefresh.current;
+    if (!pending) return;
+    if (allWeather.loading) {
+      pending.sawLoading = true;
+      return;
+    }
+    if (pending.sawLoading) finishRefresh();
+  }, [allWeather.loading, finishRefresh]);
+
+  // The disabled button's hint (SCRUM-257): four truthful states, and never a run time it lacks.
+  const refreshHint = buildRefreshHint({
+    refreshing: dataRefresh.refreshing,
+    canRefresh: dataRefresh.canRefresh,
+    dataAsOf,
+    nextRunUtc,
+    timezone,
+  });
+  const refreshError =
+    dataRefresh.error ?? (allWeather.error ? 'Could not refresh from the source; the data on screen is unchanged.' : null);
 
   // Image export, range capture and their dialog state (SCRUM-174: own hook).
   const mapExport = useMapExport({
@@ -74,7 +139,6 @@ export const App: React.FC = () => {
   const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
-  const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   // Open-Meteo quota warning: shown once per reset window, however many grid requests fail.
@@ -88,6 +152,8 @@ export const App: React.FC = () => {
   );
 
   const selectSaved = useCallback((location: SavedLocation) => {
+    // A user selection owns the map from now on, so the startup focus is no longer needed.
+    setFocus(null);
     setSelection({ kind: 'saved', location });
   }, []);
 
@@ -107,8 +173,10 @@ export const App: React.FC = () => {
         const fallback = saved[0] ?? null;
         const position = await getCurrentPosition();
         if (cancelled) return;
+        // Startup only focuses the map: selecting here would open a details pop-up the user
+        // never asked for (SCRUM-248).
         if (!position) {
-          if (fallback) setSelection({ kind: 'saved', location: fallback });
+          if (fallback) setFocus(fallback);
           return;
         }
         try {
@@ -116,9 +184,9 @@ export const App: React.FC = () => {
             { name: 'My Current Location', latitude: position.coords.latitude, longitude: position.coords.longitude },
             'first',
           );
-          if (!cancelled) setSelection({ kind: 'saved', location: here });
+          if (!cancelled) setFocus(here);
         } catch {
-          if (!cancelled && fallback) setSelection({ kind: 'saved', location: fallback });
+          if (!cancelled && fallback) setFocus(fallback);
         }
       } catch (err) {
         console.error('Initialization error:', err);
@@ -154,19 +222,21 @@ export const App: React.FC = () => {
   const handleDeleteLocation = useCallback(
     async (id: number) => {
       try {
-        const remaining = await removeLocation(id);
+        await removeLocation(id);
         allWeather.remove(id);
-        if (selectedLocation?.id === id) {
-          setSelection(remaining[0] ? { kind: 'saved', location: remaining[0] } : null);
-        }
+        // Deleting is a removal, never a selection: the highlight goes and no other
+        // location's pop-up opens (SCRUM-248).
+        if (selectedLocation?.id === id) setSelection(null);
+        if (focus?.id === id) setFocus(null);
       } catch (err) {
         console.error('Failed to delete location:', err);
       }
     },
-    [removeLocation, allWeather, selectedLocation?.id],
+    [removeLocation, allWeather, selectedLocation?.id, focus?.id],
   );
 
   const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
+    setFocus(null);
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
   }, []);
 
@@ -189,12 +259,16 @@ export const App: React.FC = () => {
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
-        onOpenModelGuide={() => setIsModelGuideOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
         onOpenExportDialog={mapExport.openDialog}
         savingMap={mapExport.savingMap}
         feedbackEnabled={feedbackEnabled}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
+        onRefresh={dataRefresh.refresh}
+        canRefresh={dataRefresh.canRefresh}
+        refreshing={dataRefresh.refreshing}
+        refreshHint={refreshHint}
+        refreshError={refreshError}
       />
 
       <main className="flex-1 flex flex-col min-h-0 w-full">
@@ -202,11 +276,13 @@ export const App: React.FC = () => {
           <MapView
             locations={locations}
             selectedLocation={selectedLocation}
+            focusLocation={focus}
             onSelectLocation={selectSaved}
             weatherMap={allWeather.weatherMap}
             tileLayerType={mapSettings.tileLayer}
             cartoApiKey={mapSettings.cartoApiKey}
             selectedModel={selectedModel}
+            modelName={selectedModelInfo?.name ?? selectedModel}
             windOverlayVisible={mapSettings.windOverlayVisible}
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
             windColorHighContrast={mapSettings.windColorHighContrast}
@@ -224,10 +300,12 @@ export const App: React.FC = () => {
             onGridLoaded={mapExport.handleGridLoaded}
             onGridQuotaExhausted={handleGridQuotaExhausted}
             onGridLoadingChange={mapExport.handleGridLoadingChange}
+            refreshSeq={refreshSeq}
           />
         </div>
         <ForecastTimeSelector
           model={selectedModelInfo}
+          availability={modelAvailability}
           forecastTime={forecastTime}
           onChange={setForecastTime}
           timezone={timezone}
@@ -263,11 +341,6 @@ export const App: React.FC = () => {
         onToggleSeamarks={mapSettings.setSeamarksVisible}
         bcDepthVisible={mapSettings.bcDepthVisible}
         onToggleBcDepth={mapSettings.setBcDepthVisible}
-      />
-
-      <WeatherModelGuideModal
-        isOpen={isModelGuideOpen}
-        onClose={() => setIsModelGuideOpen(false)}
       />
 
       <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />

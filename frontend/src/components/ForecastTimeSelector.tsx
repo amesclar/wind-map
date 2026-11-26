@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
-import type { WeatherModelInfo } from '../types';
+import type { ModelAvailability, WeatherModelInfo } from '../types';
 import {
   PLAY_STEP_HOURS,
   buildSteps,
@@ -16,6 +16,8 @@ import {
 interface ForecastTimeSelectorProps {
   /** Cadence, horizon and run times from /api/weather/models (SCRUM-115). */
   model: WeatherModelInfo | null;
+  /** Publication times from /api/weather/models/{model}/availability (SCRUM-256), when known. */
+  availability?: ModelAvailability | null;
   /** Selected hour, ISO 8601; null means now. */
   forecastTime: string | null;
   onChange: (iso: string | null) => void;
@@ -38,6 +40,7 @@ const BUTTON =
 
 export const ForecastTimeSelector: React.FC<ForecastTimeSelectorProps> = ({
   model,
+  availability = null,
   forecastTime,
   onChange,
   timezone,
@@ -114,10 +117,15 @@ export const ForecastTimeSelector: React.FC<ForecastTimeSelectorProps> = ({
     iso && !Number.isNaN(Date.parse(iso)) ? formatRunTime(iso, timezone) : null;
   const lastRun = runTime(model?.last_run_utc);
   const nextRun = runTime(model?.next_run_utc);
+  // A published run (SCRUM-256) is what the user is actually looking at; the derived cycle is the
+  // fallback for composites with no single run, and the wording differs so the two never blur.
+  const updated = runTime(availability?.available_utc ?? undefined);
+  const nextUpdated = runTime(availability?.next_available_utc ?? undefined);
+  const runLine = updated
+    ? ` · updated ${updated}` + (nextUpdated ? ` (next ~${nextUpdated})` : '')
+    : (lastRun ? ` · run ${lastRun}` : '') + (nextRun ? ` (next ${nextRun})` : '');
   const modelLine = model
-    ? `${model.name} · every ${model.update_hours} h · ${formatHorizon(model.horizon_hours)}` +
-      (lastRun ? ` · run ${lastRun}` : '') +
-      (nextRun ? ` (next ${nextRun})` : '')
+    ? `${model.name} · every ${model.update_hours} h · ${formatHorizon(model.horizon_hours)}` + runLine
     : 'Loading the forecast window…';
 
   return (
@@ -152,7 +160,7 @@ export const ForecastTimeSelector: React.FC<ForecastTimeSelectorProps> = ({
             <span data-testid="forecast-time-label" className="truncate text-xs font-semibold text-gray-100">
               {label}
             </span>
-            <span data-testid="forecast-model-info" className="truncate text-[10px] text-gray-400">
+            <span data-testid="forecast-model-info" className="truncate text-xs text-gray-400">
               {modelLine}
             </span>
           </div>

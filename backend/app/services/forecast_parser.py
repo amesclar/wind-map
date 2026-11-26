@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from backend.app.config import DEFAULT_TIMEZONE, FORECAST_POINTS, FORECAST_STEP_HOURS
 from backend.app.models import WeatherForecastPoint
-from backend.app.units import as_float, c_to_f, deg_to_cardinal, knots_to_units
+from backend.app.units import c_to_f, deg_to_cardinal, knots_to_units
 
 # Variables requested for both `current` and `hourly`.
 FORECAST_VARIABLES = (
@@ -39,13 +39,14 @@ def build_weather_point(
     weather_code: int | None,
     gust_knots: float | None = None,
 ) -> WeatherForecastPoint:
-    """One forecast slice from Open-Meteo values (knots, °C). Missing values become 0."""
+    """One forecast slice from Open-Meteo values (knots, °C). A missing value stays None
+    (SCRUM-225), so no pop-up can show it as 0 kn or 32 °F."""
     wind = knots_to_units(wind_knots)
     gust = knots_to_units(gust_knots)
-    wind_deg_val = as_float(wind_deg)
+    wind_deg_val = None if wind_deg is None else round(float(wind_deg), 1)
     return WeatherForecastPoint(
         time=time_str,
-        temperature_c=round(as_float(temp_c), 1),
+        temperature_c=None if temp_c is None else round(float(temp_c), 1),
         temperature_f=c_to_f(temp_c),
         wind_speed_knots=wind["knots"],
         wind_speed_kmh=wind["kmh"],
@@ -55,9 +56,9 @@ def build_weather_point(
         wind_gust_kmh=gust["kmh"],
         wind_gust_mph=gust["mph"],
         wind_gust_ms=gust["ms"],
-        wind_direction_deg=round(wind_deg_val, 1),
-        wind_direction_cardinal=deg_to_cardinal(wind_deg_val),
-        humidity=round(as_float(humidity), 1),
+        wind_direction_deg=wind_deg_val,
+        wind_direction_cardinal=None if wind_deg_val is None else deg_to_cardinal(wind_deg_val),
+        humidity=None if humidity is None else round(float(humidity), 1),
         weather_code=0 if weather_code is None else int(weather_code),
     )
 

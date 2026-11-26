@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 #   2 → 3 (SCRUM-115): every cache row is keyed by the forecast hour too ('current' = live).
 #   3 → 4 (SCRUM-96): ocean-current grid cache, keyed by hour like the wind grid.
 #   4 → 5 (SCRUM-210): the wind grid cache keeps the gust too, so barb pop-ups show it.
-SCHEMA_VERSION = 5
+#   5 → 6 (SCRUM-238): the currents cache keeps the model cell each value came from.
+#   6 → 7 (SCRUM-238): cached current cells are re-checked against elevation, so land rows go.
+#   7 → 8 (SCRUM-195): sea-level cache for tide pop-ups, keyed by point and hour.
+#   8 → 9 (SCRUM-106): long-lived NWS grid mapping, so a coordinate's grid is looked up once.
+SCHEMA_VERSION = 9
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -99,7 +103,42 @@ CREATE TABLE IF NOT EXISTS grid_currents_cache (
     expires_at     REAL NOT NULL,
     velocity_knots REAL,
     direction_deg  REAL,
+    -- The Marine model cell the value came from (SCRUM-238): Open-Meteo snaps a requested
+    -- point to its nearest sea cell, and the chevron is drawn here instead of on land.
+    cell_lat       REAL,
+    cell_lon       REAL,
     PRIMARY KEY (lat_key, lon_key, hour)
+);
+"""
+
+# Sea level for a point, keyed by rounded coordinates and forecast hour (SCRUM-195). A row with a
+# NULL height records that the point was checked and has no water there (inland or outside the
+# SMOC domain), so an inland pop-up is not refetched every time.
+TIDE_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS tide_point_cache (
+    lat_key   REAL NOT NULL,
+    lon_key   REAL NOT NULL,
+    hour      TEXT NOT NULL,
+    cached_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    height_m  REAL,
+    PRIMARY KEY (lat_key, lon_key, hour)
+);
+"""
+
+# NWS `/points` mapping: which forecast office and grid cell a coordinate belongs to (SCRUM-106).
+# It has no expiry — a coordinate's grid does not move — so it is deliberately outside
+# CACHE_TABLE_DDL: `clean_expired_cache` sweeps rows by `expires_at`, and dropping it on every
+# schema bump would throw away mappings that are still correct.
+NWS_GRID_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS nws_grid_cache (
+    lat_key   REAL NOT NULL,
+    lon_key   REAL NOT NULL,
+    office    TEXT NOT NULL,
+    grid_x    INTEGER NOT NULL,
+    grid_y    INTEGER NOT NULL,
+    cached_at REAL NOT NULL,
+    PRIMARY KEY (lat_key, lon_key)
 );
 """
 
@@ -108,6 +147,7 @@ CACHE_TABLE_DDL = {
     "point_weather_cache": POINT_CACHE_DDL,
     "grid_weather_cache": GRID_CACHE_DDL,
     "grid_currents_cache": GRID_CURRENTS_CACHE_DDL,
+    "tide_point_cache": TIDE_CACHE_DDL,
 }
 CACHE_TABLES = tuple(CACHE_TABLE_DDL)
 
@@ -142,6 +182,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         return
     # Cache tables may predate the current definitions (e.g. a grid cache without
     # temperature_f, or point rows stored in weather_cache under location_id 0).
+    # nws_grid_cache is not in that list on purpose: its rows stay correct across upgrades.
     for table in CACHE_TABLES:
         conn.execute(f"DROP TABLE IF EXISTS {table};")
     logger.info("Database schema upgraded from version %d to %d; caches reset", version, SCHEMA_VERSION)
@@ -153,6 +194,7 @@ def init_db() -> None:
         conn.execute(LOCATIONS_DDL)
         for ddl in CACHE_TABLE_DDL.values():
             conn.execute(ddl)
+        conn.execute(NWS_GRID_CACHE_DDL)
         # PRAGMA values can't be bound as parameters; SCHEMA_VERSION is a constant int.
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)};")
 

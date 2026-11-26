@@ -5,6 +5,7 @@ import {
   CURRENT_CHEVRON_SIZE,
   generateCurrentChevronSvg,
 } from './WaterCurrentChevron';
+import { CURRENT_TIER_OUTLINE } from '../utils/currentTiers';
 
 const parse = (html: string) => {
   const div = document.createElement('div');
@@ -26,7 +27,9 @@ describe('generateCurrentChevronSvg (SCRUM-99)', () => {
   });
 
   it('draws one chevron for light water and two above 0.5 kt', () => {
-    const paths = (kt: number) => parse(generateCurrentChevronSvg(kt, 90)).querySelectorAll('path').length;
+    // The outline repeats the paths, so count the fill layer (the second group).
+    const paths = (kt: number) =>
+      parse(generateCurrentChevronSvg(kt, 90)).querySelectorAll('g')[1].querySelectorAll('path').length;
 
     expect(paths(0.2)).toBe(1);
     expect(paths(0.5)).toBe(2);
@@ -34,26 +37,31 @@ describe('generateCurrentChevronSvg (SCRUM-99)', () => {
   });
 
   it('uses the tier colour and a heavier stroke for strong water', () => {
-    const stroke = (kt: number) => parse(generateCurrentChevronSvg(kt, 90)).querySelector('g')!;
+    const stroke = (kt: number) => parse(generateCurrentChevronSvg(kt, 90)).querySelectorAll('g')[1];
 
-    expect(stroke(0.2).getAttribute('stroke')).toBe('#38bdf8');
-    expect(stroke(1.0).getAttribute('stroke')).toBe('#06b6d4');
-    expect(stroke(2.0).getAttribute('stroke')).toBe('#0284c7');
+    expect(stroke(0.2).getAttribute('stroke')).toBe('#e0f2fe');
+    expect(stroke(1.0).getAttribute('stroke')).toBe('#67e8f9');
+    expect(stroke(2.0).getAttribute('stroke')).toBe('#ffffff');
     expect(stroke(2.0).getAttribute('stroke-width')).toBe('4.5');
     expect(stroke(1.0).getAttribute('stroke-width')).toBe('3');
-    expect(stroke(3.5).getAttribute('stroke')).toBe('#f59e0b');
+    expect(stroke(3.5).getAttribute('stroke')).toBe('#ff9ceb');
   });
 
-  it('draws a light under-stroke first only when the chart base asks for it (SCRUM-203)', () => {
-    expect(parse(generateCurrentChevronSvg(1.3, 333)).querySelectorAll('g')).toHaveLength(1);
+  it('draws the dark outline under every tier, on every base (SCRUM-237)', () => {
+    const groups = parse(generateCurrentChevronSvg(1.3, 333)).querySelectorAll('g');
 
-    const groups = parse(generateCurrentChevronSvg(1.3, 333, 28, { halo: true })).querySelectorAll('g');
     expect(groups).toHaveLength(2);
-    // The under-stroke is wider and white; the tier stroke stays on top and unchanged.
-    expect(groups[0].getAttribute('stroke')).toBe('#ffffff');
-    expect(groups[0].getAttribute('stroke-width')).toBe('5.5');
-    expect(groups[1].getAttribute('stroke')).toBe('#06b6d4');
+    expect(groups[0].getAttribute('stroke')).toBe(CURRENT_TIER_OUTLINE);
+    expect(groups[0].getAttribute('stroke-width')).toBe('5'); // the 3 px fill plus 2 px
+    expect(groups[1].getAttribute('stroke')).toBe('#67e8f9');
     expect(groups[1].getAttribute('stroke-width')).toBe('3');
+    // Fully opaque: the rim, not transparency, carries the contrast.
+    expect(groups[1].getAttribute('opacity')).toBeNull();
+
+    // Bold tiers keep the heavier fill and get the matching rim.
+    const bold = parse(generateCurrentChevronSvg(2, 90)).querySelectorAll('g');
+    expect(bold[0].getAttribute('stroke-width')).toBe('6.5');
+    expect(bold[1].getAttribute('stroke-width')).toBe('4.5');
   });
 
   it('labels the glyph for screen readers with the speed and direction', () => {

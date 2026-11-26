@@ -9,7 +9,7 @@ import {
   WindSpeedUnit,
 } from '../types';
 import { generateWindBarbSvg } from './WindBarb';
-import { BARB_OUTLINES, WindOverlay } from './WindOverlay';
+import { BARB_OUTLINES, hasWindData, WindOverlay } from './WindOverlay';
 import { windColorOpacity, WindColorOverlay } from './WindColorOverlay';
 import { WindColorLegend } from './WindColorLegend';
 import { CurrentOverlay } from './CurrentOverlay';
@@ -17,6 +17,8 @@ import { CurrentLegend } from './CurrentLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
+import { buildTideBlockHtml, loadPointTide } from '../utils/tideBlock';
+import { POPUP_OPTIONS, placePopupInView } from '../utils/popupPlacement';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
@@ -46,11 +48,15 @@ import { formatDirection, formatSpeed, formatTemperature } from '../utils/units'
 interface MapViewProps {
   locations: SavedLocation[];
   selectedLocation: SavedLocation | null;
+  /** Where to look at startup without selecting it (SCRUM-248); flies, opens no pop-up. */
+  focusLocation?: SavedLocation | null;
   onSelectLocation: (loc: SavedLocation) => void;
   weatherMap: Record<number, WeatherForecastResponse>;
   tileLayerType: MapTileLayer;
   cartoApiKey: string;
   selectedModel: string;
+  /** Display name of the selected model, for notices (SCRUM-225). */
+  modelName?: string;
   windOverlayVisible: boolean;
   /** Color gradient layer and its legend (SCRUM-124); off unless turned on. */
   windColorOverlayVisible: boolean;
@@ -81,6 +87,8 @@ interface MapViewProps {
   onGridQuotaExhausted?: (resetAt: string | null) => void;
   /** Whether the current view's grid is in flight, so an export can wait for its barbs (SCRUM-242). */
   onGridLoadingChange?: (loading: boolean) => void;
+  /** One-shot refresh trigger for the visible grid (SCRUM-113). */
+  refreshSeq?: number;
 }
 
 interface LocationMarker {
@@ -93,6 +101,12 @@ const SELECTED_LOCATION_BARB_SIZE = 52;
 // Drawn until a location's forecast has loaded.
 const PLACEHOLDER_WIND = { speedKnots: 10, directionDeg: 180, tempF: 50 };
 
+/** Marker for a location the model has no wind for (SCRUM-225): a neutral no-data glyph,
+ * never a calm barb that claims the wind is 0 kn. */
+function noWindBarbSvg(size: number): string {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 50 50" role="img" aria-label="No wind data" focusable="false"><title>No wind data</title><circle cx="25" cy="25" r="9" fill="none" stroke="#9ca3af" stroke-width="2.5"/><line x1="18.6" y1="18.6" x2="31.4" y2="31.4" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+}
+
 /**
  * Saved-location marker: a labelled wind barb, larger and glowing when selected. It carries the same
  * crisp outline as the grid barbs (SCRUM-218), so one look covers every base map.
@@ -103,14 +117,19 @@ export function buildLocationIcon(
 ): L.DivIcon {
   const size = isSelected ? SELECTED_LOCATION_BARB_SIZE : LOCATION_BARB_SIZE;
   const current = weather?.current;
-  const svg = generateWindBarbSvg({
-    speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
-    directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
-    tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
-    size,
-    showLabel: true,
-    outlines: BARB_OUTLINES,
-  });
+  const noData =
+    current !== undefined &&
+    (typeof current.wind_speed_knots !== 'number' || typeof current.wind_direction_deg !== 'number');
+  const svg = noData
+    ? noWindBarbSvg(size)
+    : generateWindBarbSvg({
+        speedKnots: current?.wind_speed_knots ?? PLACEHOLDER_WIND.speedKnots,
+        directionDeg: current?.wind_direction_deg ?? PLACEHOLDER_WIND.directionDeg,
+        tempF: current?.temperature_f ?? PLACEHOLDER_WIND.tempF,
+        size,
+        showLabel: true,
+        outlines: BARB_OUTLINES,
+      });
   const glow = isSelected ? 'scale-110 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : '';
   return L.divIcon({
     className: 'wind-barb-marker',
@@ -147,6 +166,7 @@ export function buildLocationPopup(
       </div>
       <div style="margin-top: 4px; color: #a3a3a3; font-size: 11px;">🧭 ${escapeHtml(direction)}</div>
       ${validTimeLabel ? `<div style="margin-top: 2px; color: #9ca3af; font-size: 11px;">🕒 ${escapeHtml(validTimeLabel)}</div>` : ''}
+      <div data-tide-slot data-tide-lat="${loc.latitude}" data-tide-lon="${loc.longitude}"></div>
     </div>
   `;
 }
@@ -154,11 +174,13 @@ export function buildLocationPopup(
 export const MapView: React.FC<MapViewProps> = ({
   locations,
   selectedLocation,
+  focusLocation = null,
   onSelectLocation,
   weatherMap,
   tileLayerType,
   cartoApiKey,
   selectedModel,
+  modelName,
   windOverlayVisible,
   windColorOverlayVisible,
   windColorHighContrast = false,
@@ -175,6 +197,7 @@ export const MapView: React.FC<MapViewProps> = ({
   containerRef,
   onGridLoaded,
   onGridQuotaExhausted,
+  refreshSeq,
   onGridLoadingChange,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -222,6 +245,7 @@ export const MapView: React.FC<MapViewProps> = ({
     onGridLoaded,
     onGridQuotaExhausted,
     onGridLoadingChange,
+    refreshSeq,
   );
   // Currents have their own fetch and horizon: the layer follows the same selected hour
   // (SCRUM-99) but not the weather model or the wind layers.
@@ -257,6 +281,41 @@ export const MapView: React.FC<MapViewProps> = ({
     // The Leaflet map is created once; selectedLocation only sets its initial center.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fill a pop-up's tide slot when it opens (SCRUM-195). The slot carries only the point; the
+  // hour is this render's `validTime`, so the tide matches the rest of the pop-up.
+  useEffect(() => {
+    if (!mapInstance) return;
+    let cancelled = false;
+    const onPopupOpen = (event: L.PopupEvent) => {
+      const element = event.popup.getElement();
+      // Keep the whole card inside the panel even when the marker sits at an edge (SCRUM-252).
+      placePopupInView(mapInstance, element);
+      // Leaflet animates its own auto-pan after this event; settle the card once it stops.
+      mapInstance.once('moveend', () => placePopupInView(mapInstance, element));
+      const slot = element?.querySelector<HTMLElement>('[data-tide-slot]');
+      if (!slot) return;
+      const lat = Number(slot.dataset.tideLat);
+      const lon = Number(slot.dataset.tideLon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      loadPointTide(lat, lon, validTime)
+        .then((tide) => {
+          if (!cancelled) {
+            slot.innerHTML = buildTideBlockHtml(tide, unitSystem, validTime === null, validTimeLabel);
+            // The tide block can make the card taller than the space the pan left it.
+            placePopupInView(mapInstance, element);
+          }
+        })
+        .catch(() => {
+          // A tide that cannot be loaded leaves the rest of the pop-up untouched.
+        });
+    };
+    mapInstance.on('popupopen', onPopupOpen);
+    return () => {
+      cancelled = true;
+      mapInstance.off('popupopen', onPopupOpen);
+    };
+  }, [mapInstance, unitSystem, validTime, validTimeLabel]);
 
   // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
   // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
@@ -485,7 +544,7 @@ export const MapView: React.FC<MapViewProps> = ({
         location: loc,
         marker: L.marker([loc.latitude, loc.longitude], { icon }).addTo(map),
       };
-      entry.marker.bindPopup(popup);
+      entry.marker.bindPopup(popup, POPUP_OPTIONS);
       // Reads the entry and handler at click time, so neither goes stale.
       entry.marker.on('click', () => onSelectLocationRef.current(entry.location));
       markers.set(loc.id, entry);
@@ -510,27 +569,36 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Fly to selected location
+  // Fly to the selection, or to the startup focus (SCRUM-248): the focus only moves the map, so
+  // the app opens on the current location with no marker highlighted and no details pop-up.
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !selectedLocation) return;
+    const target = selectedLocation ?? focusLocation;
+    if (!map || !target) return;
 
     // The chart does not draw below its floor, so the initial flight has to land where it does
     // (SCRUM-203); every other base keeps the original zoom.
     const zoom = chartBaseRef.current ? CHART_MIN_ZOOM : 9;
-    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], zoom, {
+    map.flyTo([target.latitude, target.longitude], zoom, {
       duration: 1.2,
       easeLinearity: 0.25,
     });
 
-    markersRef.current.get(selectedLocation.id)?.marker.openPopup();
-  }, [selectedLocation, chartBaseRef]);
+    if (selectedLocation) markersRef.current.get(selectedLocation.id)?.marker.openPopup();
+  }, [selectedLocation, focusLocation, chartBaseRef]);
 
   // Hand the node to both the internal ref (used to create the map) and the export's ref.
   const setContainer = (node: HTMLDivElement | null) => {
     mapContainerRef.current = node;
     if (containerRef) containerRef.current = node;
   };
+
+  // Nothing drawable in the whole view (SCRUM-225): say so instead of showing an empty
+  // "calm" map. Only when a wind layer is on, because otherwise absence is expected.
+  const gridHasNoData =
+    (windOverlayVisible || windColorOverlayVisible) &&
+    gridPoints.length > 0 &&
+    gridPoints.every((pt) => !hasWindData(pt));
 
   return (
     <div className={`w-full h-full relative isolate${chartBase ? ' chart-base' : ''}`}>
@@ -539,6 +607,15 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
+      {gridHasNoData && (
+        <div
+          data-testid="no-wind-data-notice"
+          role="note"
+          className="absolute left-1/2 top-20 z-[750] -translate-x-1/2 rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
+        >
+          No data from {modelName ?? selectedModel} for this area
+        </div>
+      )}
       {chartBase && (chartOutsideCoverage || chartTilesFailed || chartStraddlesEdge) && (
         <div className="absolute right-3 top-24 z-[750] flex max-w-[260px] flex-col items-end gap-2">
           {chartTilesFailed && (
@@ -603,7 +680,6 @@ export const MapView: React.FC<MapViewProps> = ({
         points={currentPoints}
         speedUnit={speedUnit}
         timeLabel={validTimeLabel}
-        halo={lightBase}
       />
       {waterCurrentsVisible && <CurrentLegend speedUnit={speedUnit} />}
       {windColorOverlayVisible && (

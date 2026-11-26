@@ -27,8 +27,9 @@ const RULE = '#30363d';
 
 /** CSS-pixel heights of the chrome drawn around the map, scaled with the capture. */
 export const HEADER_PX = 74;
-export const LEGEND_PX = 78;
-export const FOOTER_PX = 30;
+// Taller than the old 78/30 so the larger barb glyphs, captions and footer line fit (SCRUM-258).
+export const LEGEND_PX = 88;
+export const FOOTER_PX = 34;
 const PADDING = 14;
 
 /** The background the whole composed image sits on. */
@@ -146,20 +147,27 @@ export function drawLegend(
   ctx.fillRect(0, top, width, Math.max(1, unit));
 
   ctx.fillStyle = MUTED;
-  ctx.font = `normal ${8.5 * unit}px sans-serif`;
+  ctx.font = `normal ${10 * unit}px sans-serif`;
   const scale = content.windColorScale;
   const barbTitle = scale
     ? `Wind barbs (${content.speedUnitLabel}) · colour = temperature (${content.temperatureUnitLabel})`
     : `Wind barbs (${content.speedUnitLabel})`;
   ctx.fillText(barbTitle, pad, top + 12 * unit);
-  const barbsWidth = Math.max(width * 0.52, 240 * unit);
-  const slot = barbsWidth / content.barbs.length;
+  // Six examples (SCRUM-240) leave far less room per entry than four did. Measure the captions
+  // first and take any narrow-width squeeze from the glyph and its gap, never from the caption.
+  const glyphRoom = 32 * unit;
+  const gap = 6 * unit;
+  const captionWidths = content.barbs.map((entry) => ctx.measureText(entry.caption).width);
+  const captionsWidth = captionWidths.reduce((sum, w) => sum + w, 0);
+  const perEntry = (width - pad * 2 - captionsWidth) / content.barbs.length;
+  const glyphSize = Math.max(12 * unit, Math.min(glyphRoom, perEntry - gap));
+  let x = pad;
   content.barbs.forEach((entry, index) => {
-    const cx = pad + slot * index + 14 * unit;
-    drawBarb(ctx, cx, top + 30 * unit, 26 * unit, entry.knots);
+    drawBarb(ctx, x + glyphSize / 2, top + 33 * unit, glyphSize, entry.knots);
     ctx.fillStyle = TEXT;
-    ctx.font = `normal ${8.5 * unit}px sans-serif`;
-    ctx.fillText(entry.caption, cx + 18 * unit, top + 34 * unit);
+    ctx.font = `normal ${10 * unit}px sans-serif`;
+    ctx.fillText(entry.caption, x + glyphSize + gap / 2, top + 37 * unit);
+    x += glyphSize + gap + captionWidths[index];
   });
 
   if (scale) {
@@ -167,7 +175,7 @@ export function drawLegend(
     // always labels every tick; only the narrow screen strip drops some (SCRUM-165).
     const unitGap = 26 * unit;
     const barWidth = Math.max(1, width - pad * 2 - unitGap);
-    const barY = top + 54 * unit;
+    const barY = top + 60 * unit;
     const barHeight = 10 * unit;
     const gradient = ctx.createLinearGradient(pad, barY, pad + barWidth, barY);
     for (const stop of scale.stops) gradient.addColorStop(stop.offset, stop.color);
@@ -181,7 +189,7 @@ export function drawLegend(
       const labelWidth = ctx.measureText(tick.label).width;
       const drawX =
         index === 0 ? x : index === scale.ticks.length - 1 ? x - labelWidth : x - labelWidth / 2;
-      ctx.fillText(tick.label, drawX, top + 75 * unit);
+      ctx.fillText(tick.label, drawX, top + 81 * unit);
     });
     ctx.fillStyle = MUTED;
     ctx.fillText(scale.unitLabel, pad + barWidth + 6 * unit, barY + 9 * unit);
@@ -190,16 +198,16 @@ export function drawLegend(
 
   ctx.fillStyle = MUTED;
   ctx.font = `normal ${8.5 * unit}px sans-serif`;
-  ctx.fillText(`Temperature (${content.temperatureUnitLabel})`, pad, top + 56 * unit);
+  ctx.fillText(`Temperature (${content.temperatureUnitLabel})`, pad, top + 62 * unit);
   const swatchWidth = Math.min(30 * unit, (width - pad * 2) / content.temperatures.length - 6 * unit);
   const captionWidth = (width - pad * 2) / content.temperatures.length;
   content.temperatures.forEach((band, index) => {
     const x = pad + captionWidth * index;
     ctx.fillStyle = band.color;
-    ctx.fillRect(x, top + 62 * unit, swatchWidth, 8 * unit);
+    ctx.fillRect(x, top + 68 * unit, swatchWidth, 8 * unit);
     ctx.fillStyle = TEXT;
     ctx.font = `normal ${7.5 * unit}px sans-serif`;
-    ctx.fillText(band.caption, x, top + 76 * unit);
+    ctx.fillText(band.caption, x, top + 82 * unit);
   });
 }
 
@@ -214,7 +222,7 @@ export function drawFooter(
   ctx.fillStyle = RULE;
   ctx.fillRect(0, top, width, Math.max(1, unit));
   ctx.fillStyle = MUTED;
-  drawFittedText(ctx, footer, pad, top + 19 * unit, width - pad * 2, 9 * unit);
+  drawFittedText(ctx, footer, pad, top + 21 * unit, width - pad * 2, 10.5 * unit);
 }
 
 /** The hairline above the header band, keeping the bands visually separate on paper. */

@@ -10,7 +10,7 @@ from backend.app.database import get_db_connection
 from backend.app.main import app
 from backend.app.services.forecast_parser import build_weather_point
 from backend.app.units import deg_to_cardinal
-from factories import forecast_payload, upstream_error
+from factories import forecast_payload, upstream_error, upstream_status_error
 
 POINT = "/api/weather/point?lat=48.78&lon=-121.94"
 
@@ -45,6 +45,19 @@ def test_build_weather_point():
     assert pt.wind_gust_mph == round(22.0 * 1.15078, 1)
 
 
+def test_build_weather_point_keeps_missing_humidity_missing():
+    """A provider without a humidity value reports null, not 0 % (SCRUM-106)."""
+    pt = build_weather_point(
+        time_str="2026-11-12T12:00",
+        temp_c=10.0,
+        humidity=None,
+        wind_knots=10.0,
+        wind_deg=180.0,
+        weather_code=0,
+    )
+    assert pt.humidity is None
+
+
 def test_weather_forecast_and_cache(client, open_meteo):
     loc_id = client.get("/api/locations").json()[0]["id"]
     open_meteo.respond(forecast_payload())
@@ -65,6 +78,27 @@ def test_weather_forecast_and_cache(client, open_meteo):
     assert data2["cached"] is True
     assert len(data2["forecast"]) == 16
     assert open_meteo.call_count == 1
+
+
+def test_all_missing_forecast_is_not_cached(client, open_meteo):
+    """A frame with no wind anywhere is an upstream gap, not a calm forecast (SCRUM-225)."""
+    raw = forecast_payload(
+        wind_speed_10m=None,
+        wind_direction_10m=None,
+        temperature_2m=None,
+        wind_gusts_10m=None,
+    )
+    for name in ("wind_speed_10m", "wind_direction_10m", "temperature_2m", "wind_gusts_10m"):
+        raw["hourly"][name] = [None] * len(raw["hourly"]["time"])
+    open_meteo.respond(raw)
+
+    first = client.get(POINT).json()
+    second = client.get(POINT).json()
+
+    assert open_meteo.call_count == 2  # the null frame was not stored
+    assert first["cached"] is False and second["cached"] is False
+    assert first["current"]["wind_speed_knots"] is None
+    assert first["current"]["temperature_f"] is None
 
 
 def test_point_weather_returns_forecast(client, open_meteo):
@@ -179,7 +213,7 @@ def test_location_weather_upstream_failure_is_502_without_internal_detail(client
     open_meteo.fail(upstream_error())
     resp = client.get(f"/api/weather?location_id={loc_id}")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -187,7 +221,7 @@ def test_point_weather_upstream_failure_is_502_without_internal_detail(client, o
     open_meteo.fail(upstream_error())
     resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
     assert resp.status_code == 502
-    assert resp.json()["detail"] == "Failed to fetch point weather forecast from Open-Meteo"
+    assert resp.json()["detail"] == "Failed to fetch point weather forecast"
     assert "secret-host" not in resp.text
 
 
@@ -233,7 +267,10 @@ def test_unknown_model_is_rejected_without_calling_open_meteo(client, open_meteo
 
 def test_every_listed_model_is_accepted(client, open_meteo):
     open_meteo.respond(forecast_payload())
-    for model in [m["id"] for m in client.get("/api/weather/models").json()]:
+    # NDFD is served by its own provider, so it answers from recorded payloads in
+    # test_nws_prototype.py rather than from this Open-Meteo stub (SCRUM-245 prototype).
+    models = [m["id"] for m in client.get("/api/weather/models").json() if m["id"] != "nws_ndfd"]
+    for model in models:
         assert client.get(f"/api/weather/point?lat=48&lon=-122&model={model}").status_code == 200
 
 
@@ -281,3 +318,20 @@ def test_saved_location_cache_hit_reports_current_location_details(client, open_
 
     assert hit["cached"] is True
     assert hit["location_name"] == "Renamed"
+
+
+# ---------------------------------------------------------------------------
+# Logging (SCRUM-253)
+# ---------------------------------------------------------------------------
+
+
+def test_point_weather_failure_logs_the_exception_but_not_the_point(client, open_meteo, caplog):
+    open_meteo.fail(upstream_status_error("https://api.open-meteo.com/v1/forecast?latitude=48.0&longitude=-122.0"))
+
+    with caplog.at_level("DEBUG", logger="backend.app.routers.weather"):
+        resp = client.get("/api/weather/point?lat=48.0&lon=-122.0")
+
+    assert resp.status_code == 502
+    assert "HTTPStatusError" in caplog.text
+    assert "48.0" not in caplog.text
+    assert "-122.0" not in caplog.text

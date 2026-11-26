@@ -17,6 +17,8 @@ export interface MockMarker {
   options: Record<string, unknown>;
   icon: unknown;
   popupHtml: string | null;
+  /** Options passed to bindPopup, for placement assertions (SCRUM-252). */
+  popupOptions?: Record<string, unknown>;
   handlers: Record<string, Handler>;
   /** Simulate a Leaflet event on this marker, e.g. fire('click'). */
   fire: (event: string) => void;
@@ -62,7 +64,7 @@ export interface MockMap {
   container: HTMLElement;
   handlers: Record<string, Handler[]>;
   /** Simulate a map event, e.g. fire('moveend'). */
-  fire: (event: string) => void;
+  fire: (event: string, ...args: unknown[]) => void;
   bounds: { south: number; north: number; west: number; east: number };
   size: { x: number; y: number };
   zoom: number;
@@ -78,6 +80,7 @@ export interface MockMap {
   latLngToContainerPoint: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
+  once: ReturnType<typeof vi.fn>;
   flyTo: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
 }
@@ -97,8 +100,9 @@ function makeMarker(latlng: [number, number], options: Record<string, unknown> =
   } as MockMarker;
   marker.fire = (event) => marker.handlers[event]?.();
   marker.addTo = vi.fn(() => marker);
-  marker.bindPopup = vi.fn((html: string) => {
+  marker.bindPopup = vi.fn((html: string, options?: Record<string, unknown>) => {
     marker.popupHtml = html;
+    marker.popupOptions = options;
     return marker;
   });
   marker.on = vi.fn((event: string, fn: Handler) => {
@@ -138,7 +142,7 @@ function makeMap(container?: HTMLElement): MockMap {
     return map;
   });
   map.getContainer = vi.fn(() => map.container);
-  map.fire = (event) => (map.handlers[event] ?? []).forEach((fn) => fn());
+  map.fire = (event, ...args) => (map.handlers[event] ?? []).forEach((fn) => fn(...args));
   map.getBounds = vi.fn(() => ({
     getSouth: () => map.bounds.south,
     getNorth: () => map.bounds.north,
@@ -169,6 +173,14 @@ function makeMap(container?: HTMLElement): MockMap {
   });
   map.off = vi.fn((event: string, fn: Handler) => {
     map.handlers[event] = (map.handlers[event] ?? []).filter((h) => h !== fn);
+    return map;
+  });
+  map.once = vi.fn((event: string, fn: Handler) => {
+    const wrapper: Handler = (...args) => {
+      map.handlers[event] = (map.handlers[event] ?? []).filter((h) => h !== wrapper);
+      fn(...args);
+    };
+    (map.handlers[event] ??= []).push(wrapper);
     return map;
   });
   map.flyTo = vi.fn();

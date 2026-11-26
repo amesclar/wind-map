@@ -20,19 +20,21 @@ export interface GeocodeResult {
 
 export interface WeatherForecastPoint {
   time: string;
-  temperature_c: number;
-  temperature_f: number;
-  wind_speed_knots: number;
-  wind_speed_kmh: number;
-  wind_speed_mph: number;
-  wind_speed_ms: number;
-  wind_gust_knots: number;
-  wind_gust_kmh: number;
-  wind_gust_mph: number;
-  wind_gust_ms: number;
-  wind_direction_deg: number;
-  wind_direction_cardinal: string;
-  humidity: number;
+  /** SCRUM-225: null when Open-Meteo has no value; shown as "No data", never as 0 or 32 °F. */
+  temperature_c: number | null;
+  temperature_f: number | null;
+  wind_speed_knots: number | null;
+  wind_speed_kmh: number | null;
+  wind_speed_mph: number | null;
+  wind_speed_ms: number | null;
+  wind_gust_knots: number | null;
+  wind_gust_kmh: number | null;
+  wind_gust_mph: number | null;
+  wind_gust_ms: number | null;
+  wind_direction_deg: number | null;
+  wind_direction_cardinal: string | null;
+  /** null when the provider has no value for the hour (NDFD can gap); not rendered today. */
+  humidity: number | null;
   weather_code: number;
 }
 
@@ -68,6 +70,18 @@ export interface WeatherModelInfo extends WeatherModel {
   next_run_utc: string;
 }
 
+/**
+ * GET /api/weather/models/{model}/availability (SCRUM-256): when the newest run of the selected
+ * model was published, and when the next one is due. Every field is null for a model with no
+ * single upstream run (best_match, the seamless blends), which keeps the derived cycle clock.
+ */
+export interface ModelAvailability {
+  model: string;
+  run_utc: string | null;
+  available_utc: string | null;
+  next_available_utc: string | null;
+}
+
 export type UnitSystem = 'imperial' | 'metric';
 export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
@@ -100,22 +114,27 @@ export interface FeedbackPayload {
   app_version: string;
   timezone: string;
   user_agent: string;
+  /** Up to 3 validated files, sent in the same multipart request (SCRUM-219). */
+  files?: File[];
 }
 
 /** Response of POST /api/feedback: the Jira issue that was created. */
 export interface FeedbackResult {
   issue_key: string;
   issue_url: string;
+  /** True when the issue was filed but its files could not be attached (SCRUM-219). */
+  attachments_failed?: boolean;
 }
 
 /** One point of GET /api/weather/grid. */
 export interface GridWindPoint {
   latitude: number;
   longitude: number;
-  wind_speed_knots: number;
+  /** SCRUM-225: null when the model has no value for the point; no barb is drawn for it. */
+  wind_speed_knots: number | null;
   /** Gust for the same moment (SCRUM-210); absent when the model has none for the point. */
   wind_gust_knots?: number | null;
-  wind_direction_deg: number;
+  wind_direction_deg: number | null;
   /** Temperature in °F; colors the map barb (SCRUM-89). */
   temperature_f?: number | null;
   /** Forecast hour these values describe (SCRUM-115); null or absent means current. */
@@ -124,6 +143,7 @@ export interface GridWindPoint {
 
 /** One point of GET /api/currents/grid (SCRUM-96). */
 export interface CurrentPoint {
+  /** The Marine model cell the value came from, not the requested map point (SCRUM-238). */
   latitude: number;
   longitude: number;
   /** Speed in knots, and the direction the water flows **towards** in degrees. */
@@ -141,3 +161,33 @@ export interface CurrentGridResponse {
 
 /** The grid point whose barb is selected (highlighted) on the map. */
 export type SelectedGridPoint = Pick<GridWindPoint, 'latitude' | 'longitude'>;
+
+/** One hourly sea-level sample from GET /api/tides/point (SCRUM-195). */
+export interface TideSample {
+  /** UTC minute stamp, e.g. `2026-11-25T12:00`; read it as UTC. */
+  time: string;
+  /** Metres above global mean sea level. */
+  height_m: number;
+}
+
+/** A high or low tide, time refined to the minute (SCRUM-195). */
+export interface TideExtreme {
+  type: 'high' | 'low';
+  time: string;
+  height_m: number;
+}
+
+/** GET /api/tides/point payload; `points` is empty over land (SCRUM-195). */
+export interface TidePointResponse {
+  latitude: number;
+  longitude: number;
+  /** The reference for the heights: mean sea level, not a chart datum. */
+  datum: string;
+  unit: string;
+  hour: string;
+  points: TideSample[];
+  last_extreme: TideExtreme | null;
+  next_extreme: TideExtreme | null;
+  /** The extreme after the next one (SCRUM-250). */
+  next_extreme_after: TideExtreme | null;
+}

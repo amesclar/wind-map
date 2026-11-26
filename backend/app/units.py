@@ -36,15 +36,22 @@ def as_optional_float(value: float | None) -> float | None:
     return None if value is None else float(value)
 
 
-def c_to_f(temp_c: float | None) -> float:
-    """°C → °F rounded to 1 decimal. Used by both the drawer forecast and the map grid,
-    so their colors always agree."""
-    return round(as_float(temp_c) * 9.0 / 5.0 + 32.0, 1)
+def c_to_f(temp_c: float | None) -> float | None:
+    """°C → °F rounded to 1 decimal; a missing temperature stays missing (SCRUM-225).
+
+    Used by both the drawer forecast and the map grid, so their colors always agree.
+    """
+    if temp_c is None:
+        return None
+    return round(float(temp_c) * 9.0 / 5.0 + 32.0, 1)
 
 
-def knots_to_units(knots: float | None) -> dict[str, float]:
-    """Speed in knots → {"knots", "kmh", "mph", "ms"}, each rounded to 1 decimal."""
-    k = as_float(knots)
+def knots_to_units(knots: float | None) -> dict[str, float | None]:
+    """Knots → every display unit, rounded to 1 decimal. A missing speed stays None in every
+    unit (SCRUM-225); 0 would claim calm."""
+    if knots is None:
+        return {"knots": None, "kmh": None, "mph": None, "ms": None}
+    k = float(knots)
     return {
         "knots": round(k, 1),
         "kmh": round(k * KNOTS_TO_KMH, 1),

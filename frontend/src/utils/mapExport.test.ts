@@ -266,16 +266,27 @@ describe('sanitizeExportFileName (SCRUM-162)', () => {
 });
 
 describe('legend contents (SCRUM-116)', () => {
-  it('labels the four barb glyphs in the chosen speed unit', () => {
+  it('labels the six barb glyphs in the chosen speed unit (SCRUM-240)', () => {
     const knots = barbLegendEntries('knots');
     expect(knots.map((e) => e.knots)).toEqual([...BARB_LEGEND_KNOTS]);
-    expect(knots.map((e) => e.caption)).toEqual(['calm', '5 kt', '10 kt', '50 kt']);
+    expect(knots.map((e) => e.caption)).toEqual(['calm', '5 kt', '10 kt', '15 kt', '20 kt', '50 kt']);
 
     const kmh = barbLegendEntries('kmh');
-    expect(kmh.map((e) => e.caption)).toEqual(['calm', '9 km/h', '19 km/h', '93 km/h']);
+    expect(kmh.map((e) => e.caption)).toEqual([
+      'calm',
+      '9 km/h',
+      '19 km/h',
+      '28 km/h',
+      '37 km/h',
+      '93 km/h',
+    ]);
+
+    const ms = barbLegendEntries('ms');
+    expect(ms.map((e) => e.caption)).toEqual(['calm', '3 m/s', '5 m/s', '8 m/s', '10 m/s', '26 m/s']);
 
     const mph = barbLegendEntries('mph');
     expect(mph[1].caption).toBe('6 mph');
+    expect(mph[4].caption).toBe('23 mph');
   });
 
   it('uses the same temperature colors as the barbs, labelled in the unit system', () => {

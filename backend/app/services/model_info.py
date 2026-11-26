@@ -2,7 +2,7 @@
 
 The Open-Meteo Forecast API stitches the latest run of each model into one series and does not
 return the run time, so it is derived from the cycle hours in the model table
-(`config.MODEL_METADATA`, documented against frontend/src/assets/weather-models.md).
+(`config.MODEL_METADATA`, the single source of truth since SCRUM-232).
 """
 
 from datetime import UTC, datetime, timedelta

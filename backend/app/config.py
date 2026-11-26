@@ -77,11 +77,48 @@ OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 # Ocean currents live on their own host (SCRUM-96).
 OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
+# Land/water test for current cells (SCRUM-238): the Marine land mask is coarser than the chart,
+# so a cell it calls sea can sit on a narrow island. Elevation puts the chevron back on water.
+OPEN_METEO_ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+# A current cell whose centre is above this elevation is land, not water (SCRUM-238).
+LAND_ELEVATION_THRESHOLD_M = 0.5
+
+# NOAA NWS NDFD (SCRUM-245 spike prototype, built for real in SCRUM-106): a second provider for
+# saved-location and ad-hoc point forecasts. It cannot serve the wind grid — one request per
+# point — so the grid, the gradient and the currents stay on Open-Meteo.
+NWS_BASE_URL = "https://api.weather.gov"
+NWS_MODEL = "nws_ndfd"
+NWS_TIMEOUT_SECONDS = 15.0
+# Same attempt budget as the Open-Meteo client (SCRUM-106): one retry pair covers a 503 blip.
+NWS_RETRIES = 2
+# NWS asks every client to identify itself and answers 403 to an empty User-Agent (measured
+# 2026-11-25), so one is always sent. Set NWS_USER_AGENT to an app name plus a contact address;
+# the default names the app and links the repository, which is the contact NOAA gets when nobody
+# configured one (the startup log says so).
+NWS_DEFAULT_USER_AGENT = "wind-map (+https://github.com/amesclar/wind-map)"
+
+
+def nws_user_agent(value: str | None = None) -> str:
+    """The User-Agent for api.weather.gov: NWS_USER_AGENT when set, else the default."""
+    agent = (os.getenv("NWS_USER_AGENT", "") if value is None else value).strip()
+    return agent or NWS_DEFAULT_USER_AGENT
+
+
+def nws_user_agent_is_custom() -> bool:
+    """True when NWS_USER_AGENT was set, so the startup log can stay quiet (SCRUM-255)."""
+    return bool(os.getenv("NWS_USER_AGENT", "").strip())
+
+
+NWS_USER_AGENT = nws_user_agent()
+# Models served by a provider other than Open-Meteo. The wind grid asks Open-Meteo for its default
+# instead of sending an id Open-Meteo does not know.
+PROVIDER_ONLY_MODELS = frozenset({NWS_MODEL})
 
 # Open-Meteo HTTP client (SCRUM-92: one place for timeouts and retries)
 OPEN_METEO_TIMEOUT_SECONDS = 15.0  # single-point forecast
 OPEN_METEO_GRID_TIMEOUT_SECONDS = 20.0  # batched grid request (up to 400 points)
 OPEN_METEO_MARINE_TIMEOUT_SECONDS = 20.0  # batched marine request (same grid size)
+OPEN_METEO_ELEVATION_TIMEOUT_SECONDS = 8.0  # batched elevation lookup for a grid's cells
 OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
 OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
@@ -92,11 +129,17 @@ CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
 # Supported weather models
 AVAILABLE_MODELS = [
     {"id": "best_match", "name": "Open-Meteo (Best Match)"},
-    {"id": "ecmwf_ifs04", "name": "ECMWF IFS 0.4°"},
+    {"id": "ecmwf_ifs", "name": "ECMWF IFS HRES 9 km"},
+    {"id": "ecmwf_aifs025_single", "name": "ECMWF AIFS (AI)"},
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
+    {"id": "gem_seamless", "name": "CMC GEM Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
+    {"id": NWS_MODEL, "name": "NOAA NWS NDFD"},
 ]
 MODEL_IDS = frozenset(m["id"] for m in AVAILABLE_MODELS)
+# Retired model ids are answered as their replacement for one release (SCRUM-226), so a cached
+# frontend that still sends `ecmwf_ifs04` gets ECMWF values instead of a 422.
+MODEL_ALIASES: dict[str, str] = {"ecmwf_ifs04": "ecmwf_ifs"}
 DEFAULT_MODEL = "best_match"  # Open-Meteo picks the best model; no `models` param is sent
 DEFAULT_TIMEZONE = "America/Los_Angeles"  # Pacific, per requirements
 
@@ -111,18 +154,51 @@ if not 23 + (FORECAST_POINTS - 1) * FORECAST_STEP_HOURS < FORECAST_DAYS * 24:
 
 # Per-model forecast metadata (SCRUM-115). The UI shows the update cadence, the time horizon and
 # the derived run times, and `/api/weather/grid?time=` only accepts hours inside the selected
-# model's horizon. Source of truth for the values is the model table at
-# frontend/src/assets/weather-models.md (update frequency and time horizon columns); horizons are
-# capped at Open-Meteo's 16-day maximum. best_match is a composite, so it uses Open-Meteo's
-# documented 7-day default rather than a single model's horizon.
+# model's horizon. This table is the single source of truth since the static model guide was
+# removed (SCRUM-232); each entry names the Open-Meteo doc page its cadence and horizon come from.
+# Horizons are capped at Open-Meteo's 16-day maximum.
 MODEL_METADATA: dict[str, dict[str, object]] = {
+    # Composite: Open-Meteo's documented 7-day default (https://open-meteo.com/en/docs).
     "best_match": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
-    "ecmwf_ifs04": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    # https://open-meteo.com/en/docs/ecmwf-api — IFS HRES 9 km, 6-hourly, 15 days.
+    "ecmwf_ifs": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    # https://open-meteo.com/en/docs/ecmwf-api — AIFS 0.25° (SCRUM-227): 6-hourly cycles and
+    # natively 6-hourly steps, which Open-Meteo interpolates to hourly; no wind gusts at all.
+    "ecmwf_aifs025_single": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
+    # https://open-meteo.com/en/docs/gfs-api — GFS, 6-hourly, 16 days.
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
+    # https://open-meteo.com/en/docs/gem-api — seamless blend (SCRUM-228) of the 12-hourly global
+    # GEM with the 6-hourly regional RDPS and HRDPS runs; Open-Meteo caps the API at 10 days.
+    "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
+    # https://open-meteo.com/en/docs/dwd-api — ICON global, 6-hourly, 7.5 days.
     "icon_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 180},
+    # NDFD grids are re-issued hourly (measured `updateTime` 19:51 UTC at SEW, 19:15 UTC at KEY on
+    # 2026-11-25) rather than on fixed cycles, and reach 7.5 to 8 days; 7 days is safe for every
+    # office and covers the app's 48-hour window twice over (SCRUM-245).
+    "nws_ndfd": {"update_hours": 1, "update_cycles_utc": list(range(24)), "horizon_hours": 168},
 }
 if set(MODEL_METADATA) != MODEL_IDS:
     raise ValueError("MODEL_METADATA must describe every entry in AVAILABLE_MODELS")
+
+
+# Model publication times (SCRUM-256). `MODEL_METADATA` gives the cycle boundary, which is when a
+# run starts, not when Open-Meteo finishes publishing it (measured 3 to 8 hours later). Each model's
+# `meta.json` is the only place the publication time is exposed. Only models with one upstream run
+# are listed: `best_match` and the seamless blends are composites with no file, and GEM's metadata
+# has been frozen since 2026-05-26 even though its forecast still updates, so those keep the cycle.
+MODEL_AVAILABILITY_URL = "https://api.open-meteo.com/data/{model}/static/meta.json"
+MODEL_AVAILABILITY_IDS: dict[str, str] = {
+    "gfs_seamless": "ncep_gfs025",
+    "ecmwf_ifs": "ecmwf_ifs025",
+    "ecmwf_aifs025_single": "ecmwf_aifs025_single",
+    # The global ICON run, deliberately not EU/D2: the refinements publish sooner but cover Europe
+    # only, so the global run is the clock that never enables a refresh early elsewhere.
+    "icon_seamless": "dwd_icon",
+}
+if not set(MODEL_AVAILABILITY_IDS) <= MODEL_IDS:
+    raise ValueError("MODEL_AVAILABILITY_IDS names a model that is not selectable")
+MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0  # a freshness hint must never delay anything
+MODEL_AVAILABILITY_CACHE_SECONDS = 600  # ten minutes, failures included
 
 
 def model_metadata(model: str) -> dict[str, object]:
@@ -167,7 +243,24 @@ JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "").strip()
 JIRA_FEEDBACK_PROJECT = os.getenv("JIRA_FEEDBACK_PROJECT", "").strip() or "SCRUM"
 JIRA_TIMEOUT_SECONDS = 10.0
 FEEDBACK_LABEL = "in-app-feedback"
-FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB
+FEEDBACK_MAX_BODY_BYTES = 1_000_000  # 1 MB, the JSON body kept for one release
+
+# Feedback attachments (SCRUM-219): one multipart request that must stay well below Cloud Run's
+# 32 MiB HTTP/1 limit, so the platform never rejects it before the app can answer with a reason.
+FEEDBACK_MAX_FILES = 3
+FEEDBACK_MAX_FILE_BYTES = 4 * 1024 * 1024  # 4 MiB each
+FEEDBACK_MAX_FILES_BYTES = 12 * 1024 * 1024  # 12 MiB in total
+FEEDBACK_MAX_REQUEST_BYTES = int(12.5 * 1024 * 1024)  # files plus 0.5 MiB of text and boundaries
+JIRA_ATTACHMENT_TIMEOUT_SECONDS = 60.0
+
+
+def validate_feedback_limits(request_bytes: int = FEEDBACK_MAX_REQUEST_BYTES) -> None:
+    """Refuse a feedback cap that leaves under 4 MiB of headroom below Cloud Run's 32 MiB."""
+    if request_bytes >= 28 * 1024 * 1024:
+        raise ValueError("FEEDBACK_MAX_REQUEST_BYTES must stay below 28 MiB (Cloud Run allows 32 MiB)")
+
+
+validate_feedback_limits()
 
 
 def _positive_int(name: str, default: int) -> int:

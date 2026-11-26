@@ -1,8 +1,18 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Paperclip, X } from 'lucide-react';
 import { submitFeedback, ApiError } from '../api/client';
 import { APP_VERSION } from '../version';
 import type { FeedbackType } from '../types';
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_FEEDBACK_FILES,
+  MAX_FEEDBACK_FILES_BYTES,
+  MAX_FEEDBACK_FILE_BYTES,
+  attachmentProblem,
+  formatFileSize,
+  totalAttachmentBytes,
+} from '../utils/feedbackAttachments';
+import { SHRINK_FAILED_MESSAGE, screenshotFileName, shrinkScreenshot } from '../utils/screenshotPaste';
 
 export const MAX_SUBJECT = 50;
 export const MAX_COMMENTS = 1000;
@@ -23,6 +33,12 @@ interface FeedbackModalProps {
 
 type FieldName = 'type' | 'subject' | 'comments' | 'email';
 type Errors = Partial<Record<FieldName, string>>;
+
+interface AttachmentItem {
+  file: File;
+  /** The pasted screenshot's original size when it had to be re-encoded (SCRUM-220). */
+  shrunkFrom?: number;
+}
 
 function validate(type: string, subject: string, comments: string, email: string): Errors {
   const errors: Errors = {};
@@ -54,8 +70,13 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [issueKey, setIssueKey] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [attachmentsFailed, setAttachmentsFailed] = useState(false);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const uid = useId();
   const id = (name: string) => `${uid}-${name}`;
 
@@ -88,11 +109,70 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
       setSubject('');
       setComments('');
       setEmail('');
+      setAttachments([]);
+      setAttachmentError(null);
+      setAttachmentsFailed(false);
     }
     setErrors({});
     setFailure(null);
     setIssueKey(null);
+    setDragging(false);
     onClose();
+  };
+
+  /** Add what passes the caps and the type list; a refusal is reported and the rest still joins. */
+  const addFiles = (incoming: FileList | File[]) => {
+    const next = [...attachments];
+    let problem: string | null = null;
+    for (const file of Array.from(incoming)) {
+      const found = attachmentProblem(next.map((item) => item.file), file);
+      if (found) {
+        problem = found;
+        continue;
+      }
+      next.push({ file });
+    }
+    setAttachments(next);
+    setAttachmentError(problem);
+  };
+
+  /** A pasted screenshot joins the list, shrunk to a JPEG when it is over the 4 MiB cap (SCRUM-220). */
+  const handlePaste = async (event: React.ClipboardEvent) => {
+    const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    // Pasted text still goes into the focused field as usual: only an image takes over the paste.
+    if (images.length === 0) return;
+    event.preventDefault();
+    const now = new Date();
+    const next = [...attachments];
+    let problem: string | null = null;
+    for (const [index, image] of images.entries()) {
+      const named = new File([image], screenshotFileName(now, index), {
+        type: image.type || 'image/png',
+      });
+      const shrunk = await shrinkScreenshot(named);
+      if (!shrunk) {
+        problem = SHRINK_FAILED_MESSAGE;
+        continue;
+      }
+      const found = attachmentProblem(
+        next.map((item) => item.file),
+        shrunk,
+      );
+      if (found) {
+        problem = found;
+        continue;
+      }
+      next.push({ file: shrunk, shrunkFrom: shrunk === named ? undefined : image.size });
+    }
+    setAttachments(next);
+    setAttachmentError(problem);
+  };
+
+  const removeFile = (index: number) => {
+    setAttachments((files) => files.filter((_, position) => position !== index));
+    setAttachmentError(null);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -112,8 +192,10 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
         app_version: APP_VERSION,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
         user_agent: navigator.userAgent.slice(0, 200),
+        ...(attachments.length > 0 ? { files: attachments.map((item) => item.file) } : {}),
       });
       setIssueKey(result.issue_key);
+      setAttachmentsFailed(result.attachments_failed === true);
     } catch (err) {
       setFailure(failureMessage(err));
     } finally {
@@ -142,6 +224,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
         aria-modal="true"
         aria-labelledby={id('title')}
         data-testid="feedback-modal"
+        onPaste={handlePaste}
         className="w-full max-w-md bg-dark-800 border border-dark-600 rounded-xl shadow-2xl overflow-hidden"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-600">
@@ -162,6 +245,11 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
           <>
             <div className="px-5 py-4 text-sm text-gray-300" role="status">
               Thanks! Your feedback was filed as <span className="font-semibold text-sky-400">{issueKey}</span>.
+              {attachmentsFailed && (
+                <p className="mt-2 text-amber-300" data-testid="attachments-warning">
+                  Your files could not be attached. You don't need to send the feedback again.
+                </p>
+              )}
             </div>
             <div className="flex justify-end px-5 py-4 border-t border-dark-600">
               <button
@@ -260,6 +348,94 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
                   {...fieldProps('email')}
                 />
                 {fieldError('email')}
+              </div>
+
+              <div>
+                <span className={labelClass}>Attachments (optional)</span>
+                <div
+                  data-testid="feedback-drop-zone"
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragging(false);
+                    addFiles(event.dataTransfer.files);
+                  }}
+                  className={`rounded-lg border border-dashed px-3 py-3 text-center transition ${
+                    dragging ? 'border-sky-400 bg-sky-500/10' : 'border-dark-600'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-dark-600 bg-dark-700 px-2.5 py-1.5 text-xs font-medium text-gray-200 hover:bg-dark-600"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Attach files
+                  </button>
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Drag and drop, or up to {MAX_FEEDBACK_FILES} files of{' '}
+                    {MAX_FEEDBACK_FILE_BYTES / (1024 * 1024)} MB each
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ATTACHMENT_ACCEPT}
+                    data-testid="feedback-file-input"
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files) addFiles(event.target.files);
+                      event.target.value = '';
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500">You can also paste a screenshot.</p>
+                {attachments.length > 0 && (
+                  <ul data-testid="attachment-list" className="mt-2 space-y-1">
+                    {attachments.map((item, index) => (
+                      <li
+                        key={`${item.file.name}-${index}`}
+                        className="flex items-center gap-2 text-xs text-gray-300"
+                      >
+                        <span className="min-w-0 flex-1 truncate" data-testid="attachment-name">
+                          {item.file.name}
+                        </span>
+                        {item.shrunkFrom !== undefined && (
+                          <span
+                            className="shrink-0 text-[11px] text-amber-300/80"
+                            data-testid="attachment-shrunk"
+                          >
+                            shrunk from {formatFileSize(item.shrunkFrom)}
+                          </span>
+                        )}
+                        <span className="shrink-0 text-gray-500">{formatFileSize(item.file.size)}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${item.file.name}`}
+                          onClick={() => removeFile(index)}
+                          className="shrink-0 rounded p-0.5 text-gray-500 hover:bg-dark-700 hover:text-gray-200"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {attachments.length > 0 && (
+                  <p className="mt-1 text-[11px] text-gray-500" data-testid="attachment-total">
+                    {formatFileSize(totalAttachmentBytes(attachments.map((item) => item.file)))} of{' '}
+                    {MAX_FEEDBACK_FILES_BYTES / (1024 * 1024)} MB
+                  </p>
+                )}
+                {attachmentError && (
+                  <p role="alert" className="mt-1 text-xs text-red-400" data-testid="attachment-error">
+                    {attachmentError}
+                  </p>
+                )}
               </div>
 
               {failure && (

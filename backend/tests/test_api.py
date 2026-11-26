@@ -64,9 +64,67 @@ def test_weather_models_list(client):
     models = resp.json()
     model_ids = [m["id"] for m in models]
     assert "best_match" in model_ids
-    assert "ecmwf_ifs04" in model_ids
+    assert "ecmwf_ifs" in model_ids
+    assert "ecmwf_ifs04" not in model_ids
+    assert "ecmwf_aifs025_single" in model_ids
     assert "gfs_seamless" in model_ids
+    assert "gem_seamless" in model_ids
     assert "icon_seamless" in model_ids
+    ecmwf = next(m for m in models if m["id"] == "ecmwf_ifs")
+    assert ecmwf["name"] == "ECMWF IFS HRES 9 km"
+    assert ecmwf["horizon_hours"] == 360
+    aifs = next(m for m in models if m["id"] == "ecmwf_aifs025_single")
+    assert aifs["name"] == "ECMWF AIFS (AI)"
+    assert aifs["horizon_hours"] == 360
+    assert aifs["update_hours"] == 6
+    gem = next(m for m in models if m["id"] == "gem_seamless")
+    assert gem["name"] == "CMC GEM Seamless"
+    assert gem["horizon_hours"] == 240
+    assert gem["update_hours"] == 6
+
+
+def test_aifs_model_is_accepted_and_forwarded(client, open_meteo):
+    """AIFS is a real Open-Meteo model id, not a display-only entry (SCRUM-227)."""
+    from factories import grid_item, grid_payload
+
+    open_meteo.respond(grid_payload(*[grid_item(), grid_item(), grid_item(), grid_item()]))
+    resp = client.get(
+        "/api/weather/grid",
+        params={
+            "min_lat": 47.0,
+            "max_lat": 49.0,
+            "min_lon": -123.0,
+            "max_lon": -121.0,
+            "cols": 2,
+            "rows": 2,
+            "model": "ecmwf_aifs025_single",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert open_meteo.last_params.get("models") == "ecmwf_aifs025_single"
+
+
+def test_retired_ecmwf_model_id_is_answered_as_ecmwf_ifs(client, open_meteo):
+    """A cached frontend may still ask for the retired id (SCRUM-226)."""
+    from factories import grid_item, grid_payload
+
+    open_meteo.respond(grid_payload(*[grid_item()] * 4))
+    resp = client.get(
+        "/api/weather/grid",
+        params={
+            "min_lat": 47.0,
+            "max_lat": 49.0,
+            "min_lon": -123.0,
+            "max_lon": -121.0,
+            "cols": 2,
+            "rows": 2,
+            "model": "ecmwf_ifs04",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert open_meteo.last_params.get("models") == "ecmwf_ifs"
 
 
 # ---------------------------------------------------------------------------

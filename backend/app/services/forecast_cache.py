@@ -26,6 +26,16 @@ class ForecastCache(Protocol):
     def put(self, payload: dict[str, Any], now: float) -> None: ...
 
 
+def is_stale(cached_at: float, run_clock: float | None) -> bool:
+    """True when a cached row predates the newest run the source has published (SCRUM-113).
+
+    An unknown clock (a model with no metadata file, or a metadata outage) is never stale: a
+    refresh is then served from cache exactly as it was before this gate existed, rather than
+    spending calls the server cannot justify.
+    """
+    return run_clock is not None and cached_at < run_clock
+
+
 def _fresh(row, now: float) -> CachedForecast | None:
     if row and row["expires_at"] > now:
         return CachedForecast(payload=json.loads(row["payload_json"]), cached_at=row["cached_at"])
@@ -71,6 +81,46 @@ class SavedLocationCache:
                     now + CACHE_TTL_SECONDS,
                     json.dumps(payload),
                 ),
+            )
+
+
+@dataclass(frozen=True)
+class NwsGridCache:
+    """nws_grid_cache, keyed by rounded coordinates (SCRUM-106).
+
+    The grid a coordinate maps to does not move, so rows carry no expiry: a point is looked up
+    through `/points` once, then every forecast request for it skips that call.
+    """
+
+    latitude: float
+    longitude: float
+
+    @property
+    def key(self) -> tuple[float, float]:
+        return coord_key(self.latitude, self.longitude)
+
+    def get(self) -> tuple[str, int, int] | None:
+        with db_connection() as conn:
+            row = conn.execute(
+                "SELECT office, grid_x, grid_y FROM nws_grid_cache WHERE lat_key = ? AND lon_key = ?;",
+                self.key,
+            ).fetchone()
+        return None if row is None else (row["office"], int(row["grid_x"]), int(row["grid_y"]))
+
+    def put(self, grid: tuple[str, int, int], now: float) -> None:
+        office, grid_x, grid_y = grid
+        with db_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO nws_grid_cache (lat_key, lon_key, office, grid_x, grid_y, cached_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(lat_key, lon_key) DO UPDATE SET
+                    office=excluded.office,
+                    grid_x=excluded.grid_x,
+                    grid_y=excluded.grid_y,
+                    cached_at=excluded.cached_at;
+                """,
+                (*self.key, office, grid_x, grid_y, now),
             )
 
 

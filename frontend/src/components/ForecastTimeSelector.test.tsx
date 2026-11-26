@@ -125,4 +125,27 @@ describe('ForecastTimeSelector (SCRUM-127)', () => {
     expect(screen.getByTestId('forecast-model-info').textContent).toBe('Loading the forecast window…');
     expect(screen.getByRole('slider', { name: 'Forecast time' }).getAttribute('aria-valuemax')).toBe('48');
   });
+
+  it('prefers the published run when the API reports one (SCRUM-256)', () => {
+    renderSelector({
+      availability: {
+        model: 'gfs_seamless',
+        run_utc: '2026-11-23T12:00:00Z',
+        available_utc: '2026-11-23T18:17:00Z',
+        next_available_utc: '2026-11-24T00:17:00Z',
+      },
+    });
+
+    expect(screen.getByTestId('forecast-model-info').textContent).toBe(
+      'NOAA GFS Seamless · every 6 h · 0.5 days · updated 18:17 UTC (next ~00:17 UTC)',
+    );
+  });
+
+  it('keeps the cycle wording when the model has no publication time (SCRUM-256)', () => {
+    renderSelector({
+      availability: { model: 'best_match', run_utc: null, available_utc: null, next_available_utc: null },
+    });
+
+    expect(screen.getByTestId('forecast-model-info').textContent).toContain('run 12:00 UTC (next 18:00 UTC)');
+  });
 });

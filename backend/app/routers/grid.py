@@ -39,6 +39,11 @@ async def get_wind_grid(
     rows: int = Query(..., ge=2, le=MAX_ROWS),
     model: str = Depends(model_param),
     time: datetime | None = TIME_QUERY,
+    refresh: bool = Query(
+        False,
+        description="Refetch only the points cached before the model's newest published run "
+        "(SCRUM-113); the rest are served from cache and the response shape is unchanged.",
+    ),
 ) -> list[GridWindPoint]:
     at = validate_forecast_time(time, model)
     if min_lat >= max_lat:
@@ -60,7 +65,7 @@ async def get_wind_grid(
     ]
 
     try:
-        return await get_grid_wind(points, model=model, at=at)
+        return await get_grid_wind(points, model=model, at=at, refresh=refresh)
     except QuotaExceededError as exc:
         logger.warning("Open-Meteo quota exhausted (%d points); reset at %s", len(points), exc.reset_at)
         detail = {

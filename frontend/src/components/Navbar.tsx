@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { APP_VERSION } from '../version';
+import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
   Layers,
@@ -7,11 +8,11 @@ import {
   Map,
   Settings,
   MessageSquareText,
+  RefreshCw,
 } from 'lucide-react';
 import { WeatherModel, GeocodeResult } from '../types';
 import { AutocompleteDropdown } from './AutocompleteDropdown';
 import { MapExportControl } from './MapExportControl';
-import refreshIcon from '../assets/refresh-icon.png';
 
 interface NavbarProps {
   models: WeatherModel[];
@@ -22,7 +23,6 @@ interface NavbarProps {
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
   onOpenPreferences: () => void;
-  onOpenModelGuide: () => void;
   hasCartoKey: boolean;
   /** Opens the export dialog (SCRUM-117). */
   onOpenExportDialog: () => void;
@@ -31,6 +31,14 @@ interface NavbarProps {
   /** The server can file feedback in Jira, so the feedback button is shown (SCRUM-179). */
   feedbackEnabled: boolean;
   onOpenFeedback: () => void;
+  /** A newer run is published than the data on screen, so a click is worth a call (SCRUM-113). */
+  canRefresh?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  /** Hover hint: why the button is disabled, or what it will do (SCRUM-257). */
+  refreshHint?: RefreshHint;
+  /** Non-blocking failure of the last click; the old data stays on screen. */
+  refreshError?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,13 +50,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAndAddLocation,
   onOpenMapSettings,
   onOpenPreferences,
-  onOpenModelGuide,
   hasCartoKey,
   onOpenExportDialog,
   savingMap,
   feedbackEnabled,
   onOpenFeedback,
+  canRefresh = false,
+  refreshing = false,
+  onRefresh,
+  refreshHint,
+  refreshError = null,
 }) => {
+  const hint = refreshHint ?? {
+    text: canRefresh ? 'Refresh data now' : 'Latest run already loaded',
+    detail: null,
+  };
+  const hintDescription = hint.detail ? `${hint.text} · ${hint.detail}` : hint.text;
+  // A disabled button takes no pointer events and no focus, so the hint hangs off a wrapper.
+  const [hintOpen, setHintOpen] = useState(false);
+
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
       {/* Brand & Title */}
@@ -100,8 +120,56 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Right Controls: Model, guide, export, Preferences */}
+      {/* Right Controls: Model, feedback, export, Preferences */}
       <div className="flex items-center gap-2 shrink-0">
+        {refreshError && (
+          <span
+            data-testid="refresh-error"
+            role="status"
+            title={refreshError}
+            className="hidden xl:inline text-[11px] text-amber-300 max-w-[14rem] truncate"
+          >
+            {refreshError}
+          </span>
+        )}
+
+        {/* Refresh (SCRUM-113): its own visibility rule, since the model dropdown hides below lg */}
+        <span
+          className="relative inline-flex"
+          data-testid="refresh-zone"
+          onMouseEnter={() => setHintOpen(true)}
+          onMouseLeave={() => setHintOpen(false)}
+          onFocus={() => setHintOpen(true)}
+          onBlur={() => setHintOpen(false)}
+        >
+          <button
+            onClick={() => onRefresh?.()}
+            disabled={!canRefresh || refreshing}
+            aria-busy={refreshing}
+            aria-label="Refresh data now"
+            aria-describedby="refresh-hint"
+            data-testid="refresh-data"
+            className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-4 h-4 text-sky-400${refreshing ? ' animate-spin' : ''}`} />
+          </button>
+          {/* Always in the DOM, so the reason is announced even though the button cannot be focused. */}
+          <span id="refresh-hint" className="sr-only">
+            {hintDescription}
+          </span>
+          {hintOpen && (
+            <div
+              role="tooltip"
+              aria-hidden="true"
+              data-testid="refresh-hint-box"
+              className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-dark-600 bg-dark-900/95 px-2.5 py-2 text-[11px] leading-snug text-gray-200 shadow-lg"
+            >
+              <div>{hint.text}</div>
+              {hint.detail && <div className="mt-0.5 text-gray-400">{hint.detail}</div>}
+            </div>
+          )}
+        </span>
+
         {/* Weather Model Dropdown */}
         <div className="hidden lg:flex items-center gap-1 text-xs">
           <Layers className="w-3.5 h-3.5 text-gray-400" />
@@ -117,18 +185,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             ))}
           </select>
         </div>
-
-        {/* Model update frequency guide (SCRUM-110). Sits right of the model
-            selector and left of the gear; outside the lg-only block so it stays
-            reachable when the selector itself is hidden. */}
-        <button
-          onClick={onOpenModelGuide}
-          title="Model Update Cycles & Frequency"
-          aria-label="Model Update Cycles & Frequency"
-          className="flex items-center justify-center p-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 transition"
-        >
-          <img src={refreshIcon} alt="" aria-hidden="true" className="w-4 h-4" />
-        </button>
 
         {/* Feedback (SCRUM-179): left of export so export stays immediately left of the gear */}
         {feedbackEnabled && (

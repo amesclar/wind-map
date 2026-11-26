@@ -149,7 +149,7 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
         model: 'best_match',
         time: null,
       },
-      { signal: expect.any(AbortSignal) },
+      { signal: expect.any(AbortSignal), refresh: false },
     );
 
     // Same bounds: the view did not change, so no second request.
@@ -160,6 +160,25 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     setBounds({ south: 46, north: 50, west: -124, east: -120 });
     fire('moveend');
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+  });
+
+  it('sends refresh once per click, not on the next pan (SCRUM-113)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    const { rerender } = renderHook(
+      ({ seq }: { seq: number }) => useWindGrid(map, 'best_match', true, null, undefined, undefined, undefined, seq),
+      { initialProps: { seq: 0 } },
+    );
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    rerender({ seq: 1 });
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[1][1]).toMatchObject({ refresh: true });
+
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('moveend');
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[2][1]).toMatchObject({ refresh: false });
   });
 
   it('fetches nothing and clears the points while no layer needs the grid', async () => {
@@ -253,6 +272,41 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
 
     await waitFor(() => expect(onQuotaExhausted).toHaveBeenCalledWith('2026-11-24T00:00:29+00:00'));
     expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('does not refetch for the pan Leaflet makes to fit an edge pop-up (SCRUM-251)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    renderHook(() => useWindGrid(map, 'best_match', true));
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    // A barb clicked near the edge: Leaflet pans just enough for its pop-up, then fires moveend.
+    setBounds({ south: 46.98, north: 48.98, west: -123.01, east: -121.01 });
+    fire('autopanstart');
+    fire('moveend');
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Skipping this refresh keeps the markers (and their open pop-up) in place.
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(1);
+
+    // The next real pan still refreshes the grid.
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('moveend');
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not let an auto-pan that never moved suppress a later user pan (SCRUM-251)', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    renderHook(() => useWindGrid(map, 'best_match', true));
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    fire('autopanstart');
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('dragstart');
+    fire('moveend');
+
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
   });
 
   it('retries the same viewport after a failed request', async () => {

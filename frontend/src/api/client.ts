@@ -1,12 +1,14 @@
 import {
   AppConfig,
   CurrentGridResponse,
+  ModelAvailability,
   FeedbackPayload,
   FeedbackResult,
   GeocodeResult,
   GridWindPoint,
   NewLocation,
   SavedLocation,
+  TidePointResponse,
   WeatherForecastResponse,
   WeatherModelInfo,
 } from '../types';
@@ -53,9 +55,14 @@ export interface RequestOptions {
 export interface ForecastRequestOptions extends RequestOptions {
   /** ISO 8601 hour; omitted means current conditions. */
   time?: string | null;
+  /**
+   * One-shot refresh (SCRUM-113): the server refetches only the rows older than the model's
+   * newest published run, so a pan, zoom, hour or model change never sends it.
+   */
+  refresh?: boolean;
 }
 
-type Params = Record<string, string | number>;
+type Params = Record<string, string | number | boolean>;
 
 function url(path: string, params?: Params): string {
   if (!params) return `${API_BASE}${path}`;
@@ -101,29 +108,46 @@ export function deleteLocation(id: number): Promise<void> {
   return request(`/locations/${id}`, 'Failed to delete location', { init: { method: 'DELETE' } });
 }
 
+/** Sea level and the nearest high/low at one point (SCRUM-195). `time` is an ISO hour or null. */
+export function fetchPointTide(
+  latitude: number,
+  longitude: number,
+  time: string | null,
+  { signal }: RequestOptions = {},
+): Promise<TidePointResponse> {
+  const params: Params = { lat: latitude, lon: longitude };
+  if (time) params.hour = time;
+  return request('/tides/point', 'Failed to load tide data', { params, signal });
+}
+
 export function fetchModels(): Promise<WeatherModelInfo[]> {
   return request('/weather/models', 'Failed to load weather models');
+}
+
+/** Publication times of the model's newest run (SCRUM-256); null fields when it has none. */
+export function fetchModelAvailability(model: string): Promise<ModelAvailability> {
+  return request(`/weather/models/${encodeURIComponent(model)}/availability`, 'Failed to load model availability');
 }
 
 export function fetchWeather(
   locationId: number,
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse> {
-  return request('/weather', 'Failed to load weather data', {
-    params: { location_id: locationId, model, timezone },
-    signal,
-  });
+  const params: Params = { location_id: locationId, model, timezone };
+  if (refresh) params.refresh = true;
+  return request('/weather', 'Failed to load weather data', { params, signal });
 }
 
 export function fetchAllWeather(
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal, time }: ForecastRequestOptions = {},
+  { signal, time, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse[]> {
   const params: Params = { model, timezone };
   if (time) params.time = time;
+  if (refresh) params.refresh = true;
   return request('/weather/all', 'Failed to load all weather data', { params, signal });
 }
 
@@ -151,11 +175,19 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   }
 }
 
-/** File feedback as a Jira issue (SCRUM-179). Never retried automatically: a retry could duplicate the ticket. */
+/**
+ * File feedback as a Jira issue (SCRUM-179, SCRUM-219). Always multipart, so the optional files
+ * travel in the same request; the browser sets the boundary because no Content-Type is passed.
+ * Never retried automatically: a retry could duplicate the ticket.
+ */
 export function submitFeedback(payload: FeedbackPayload): Promise<FeedbackResult> {
-  return request('/feedback', 'Failed to send feedback', {
-    init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
-  });
+  const { files = [], ...fields } = payload;
+  const body = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) body.append(key, String(value));
+  }
+  for (const file of files) body.append('files', file, file.name);
+  return request('/feedback', 'Failed to send feedback', { init: { method: 'POST', body } });
 }
 
 export function fetchWindGrid(
@@ -170,11 +202,12 @@ export function fetchWindGrid(
     /** ISO 8601 hour inside the model's horizon; omitted means current (SCRUM-115). */
     time?: string | null;
   },
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<GridWindPoint[]> {
   const { time, ...box } = params;
   const query: Params = { ...box, model: params.model ?? DEFAULT_MODEL };
   if (time) query.time = time;
+  if (refresh) query.refresh = true;
   return request('/weather/grid', 'Failed to fetch wind grid', { params: query, signal });
 }
 
@@ -203,10 +236,9 @@ export function fetchPointWeather(
   lon: number,
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal }: RequestOptions = {},
+  { signal, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse> {
-  return request('/weather/point', 'Failed to fetch point weather', {
-    params: { lat, lon, model, timezone },
-    signal,
-  });
+  const params: Params = { lat, lon, model, timezone };
+  if (refresh) params.refresh = true;
+  return request('/weather/point', 'Failed to fetch point weather', { params, signal });
 }

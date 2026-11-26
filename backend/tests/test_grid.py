@@ -116,16 +116,53 @@ async def test_fetch_multiple_points_array_response(open_meteo):
 
 
 @pytest.mark.asyncio
-async def test_fetch_handles_null_wind_values(open_meteo):
-    """None values from Open-Meteo should default to 0.0, not raise."""
+async def test_null_wind_values_stay_null(open_meteo):
+    """A missing value is no data, not calm wind and 32 °F (SCRUM-225)."""
     pts = [(48.0, -122.0)]
-    item = {"current": {"wind_speed_10m": None, "wind_direction_10m": None}}
+    item = {
+        "current": {
+            "wind_speed_10m": None,
+            "wind_direction_10m": None,
+            "temperature_2m": None,
+        }
+    }
     open_meteo.respond(grid_payload(item))
 
     result = await get_grid_wind(pts, "best_match")
 
-    assert result[0].wind_speed_knots == 0.0
-    assert result[0].wind_direction_deg == 0.0
+    assert result[0].wind_speed_knots is None
+    assert result[0].wind_direction_deg is None
+    assert result[0].temperature_f is None
+
+
+@pytest.mark.asyncio
+async def test_partial_values_make_the_point_no_data(open_meteo):
+    """A speed without a direction or temperature cannot be drawn, so the point is no data."""
+    open_meteo.respond(grid_payload(grid_item(speed=12.0, direction=None, temp_c=None)))
+
+    result = await get_grid_wind([(48.0, -122.0)], "best_match")
+
+    assert result[0].wind_speed_knots is None
+    assert result[0].wind_direction_deg is None
+    assert result[0].temperature_f is None
+
+
+@pytest.mark.asyncio
+async def test_no_data_points_are_not_cached(open_meteo):
+    """A null-only frame is a temporary gap; the next call must ask Open-Meteo again (SCRUM-225)."""
+    item = {
+        "current": {
+            "wind_speed_10m": None,
+            "wind_direction_10m": None,
+            "temperature_2m": None,
+        }
+    }
+    open_meteo.respond(grid_payload(item))
+
+    await get_grid_wind([(48.0, -122.0)], "best_match")
+    await get_grid_wind([(48.0, -122.0)], "best_match")
+
+    assert open_meteo.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -133,9 +170,9 @@ async def test_fetch_non_best_match_model_adds_models_param(open_meteo):
     """A non-default model should be forwarded in the Open-Meteo request params."""
     open_meteo.respond(grid_payload(grid_item()))
 
-    await get_grid_wind([(48.0, -122.0)], "ecmwf_ifs04")
+    await get_grid_wind([(48.0, -122.0)], "ecmwf_ifs")
 
-    assert open_meteo.last_params.get("models") == "ecmwf_ifs04"
+    assert open_meteo.last_params.get("models") == "ecmwf_ifs"
 
 
 @pytest.mark.asyncio
@@ -262,7 +299,7 @@ async def test_get_grid_wind_different_models_cached_independently(open_meteo):
     await get_grid_wind(pts, "best_match")
     assert open_meteo.call_count == 1
 
-    await get_grid_wind(pts, "ecmwf_ifs04")
+    await get_grid_wind(pts, "ecmwf_ifs")
     assert open_meteo.call_count == 2  # different model → cache miss
 
 

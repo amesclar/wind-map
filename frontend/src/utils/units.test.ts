@@ -8,6 +8,7 @@ import {
   formatTemperature,
   formatTemperatureFromF,
   knotsToUnit,
+  NO_DATA,
   roundKnotsInUnit,
   SPEED_UNIT_LABEL,
 } from './units';
@@ -29,6 +30,31 @@ describe('formatSpeed (SCRUM-92)', () => {
 
   it('has a label for every unit', () => {
     expect(Object.keys(SPEED_UNIT_LABEL).sort()).toEqual(['kmh', 'knots', 'mph', 'ms']);
+  });
+});
+
+describe('missing values (SCRUM-225)', () => {
+  const missing = makePoint(0, 0, 0, {
+    temperature_c: null,
+    temperature_f: null,
+    wind_speed_knots: null,
+    wind_speed_kmh: null,
+    wind_speed_mph: null,
+    wind_speed_ms: null,
+    wind_gust_knots: null,
+    wind_gust_kmh: null,
+    wind_gust_mph: null,
+    wind_gust_ms: null,
+    wind_direction_deg: null,
+    wind_direction_cardinal: null,
+  });
+
+  it('shows "No data" instead of a fabricated 0 kt or 32 °F', () => {
+    expect(formatSpeed(missing, 'speed', 'knots')).toBe(NO_DATA);
+    expect(formatSpeed(missing, 'gust', 'mph')).toBe(NO_DATA);
+    expect(formatTemperature(missing, 'imperial')).toBe(NO_DATA);
+    expect(formatTemperature(missing, 'metric')).toBe(NO_DATA);
+    expect(formatDirection(missing)).toBe(NO_DATA);
   });
 });
 

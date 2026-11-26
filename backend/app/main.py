@@ -13,10 +13,11 @@ from backend.app import config
 from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
-from backend.app.routers import currents, feedback, geocode, grid, locations, weather
+from backend.app.routers import currents, feedback, geocode, grid, locations, tides, weather
 from backend.app.services import open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -24,6 +25,15 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
     clean_expired_cache()
+    # NWS asks every client for a contact address (SCRUM-255): say so once at startup rather than
+    # leaving it to be discovered in NOAA's traffic.
+    if not config.nws_user_agent_is_custom():
+        logger.warning(
+            "NWS_USER_AGENT is not set: api.weather.gov asks every client for a contact address, "
+            "so requests send the default %s. Set NWS_USER_AGENT to an app name and contact, "
+            "e.g. 'wind-map/0.11 (you@example.com)'.",
+            config.NWS_USER_AGENT,
+        )
     try:
         yield
     finally:
@@ -83,6 +93,7 @@ app.include_router(locations.router)
 app.include_router(weather.router)
 app.include_router(grid.router)
 app.include_router(currents.router)
+app.include_router(tides.router)
 app.include_router(geocode.router)
 app.include_router(feedback.router)
 

@@ -1,9 +1,12 @@
-"""Forecast service (SCRUM-92): cache lookup → Open-Meteo fetch → parse → cache store.
+"""Forecast service (SCRUM-92): cache lookup → provider fetch → parse → cache store.
 
 Each step is its own function or class:
-- `fetch_forecast`         HTTP only (services/open_meteo.py)
-- `parse_forecast`         pure parsing (services/forecast_parser.py)
+- `fetch_forecast`         HTTP only (services/open_meteo.py, services/nws.py)
+- `parse_provider_forecast`  pure parsing (services/forecast_parser.py, services/nws_parser.py)
 - `SavedLocationCache` / `PointCache`  caching (services/forecast_cache.py)
+
+Open-Meteo is the provider for every model but NDFD, which is dispatched by model id (SCRUM-106).
+Both providers share this cache: a warm (location, model, timezone, hour) costs no upstream call.
 """
 
 import math
@@ -17,13 +20,21 @@ from backend.app.config import (
     DEFAULT_MODEL,
     DEFAULT_TIMEZONE,
     FORECAST_DAYS,
+    NWS_MODEL,
     OPEN_METEO_FORECAST_URL,
     model_horizon_days,
 )
 from backend.app.models import POINT_LOCATION_ID, LocationResponse, WeatherForecastResponse
-from backend.app.services import open_meteo
-from backend.app.services.forecast_cache import ForecastCache, PointCache, SavedLocationCache
+from backend.app.services import nws, open_meteo
+from backend.app.services.forecast_cache import (
+    ForecastCache,
+    PointCache,
+    SavedLocationCache,
+    is_stale,
+)
 from backend.app.services.forecast_parser import FORECAST_VARIABLES, parse_forecast
+from backend.app.services.model_availability import refresh_clock
+from backend.app.services.nws_parser import parse_nws_forecast
 from backend.app.services.time_window import hour_key
 
 
@@ -39,7 +50,14 @@ async def fetch_forecast(
     timezone: str,
     days: int = FORECAST_DAYS,
 ) -> dict[str, Any]:
-    """Raw Open-Meteo forecast (current + hourly). Raises httpx.HTTPError."""
+    """Raw provider forecast (current + hourly). Raises httpx.HTTPError.
+
+    NDFD returns one gridpoint document per point instead of a request with parameters; the
+    parser turns its periods into the same slices (SCRUM-106).
+    """
+    if model == NWS_MODEL:
+        return await nws.fetch_gridpoints(latitude, longitude)
+
     variables = ",".join(FORECAST_VARIABLES)
     params = {
         **open_meteo.forecast_params(model),
@@ -51,6 +69,18 @@ async def fetch_forecast(
         "forecast_days": days,
     }
     return await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params)
+
+
+def parse_provider_forecast(
+    raw: dict[str, Any],
+    model: str,
+    at: datetime | None = None,
+    timezone: str = DEFAULT_TIMEZONE,
+) -> Any:
+    """The parser for the provider that served `raw` (SCRUM-106)."""
+    if model == NWS_MODEL:
+        return parse_nws_forecast(raw, at=at, timezone=timezone)
+    return parse_forecast(raw, at=at, timezone=timezone)
 
 
 def forecast_days_for(at: datetime, model: str, now: datetime | None = None) -> int:
@@ -67,6 +97,7 @@ async def _get_forecast(
     model: str,
     timezone: str,
     at: datetime | None = None,
+    refresh: bool = False,
 ) -> WeatherForecastResponse:
     """Serve from `cache` if fresh, otherwise fetch, parse and store.
 
@@ -74,11 +105,17 @@ async def _get_forecast(
     request, so a point cache hit shared by nearby coordinates reports the coordinates
     that were asked for. `at` selects one forecast hour instead of live conditions
     (SCRUM-115); the cache key already includes that hour.
+
+    `refresh` (SCRUM-113) skips a row that predates the model's newest published run and is
+    served from cache otherwise, so a click — or a stale tab sending the flag by hand — cannot
+    spend a call for data that already covers that run.
     """
     now = time.time()
     hit = cache.get(now)
     if hit:
-        return WeatherForecastResponse(**{**hit.payload, **identity}, cached=True, cached_at=hit.cached_at)
+        clock = await _run_clock_seconds(model) if refresh else None
+        if not is_stale(hit.cached_at, clock):
+            return WeatherForecastResponse(**{**hit.payload, **identity}, cached=True, cached_at=hit.cached_at)
 
     raw = await fetch_forecast(
         identity["latitude"],
@@ -88,7 +125,7 @@ async def _get_forecast(
         FORECAST_DAYS if at is None else forecast_days_for(at, model),
     )
     try:
-        parsed = parse_forecast(raw, at=at, timezone=timezone)
+        parsed = parse_provider_forecast(raw, model, at=at, timezone=timezone)
     except ValueError as exc:  # response did not cover the requested hour
         raise httpx.HTTPError(str(exc)) from exc
     payload = {
@@ -99,8 +136,17 @@ async def _get_forecast(
         "forecast": [p.model_dump() for p in parsed.points],
         "valid_time": parsed.valid_time,
     }
-    cache.put(payload, now)
+    # A frame with no wind value anywhere is a temporary upstream gap, not a calm forecast:
+    # return it but do not cache it, so the next request asks Open-Meteo again (SCRUM-225).
+    if any(p.wind_speed_knots is not None for p in (parsed.current, *parsed.points)):
+        cache.put(payload, now)
     return WeatherForecastResponse(**payload, cached=False, cached_at=now)
+
+
+async def _run_clock_seconds(model: str) -> float | None:
+    """The newest published run of `model` as Unix seconds, or None when unknown (SCRUM-113)."""
+    clock = await refresh_clock(model)
+    return None if clock is None else clock.timestamp()
 
 
 async def get_location_forecast(
@@ -108,6 +154,7 @@ async def get_location_forecast(
     model: str = DEFAULT_MODEL,
     timezone: str = DEFAULT_TIMEZONE,
     at: datetime | None = None,
+    refresh: bool = False,
 ) -> WeatherForecastResponse:
     """Forecast for a saved location, cached per (location, model, timezone, hour)."""
     identity = {
@@ -117,7 +164,7 @@ async def get_location_forecast(
         "longitude": location.longitude,
     }
     cache = SavedLocationCache(location.id, model, timezone, hour_key(at))
-    return await _get_forecast(cache, identity, model, timezone, at)
+    return await _get_forecast(cache, identity, model, timezone, at, refresh)
 
 
 async def get_point_forecast(
@@ -126,6 +173,7 @@ async def get_point_forecast(
     model: str = DEFAULT_MODEL,
     timezone: str = DEFAULT_TIMEZONE,
     at: datetime | None = None,
+    refresh: bool = False,
 ) -> WeatherForecastResponse:
     """Forecast for an arbitrary map point (barb selection), cached per rounded coordinates
     and hour. Reported with location_id POINT_LOCATION_ID and a coordinate name."""
@@ -136,4 +184,4 @@ async def get_point_forecast(
         "longitude": longitude,
     }
     cache = PointCache(latitude, longitude, model, timezone, hour_key(at))
-    return await _get_forecast(cache, identity, model, timezone, at)
+    return await _get_forecast(cache, identity, model, timezone, at, refresh)

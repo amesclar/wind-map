@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type L from 'leaflet';
 import { fetchWindGrid, parseQuotaExhausted } from '../api/client';
 import type { GridWindPoint } from '../types';
@@ -51,15 +51,21 @@ export function useWindGrid(
    * after the commit that creates the barbs and an export waiting on it cannot capture first.
    */
   onLoadingChange?: (loading: boolean) => void,
+  /** One-shot refresh trigger (SCRUM-113): a new value sends `refresh=true` exactly once. */
+  refreshSeq = 0,
 ): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
   const [loading, setLoading] = useState(false);
+  const servedRefresh = useRef(0);
 
   useEffect(() => {
     onLoadingChange?.(loading);
   }, [loading, onLoadingChange]);
 
   useEffect(() => {
+    // Read before the early returns: a click while the layer is off must not fire later.
+    let refreshOnce = refreshSeq !== servedRefresh.current;
+    servedRefresh.current = refreshSeq;
     if (!map) return;
     if (!enabled) {
       setPoints([]);
@@ -88,10 +94,13 @@ export function useWindGrid(
       const current = new AbortController();
       controller = current;
       setLoading(true);
+      // Only the click's own request refreshes; a pan in the same effect must not repeat it.
+      const refresh = refreshOnce;
+      refreshOnce = false;
       try {
         const next = await fetchWindGrid(
-          { ...box, cols, rows, model, time: validTime }, 
-          { signal: current.signal },
+          { ...box, cols, rows, model, time: validTime },
+          { signal: current.signal, refresh },
         );
         if (!current.signal.aborted) {
           setPoints(next);
@@ -116,16 +125,44 @@ export function useWindGrid(
       }
     };
 
+    // Leaflet auto-pans a marker pop-up that would overflow the viewport. That pan fires
+    // `moveend`, and refetching here would replace `points`, rebuild every marker and close
+    // the pop-up the pan was making room for (SCRUM-251). The pop-up's own pan is skipped; the
+    // next real pan or zoom refreshes as usual. A drag clears the flag too, in case an
+    // `autopanstart` never produces its `moveend`.
+    let autoPanning = false;
+    const onAutoPanStart = () => {
+      autoPanning = true;
+    };
+    const onDragStart = () => {
+      autoPanning = false;
+    };
+    const onMoveEnd = () => {
+      if (autoPanning) {
+        autoPanning = false;
+        return;
+      }
+      refresh();
+    };
+    const onZoomEnd = () => {
+      autoPanning = false;
+      refresh();
+    };
+
     refresh();
-    map.on('moveend', refresh);
-    map.on('zoomend', refresh);
+    map.on('autopanstart', onAutoPanStart);
+    map.on('dragstart', onDragStart);
+    map.on('moveend', onMoveEnd);
+    map.on('zoomend', onZoomEnd);
     return () => {
       disposed = true;
-      map.off('moveend', refresh);
-      map.off('zoomend', refresh);
+      map.off('autopanstart', onAutoPanStart);
+      map.off('dragstart', onDragStart);
+      map.off('moveend', onMoveEnd);
+      map.off('zoomend', onZoomEnd);
       controller?.abort();
     };
-  }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted]);
+  }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted, refreshSeq]);
 
   return points;
 }

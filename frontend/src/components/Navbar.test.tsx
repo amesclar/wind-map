@@ -17,7 +17,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onSelectAndAddLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
     onOpenPreferences: vi.fn(),
-    onOpenModelGuide: vi.fn(),
+    onRefresh: vi.fn(),
     hasCartoKey: false,
     onOpenExportDialog: vi.fn(),
     savingMap: false,
@@ -25,12 +25,12 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onOpenFeedback: vi.fn(),
     ...overrides,
   };
-  const { container } = render(<Navbar {...props} />);
+  const { container, rerender } = render(<Navbar {...props} />);
   const selectWith = (value: string) =>
     Array.from(container.querySelectorAll('select')).find((s) =>
       Array.from(s.options).some((o) => o.value === value),
     )!;
-  return { props, container, selectWith };
+  return { props, container, selectWith, rerender };
 }
 
 describe('Navbar (SCRUM-92)', () => {
@@ -60,11 +60,9 @@ describe('Navbar (SCRUM-92)', () => {
     expect(props.onSelectModel).toHaveBeenCalledWith('gfs_seamless');
   });
 
-  it('opens the model update frequency guide from the icon beside the model selector (SCRUM-110)', () => {
-    const { props } = renderNavbar();
-    const button = screen.getByRole('button', { name: 'Model Update Cycles & Frequency' });
-    fireEvent.click(button);
-    expect(props.onOpenModelGuide).toHaveBeenCalled();
+  it('has no model guide button any more (SCRUM-232)', () => {
+    renderNavbar();
+    expect(screen.queryByRole('button', { name: 'Model Update Cycles & Frequency' })).toBeNull();
   });
 
   it('opens the export dialog from the download trigger (SCRUM-117, SCRUM-157)', () => {
@@ -93,12 +91,12 @@ describe('Navbar (SCRUM-92)', () => {
     expect(screen.queryByText('°F')).toBeNull();
   });
 
-  it('shows the feedback button between the guide and export, keeping export left of the gear (SCRUM-179)', () => {
+  it('keeps the toolbar order feedback · export · gear (SCRUM-179, SCRUM-232)', () => {
     const { props, container } = renderNavbar();
     const buttons = Array.from(container.querySelectorAll('header button'));
     const titles = buttons.map((b) => b.getAttribute('title'));
     const feedback = titles.indexOf('Send feedback');
-    expect(titles.indexOf('Model Update Cycles & Frequency')).toBeLessThan(feedback);
+    expect(feedback).toBeGreaterThan(-1);
     expect(feedback).toBeLessThan(titles.indexOf('Export map image'));
     expect(titles.indexOf('Export map image')).toBe(titles.indexOf('Preferences') - 1);
     const button = screen.getByRole('button', { name: 'Send feedback' });
@@ -110,5 +108,50 @@ describe('Navbar (SCRUM-92)', () => {
   it('hides the feedback button when the server has no Jira configuration (SCRUM-179)', () => {
     renderNavbar({ feedbackEnabled: false });
     expect(screen.queryByRole('button', { name: 'Send feedback' })).toBeNull();
+  });
+});
+
+describe('refresh hint (SCRUM-257)', () => {
+  const hint = { text: 'Latest run already loaded', detail: 'Next run available ~16:17' };
+
+  it('stays hidden until the icon is hovered, then names the next run', () => {
+    renderNavbar({ refreshHint: hint });
+    expect(screen.queryByTestId('refresh-hint-box')).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByTestId('refresh-zone'));
+    const box = screen.getByTestId('refresh-hint-box');
+    expect(box.textContent).toContain('Latest run already loaded');
+    expect(box.textContent).toContain('Next run available ~16:17');
+
+    fireEvent.mouseLeave(screen.getByTestId('refresh-zone'));
+    expect(screen.queryByTestId('refresh-hint-box')).toBeNull();
+  });
+
+  it('describes the disabled button to assistive tech without a hover', () => {
+    renderNavbar({ refreshHint: hint });
+    const button = screen.getByTestId('refresh-data') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    const describedBy = button.getAttribute('aria-describedby')!;
+    expect(document.getElementById(describedBy)!.textContent).toBe(
+      'Latest run already loaded · Next run available ~16:17',
+    );
+  });
+
+  it('fires nothing while disabled and follows new hint text', () => {
+    const { props, rerender } = renderNavbar({ refreshHint: hint });
+    fireEvent.click(screen.getByTestId('refresh-data'));
+    expect(props.onRefresh).not.toHaveBeenCalled();
+
+    rerender(<Navbar {...props} refreshHint={{ text: 'Waiting for the first forecast', detail: null }} />);
+    fireEvent.mouseEnter(screen.getByTestId('refresh-zone'));
+    expect(screen.getByTestId('refresh-hint-box').textContent).toBe('Waiting for the first forecast');
+  });
+
+  it('invites the click while the button is enabled', () => {
+    const { props } = renderNavbar({ canRefresh: true, refreshHint: { text: 'Refresh data now', detail: null } });
+    fireEvent.mouseEnter(screen.getByTestId('refresh-zone'));
+    expect(screen.getByTestId('refresh-hint-box').textContent).toBe('Refresh data now');
+    fireEvent.click(screen.getByTestId('refresh-data'));
+    expect(props.onRefresh).toHaveBeenCalledTimes(1);
   });
 });

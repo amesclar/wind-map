@@ -220,8 +220,11 @@ export interface BarbLegendEntry {
   caption: string;
 }
 
-/** The four glyphs in the legend: calm, a half barb, a full barb and a 50 kt pennant. */
-export const BARB_LEGEND_KNOTS = [0, 5, 10, 50] as const;
+/**
+ * The six glyphs in the legend: calm, the half barb, the full barb, their additive pairs (15 and
+ * 20 kt, which teach how feathers combine) and the 50 kt pennant (SCRUM-240).
+ */
+export const BARB_LEGEND_KNOTS = [0, 5, 10, 15, 20, 50] as const;
 
 export function barbLegendEntries(speedUnit: WindSpeedUnit): BarbLegendEntry[] {
   const unit = SPEED_UNIT_LABEL[speedUnit];
