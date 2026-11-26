@@ -858,3 +858,31 @@ describe('MapView missing wind data (SCRUM-225)', () => {
     expect(marker!.popupHtml).not.toContain('32°F');
   });
 });
+
+describe('MapView container ref (SCRUM-283)', () => {
+  it('keeps the ref callback stable across a re-render', () => {
+    // A changing ref callback makes React detach and reattach the node on every render, and
+    // MapView re-renders on every grid update — the export hook's containerRef went null each time.
+    const assignments: (HTMLDivElement | null)[] = [];
+    const containerRef = {
+      get current() {
+        return assignments[assignments.length - 1] ?? null;
+      },
+      set current(node: HTMLDivElement | null) {
+        assignments.push(node);
+      },
+    };
+
+    const { rerender } = render(
+      <MapView {...baseProps} locations={[]} containerRef={containerRef} />,
+    );
+    const afterMount = assignments.length;
+    expect(afterMount).toBe(1);
+    expect(assignments[0]).not.toBeNull();
+
+    rerender(<MapView {...baseProps} locations={[]} containerRef={containerRef} />);
+    rerender(<MapView {...baseProps} locations={[]} containerRef={containerRef} />);
+
+    expect(assignments.length).toBe(afterMount);
+  });
+});

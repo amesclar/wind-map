@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import {
   SavedLocation,
@@ -595,10 +595,16 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [selectedLocation, focusLocation, chartBaseRef]);
 
   // Hand the node to both the internal ref (used to create the map) and the export's ref.
-  const setContainer = (node: HTMLDivElement | null) => {
-    mapContainerRef.current = node;
-    if (containerRef) containerRef.current = node;
-  };
+  // Memoised (SCRUM-283): a fresh function on every render makes React treat it as a different
+  // ref, detaching and reattaching the node — and MapView re-renders on every grid update, so
+  // the export hook's containerRef kept going null.
+  const setContainer = useCallback(
+    (node: HTMLDivElement | null) => {
+      mapContainerRef.current = node;
+      if (containerRef) containerRef.current = node;
+    },
+    [containerRef],
+  );
 
   // Nothing drawable in the whole view (SCRUM-225): say so instead of showing an empty
   // "calm" map. Only when a wind layer is on, because otherwise absence is expected.
