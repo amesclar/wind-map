@@ -5,7 +5,7 @@ import { CURRENT_TIERS, tierRangeLabel } from '../utils/currentTiers';
 import { WAVE_TIERS, waveRangeLabel } from '../utils/waveTiers';
 import { generateWindBarbSvg } from './WindBarb';
 import { generateCurrentChevronSvg } from './WaterCurrentChevron';
-import { generateWaveArrowSvg } from './WaveArrow';
+import { generateWaveKeySvg } from './WaveArrow';
 
 /**
  * Examples drawn in the key: a half barb (5 kt), a full plus a half (15 kt) and three fulls plus a
@@ -25,6 +25,13 @@ export const MAP_KEY_WIND_COLOR = '#cbd5e1';
 export const MAP_KEY_GLYPH_PX = 20;
 
 /**
+ * Wind barbs draw larger than the other key glyphs (SCRUM-304). At the shared 20 px a staff was
+ * about 1 px wide and the barb's ink 7.6 px tall against the chevron's 10 px, so the barbs read as
+ * the smallest thing in the key; at 28 px the ink matches the chevrons' height.
+ */
+export const MAP_KEY_WIND_GLYPH_PX = 28;
+
+/**
  * What each glyph's orientation means (SCRUM-294). One parallel line per layer, in the key and in
  * its `aria-label`: shape and colour say how much, but never which way the glyph points.
  */
@@ -39,7 +46,7 @@ function windKeySvg(speedKnots: number): string {
     speedKnots,
     directionDeg: 0,
     tempF: 50,
-    size: MAP_KEY_GLYPH_PX,
+    size: MAP_KEY_WIND_GLYPH_PX,
     showLabel: false,
     colorOverride: MAP_KEY_WIND_COLOR,
   });
@@ -74,35 +81,35 @@ export const MapLegend: React.FC<{
       data-testid="map-legend"
       role="img"
       aria-label={parts.join('; ')}
-      className="absolute left-3 top-3 z-[750] pointer-events-none max-w-[248px] rounded-lg border border-dark-600/70 bg-dark-900/85 px-2.5 py-2 backdrop-blur-xs"
+      className="absolute left-3 top-3 z-[750] pointer-events-none max-w-[300px] rounded-lg border border-dark-600/70 bg-dark-900/85 px-2.5 py-2 backdrop-blur-xs"
     >
-      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">Map key</div>
 
-      <div data-testid="map-legend-wind" className="flex items-end gap-1.5">
-        <span className="mb-2 text-[9px] leading-none text-gray-300">Wind (kt)</span>
+      <div data-testid="map-legend-wind" className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[10px] leading-none text-gray-300">Wind (kt)</span>
         {MAP_KEY_WIND_KNOTS.map((knots) => (
           <span
             key={knots}
             data-testid={`map-legend-wind-${knots}`}
-            className="flex flex-col items-center gap-0.5 text-[9px] leading-none text-gray-300"
+            className="inline-flex items-center gap-1 text-[10px] leading-none text-gray-300"
           >
             <span
               aria-hidden="true"
-              className="inline-flex"
-                dangerouslySetInnerHTML={{ __html: windKeySvg(knots) }}
+              className="inline-flex shrink-0"
+              dangerouslySetInnerHTML={{ __html: windKeySvg(knots) }}
             />
             <span>{knots}</span>
           </span>
         ))}
       </div>
-      <div data-testid="map-legend-wind-note" className="mt-1 text-[9px] leading-tight text-gray-400">
+      <div data-testid="map-legend-wind-note" className="mt-1 text-[10px] leading-tight text-gray-400">
         <div data-testid="map-legend-wind-direction">{MAP_KEY_ORIENTATION.wind}</div>
         <div>colour = temperature</div>
       </div>
 
       {currents && (
         <div data-testid="map-legend-currents" className="mt-1.5 border-t border-dark-600/60 pt-1.5">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Currents ({speedLabel})
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -110,11 +117,11 @@ export const MapLegend: React.FC<{
               <span
                 key={tier.id}
                 data-testid={`map-legend-current-${tier.id}`}
-                className="flex items-center gap-1 text-[9px] leading-none text-gray-300"
+                className="flex items-center gap-1 text-[10px] leading-none text-gray-300"
               >
                 <span
                   aria-hidden="true"
-                  className="inline-flex"
+                  className="inline-flex shrink-0"
                   dangerouslySetInnerHTML={{
                     __html: generateCurrentChevronSvg(tier.minKnots, 0, MAP_KEY_GLYPH_PX),
                   }}
@@ -125,7 +132,7 @@ export const MapLegend: React.FC<{
           </div>
           <div
             data-testid="map-legend-currents-note"
-            className="mt-1 text-[9px] leading-tight text-gray-400"
+            className="mt-1 text-[10px] leading-tight text-gray-400"
           >
             {MAP_KEY_ORIENTATION.currents}
           </div>
@@ -134,7 +141,7 @@ export const MapLegend: React.FC<{
 
       {waves && (
         <div data-testid="map-legend-waves" className="mt-1.5 border-t border-dark-600/60 pt-1.5">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-gray-300">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300">
             Waves ({waveUnit})
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -142,14 +149,14 @@ export const MapLegend: React.FC<{
               <span
                 key={tier.id}
                 data-testid={`map-legend-wave-${tier.id}`}
-                className="flex items-center gap-1 text-[9px] leading-none text-gray-300"
+                className="flex items-center gap-1 text-[10px] leading-none text-gray-300"
               >
                 <span
                   aria-hidden="true"
-                  className="inline-flex"
-                  // 180° from is due north travel: the key shows an arrow pointing up.
+                  className="inline-flex shrink-0"
+                  // Cropped to its own ink with the heads up, so the value sits against the symbol.
                   dangerouslySetInnerHTML={{
-                    __html: generateWaveArrowSvg(tier.minMetres, 180, MAP_KEY_GLYPH_PX),
+                    __html: generateWaveKeySvg(tier.minMetres, MAP_KEY_GLYPH_PX),
                   }}
                 />
                 {waveRangeLabel(tier, unitSystem)}
@@ -158,7 +165,7 @@ export const MapLegend: React.FC<{
           </div>
           <div
             data-testid="map-legend-waves-note"
-            className="mt-1 text-[9px] leading-tight text-gray-400"
+            className="mt-1 text-[10px] leading-tight text-gray-400"
           >
             {MAP_KEY_ORIENTATION.waves}
           </div>

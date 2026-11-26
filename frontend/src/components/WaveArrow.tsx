@@ -46,6 +46,44 @@ function waveLinePaths(x: number, amplitude: number, headHalfWidth: number): str
   return `<path d="${shaft}" /><path d="${head}" />`;
 }
 
+const round = (value: number): number => Number(value.toFixed(2));
+
+interface WaveGlyph {
+  tier: ReturnType<typeof waveTier>;
+  paths: string;
+  strokeWidth: number;
+  rimWidth: number;
+  /** Horizontal bounds of the ink, in viewBox units, including half the widest stroke. */
+  left: number;
+  right: number;
+}
+
+/** One glyph's paths and the horizontal bounds of its ink, shared by the map glyph and the key. */
+function waveGlyph(heightM: number): WaveGlyph {
+  const tier = waveTier(heightM);
+  const count = tier.lines;
+  const spacing = LINE_SPACING[count] ?? LINE_SPACING[4];
+  const strokeWidth = (LINE_STROKE[count] ?? 2) + (tier.bold ? 0.15 : 0);
+  const headHalfWidth = count === 1 ? HEAD_HALF_WIDTH : Math.min(HEAD_HALF_WIDTH, spacing / 2 - 1.1);
+  const offsets = lineOffsets(count);
+  const paths = offsets
+    .map((x) => waveLinePaths(x, LINE_AMPLITUDE[count] ?? 2, headHalfWidth))
+    .join('');
+  // One line has room for the full 2-unit rim; crowded glyphs take a thinner one so the rims of
+  // neighbouring lines and heads cannot merge.
+  const rimWidth = count === 1 ? 2 : 1.6;
+  // Half the widest stroke, so the rim itself is inside the box rather than clipped.
+  const pad = (strokeWidth + rimWidth) / 2;
+  return {
+    tier,
+    paths,
+    strokeWidth,
+    rimWidth,
+    left: (offsets[0] ?? 0) - headHalfWidth - pad,
+    right: (offsets[offsets.length - 1] ?? 0) + headHalfWidth + pad,
+  };
+}
+
 /**
  * SVG for one wave glyph (SCRUM-234, SCRUM-292): the swell drawn as counted wavy lines, each
  * ending in one chevron head, pointing where the waves travel.
@@ -61,21 +99,27 @@ export function generateWaveArrowSvg(
   directionDeg: number,
   size: number = waveTier(heightM).size,
 ): string {
-  const tier = waveTier(heightM);
-  const count = tier.lines;
-  const spacing = LINE_SPACING[count] ?? LINE_SPACING[4];
-  const strokeWidth = (LINE_STROKE[count] ?? 2) + (tier.bold ? 0.15 : 0);
-  const headHalfWidth = count === 1 ? HEAD_HALF_WIDTH : Math.min(HEAD_HALF_WIDTH, spacing / 2 - 1.1);
-  const paths = lineOffsets(count)
-    .map((x) => waveLinePaths(x, LINE_AMPLITUDE[count] ?? 2, headHalfWidth))
-    .join('');
-  // One line has room for the full 2-unit rim; crowded glyphs take a thinner one so the rims of
-  // neighbouring lines and heads cannot merge.
-  const rimWidth = count === 1 ? 2 : 1.6;
+  const glyph = waveGlyph(heightM);
   const rotation = `transform="rotate(${travelDirection(directionDeg)}, ${CENTRE}, ${CENTRE})" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
   const label = `${formatWaveHeight(heightM, 'metric')} waves from ${Math.round(directionDeg)}°`;
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${ARROW_VIEWBOX} ${ARROW_VIEWBOX}" role="img" aria-label="${escapeHtml(label)}" style="display:block;overflow:visible;">
-    <g ${rotation} stroke="${WAVE_TIER_OUTLINE}" stroke-width="${strokeWidth + rimWidth}">${paths}</g><g ${rotation} stroke="${tier.color}" stroke-width="${strokeWidth}">${paths}</g>
+    <g ${rotation} stroke="${WAVE_TIER_OUTLINE}" stroke-width="${glyph.strokeWidth + glyph.rimWidth}">${glyph.paths}</g><g ${rotation} stroke="${glyph.tier.color}" stroke-width="${glyph.strokeWidth}">${glyph.paths}</g>
+  </svg>`;
+}
+
+/**
+ * The map key's wave glyph (SCRUM-305): the same ink at the same scale, but with the viewBox and
+ * width cropped to the glyph itself and no rotation, so the heads point up and the key value can
+ * sit right against the symbol. In the square viewBox a one-line glyph left most of its box empty,
+ * which is why its value floated away from the line while a four-line glyph hugged its own.
+ */
+export function generateWaveKeySvg(heightM: number, size: number = 20): string {
+  const glyph = waveGlyph(heightM);
+  const width = glyph.right - glyph.left;
+  const scale = size / ARROW_VIEWBOX;
+  const label = `${formatWaveHeight(heightM, 'metric')} waves`;
+  return `<svg width="${round(width * scale)}" height="${size}" viewBox="${round(glyph.left)} 0 ${round(width)} ${ARROW_VIEWBOX}" role="img" aria-label="${escapeHtml(label)}" style="display:block;overflow:visible;">
+    <g stroke="${WAVE_TIER_OUTLINE}" stroke-width="${glyph.strokeWidth + glyph.rimWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round">${glyph.paths}</g><g stroke="${glyph.tier.color}" stroke-width="${glyph.strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round">${glyph.paths}</g>
   </svg>`;
 }
 
