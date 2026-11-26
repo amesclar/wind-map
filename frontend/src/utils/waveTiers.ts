@@ -1,5 +1,5 @@
 /**
- * Ocean-wave height tiers (SCRUM-234), shared by the arrows, the legend and the export credit.
+ * Ocean-wave height tiers (SCRUM-234), shared by the wave glyph, the legend and the export credit.
  *
  * The API serves significant wave height in metres; the imperial display converts to feet. The
  * direction it serves is where the waves come **from** (meteorological, like wind), so the arrow
@@ -16,6 +16,8 @@ export interface WaveTier {
   /** Inclusive lower bound in metres; the tier runs up to the next tier's `minMetres`. */
   minMetres: number;
   color: string;
+  /** Parallel wavy lines in the glyph: the height cue (SCRUM-292). */
+  lines: number;
   /** Glyph size in px; rougher water draws larger. */
   size: number;
   /** Heavier stroke for the top tiers. */
@@ -31,10 +33,10 @@ export const WAVE_TIER_OUTLINE = '#0b1220';
 // Sizes grew in SCRUM-263 (they were 20/24/28/32): at the old size a 2–4 m arrow read as a speck
 // beside a wind barb, and the tier is easier to tell apart from the swell it sits on.
 export const WAVE_TIERS: readonly WaveTier[] = [
-  { id: 'calm', label: '0–1 m', minMetres: 0, color: '#93c5fd', size: 28, bold: false },
-  { id: 'moderate', label: '1–2 m', minMetres: 1, color: '#38bdf8', size: 34, bold: false },
-  { id: 'rough', label: '2–4 m', minMetres: 2, color: '#f59e0b', size: 40, bold: true },
-  { id: 'high', label: '4+ m', minMetres: 4, color: '#ef4444', size: 46, bold: true },
+  { id: 'calm', label: '0–1 m', minMetres: 0, color: '#93c5fd', lines: 1, size: 28, bold: false },
+  { id: 'moderate', label: '1–2 m', minMetres: 1, color: '#38bdf8', lines: 2, size: 34, bold: false },
+  { id: 'rough', label: '2–4 m', minMetres: 2, color: '#f59e0b', lines: 3, size: 40, bold: true },
+  { id: 'high', label: '4+ m', minMetres: 4, color: '#ef4444', lines: 4, size: 46, bold: true },
 ];
 
 const METRIC_LABELS = ['0–1 m', '1–2 m', '2–4 m', '4+ m'];
