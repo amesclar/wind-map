@@ -23,6 +23,10 @@ describe('waveTier (SCRUM-234)', () => {
     expect(WAVE_TIERS.map((tier) => tier.size)).toEqual([28, 34, 40, 46]);
   });
 
+  it('draws one more wavy line per tier, so height reads by count (SCRUM-292)', () => {
+    expect(WAVE_TIERS.map((tier) => tier.lines)).toEqual([1, 2, 3, 4]);
+  });
+
   it('labels the ranges in feet or metres', () => {
     expect(WAVE_TIERS.map((tier) => waveRangeLabel(tier, 'metric'))).toEqual([
       '0–1 m',
