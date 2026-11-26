@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWavePopup, generateWaveArrowSvg, travelDirection } from './WaveArrow';
+import { buildWaveArrowIcon, buildWavePopup, generateWaveArrowSvg, travelDirection } from './WaveArrow';
 import type { WavePoint, WaveSeriesPoint } from '../types';
 import { WAVE_TIER_OUTLINE } from '../utils/waveTiers';
 
@@ -38,9 +38,27 @@ describe('generateWaveArrowSvg (SCRUM-234)', () => {
   });
 
   it('sizes the glyph by the height tier', () => {
-    expect(generateWaveArrowSvg(0.5, 0)).toContain('width="20"');
-    expect(generateWaveArrowSvg(4.5, 0)).toContain('width="32"');
+    expect(generateWaveArrowSvg(0.5, 0)).toContain('width="28"');
+    expect(generateWaveArrowSvg(4.5, 0)).toContain('width="46"');
     expect(generateWaveArrowSvg(4.5, 0)).toContain('#ef4444');
+  });
+});
+
+describe('buildWaveArrowIcon (SCRUM-263)', () => {
+  it('grows the smallest icon box to a 32 px hit area and centres the glyph in it', () => {
+    const icon = buildWaveArrowIcon({ ...point, height_m: 0.4 });
+
+    expect(icon.options.iconSize).toEqual([32, 32]);
+    expect(icon.options.iconAnchor).toEqual([16, 16]);
+    expect(icon.options.html).toContain('data-hit="32"');
+    expect(icon.options.html).toContain('width="28"');
+  });
+
+  it('keeps the larger tiers at their drawn size', () => {
+    const icon = buildWaveArrowIcon({ ...point, height_m: 4.5 });
+
+    expect(icon.options.iconSize).toEqual([46, 46]);
+    expect(icon.options.html).toContain('data-tier="high"');
   });
 });
 

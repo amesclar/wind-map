@@ -15,7 +15,9 @@ from backend.app.services.waves_service import (
 )
 from factories import upstream_error, upstream_status_error
 
-BBOX = {"min_lat": 47.0, "max_lat": 49.0, "min_lon": -123.0, "max_lon": -121.0}
+# Offshore Pacific: every corner is open water, so a fixture cell can sit near a node without the
+# 1 km land mask (SCRUM-263) deciding the test.
+BBOX = {"min_lat": 46.0, "max_lat": 48.0, "min_lon": -126.5, "max_lon": -125.0}
 HOUR = datetime(2026, 11, 25, 12, tzinfo=UTC)
 # Roughly 16 km from (47.6, -122.2): the nearest sea cell an inland request is snapped to.
 INLAND_REQUEST = (47.6, -122.2)
@@ -23,6 +25,11 @@ INLAND_CELL = (47.708, -122.375)
 # About 3 km away: a coastal point answered by the cell that covers it.
 COASTAL_REQUEST = (48.19, -122.51)
 COASTAL_CELL = (48.208, -122.542)
+# Open water south-west of the Strait of Juan de Fuca, the default fixture cell.
+OFFSHORE_CELL = (47.9, -125.5)
+# A Whidbey Island cell: the wave model answers with it and calls it sea, GLOBE calls it land.
+WHIDBEY_LAND_CELL = (48.375, -122.625)
+WHIDBEY_REQUEST = (48.35, -122.66)  # about 3.8 km away, inside the default 5 km tolerance
 
 
 def grid_params(**overrides) -> dict:
@@ -38,7 +45,7 @@ def iso(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def wave_item(height, direction, period, cell=(47.9, -124.6), at="2026-11-25T12:00"):
+def wave_item(height, direction, period, cell=OFFSHORE_CELL, at="2026-11-25T12:00"):
     """One point of a `current` response; all null means no waves."""
     return {
         "latitude": cell[0],
@@ -112,11 +119,11 @@ async def test_fetch_single_point_dict_response(open_meteo):
     """The marine API returns a plain object for one point."""
     open_meteo.respond(wave_item(1.4, 280.0, 8.5))
 
-    result = await get_grid_waves([(47.9, -124.6)])
+    result = await get_grid_waves([OFFSHORE_CELL])
 
     assert len(result) == 1
-    assert result[0].latitude == 47.9
-    assert result[0].longitude == -124.6
+    assert result[0].latitude == OFFSHORE_CELL[0]
+    assert result[0].longitude == OFFSHORE_CELL[1]
     assert result[0].height_m == 1.4
     assert result[0].direction_deg == 280.0
     assert result[0].period_s == 8.5
@@ -145,11 +152,22 @@ async def test_inland_snap_is_dropped_and_cached(open_meteo):
 
 
 @pytest.mark.asyncio
-async def test_a_coarse_grid_keeps_a_distant_cell(open_meteo):
-    """Half of a 1° grid spacing is about 55 km, so a 30 km snap belongs to its node."""
-    open_meteo.respond(wave_item(2.0, 300.0, 9.0, cell=(47.9, -123.5)))
+async def test_a_cell_on_land_is_dropped_and_cached(open_meteo):
+    """A cell 3.8 km away is inside the tolerance but on Whidbey Island: no arrow there."""
+    open_meteo.respond(wave_item(1.4, 280.0, 8.5, cell=WHIDBEY_LAND_CELL))
 
-    result = await get_grid_waves([(47.9, -124.0)], tolerance_km=land_tolerance_km(1.0, 1.0, 48.0))
+    assert await get_grid_waves([WHIDBEY_REQUEST]) == []
+    assert await get_grid_waves([WHIDBEY_REQUEST]) == []
+
+    assert open_meteo.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_coarse_grid_keeps_a_distant_cell(open_meteo):
+    """Half of a 1° grid spacing is about 55 km, so a 37 km snap belongs to its node."""
+    open_meteo.respond(wave_item(2.0, 300.0, 9.0, cell=(47.9, -125.0)))
+
+    result = await get_grid_waves([OFFSHORE_CELL], tolerance_km=land_tolerance_km(1.0, 1.0, 48.0))
 
     assert len(result) == 1
 
@@ -258,7 +276,7 @@ async def test_point_series_across_days_fetches_one_day_at_a_time(open_meteo):
 # ---------------------------------------------------------------------------
 
 
-NEAR_GRID_CELLS = [(47.05, -122.95), (47.05, -121.05), (48.95, -122.95), (48.95, -121.05)]
+NEAR_GRID_CELLS = [(46.05, -126.45), (46.05, -125.05), (47.95, -126.45), (47.95, -125.05)]
 
 
 def test_grid_endpoint_returns_points_and_echoes_the_hour(client, open_meteo):
@@ -288,7 +306,7 @@ def test_grid_endpoint_drops_inland_nodes(client, open_meteo):
     open_meteo.respond(
         [
             wave_item(None, None, None),
-            wave_item(1.5, 45.0, 7.0, cell=(47.05, -120.95)),
+            wave_item(1.5, 45.0, 7.0, cell=NEAR_GRID_CELLS[1]),
             wave_item(1.5, 45.0, 7.0, cell=INLAND_CELL),
             wave_item(None, None, None),
         ]
@@ -298,6 +316,30 @@ def test_grid_endpoint_drops_inland_nodes(client, open_meteo):
 
     assert len(body["points"]) == 1
     assert body["points"][0]["direction_deg"] == 45.0
+
+
+def test_grid_endpoint_drops_nodes_whose_cell_is_land(client, open_meteo):
+    """Three nodes over Admiralty Inlet are water; the fourth cell is on Whidbey Island (SCRUM-263)."""
+    nodes = [(48.15, -122.75), (48.15, -122.55), (48.25, -122.75), (48.25, -122.55)]
+    open_meteo.respond([wave_item(1.0, 20.0, 8.0, cell=node) for node in nodes])
+
+    body = client.get(
+        "/api/waves/grid",
+        params={
+            "min_lat": 48.15,
+            "max_lat": 48.25,
+            "min_lon": -122.75,
+            "max_lon": -122.55,
+            "cols": 2,
+            "rows": 2,
+        },
+    ).json()
+
+    assert [(point["latitude"], point["longitude"]) for point in body["points"]] == [
+        (48.15, -122.75),
+        (48.15, -122.55),
+        (48.25, -122.55),
+    ]
 
 
 def test_grid_endpoint_rejects_inverted_bbox(client, open_meteo):

@@ -19,8 +19,8 @@ describe('waveTier (SCRUM-234)', () => {
     expect(waveTier(9).id).toBe('high');
   });
 
-  it('draws rougher water larger', () => {
-    expect(WAVE_TIERS.map((tier) => tier.size)).toEqual([20, 24, 28, 32]);
+  it('draws rougher water larger (SCRUM-263 made every arrow bigger)', () => {
+    expect(WAVE_TIERS.map((tier) => tier.size)).toEqual([28, 34, 40, 46]);
   });
 
   it('labels the ranges in feet or metres', () => {

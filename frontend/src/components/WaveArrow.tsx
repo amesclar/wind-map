@@ -37,14 +37,23 @@ export function generateWaveArrowSvg(
   </svg>`;
 }
 
-/** Leaflet icon for a wave arrow; the data attributes make the tier and size testable. */
+/** Every arrow keeps at least this square of clickable area (SCRUM-263). */
+export const WAVE_ARROW_MIN_HIT_PX = 32;
+
+/**
+ * Leaflet icon for a wave arrow; the data attributes make the tier and hit area testable.
+ *
+ * The smallest tier draws a 28 px glyph, so its icon box grows to the 32 px minimum and the glyph
+ * is centred in it rather than stretched: the pointer target grows, the arrow does not.
+ */
 export function buildWaveArrowIcon(pt: WavePoint): L.DivIcon {
   const tier = waveTier(pt.height_m);
+  const box = Math.max(tier.size, WAVE_ARROW_MIN_HIT_PX);
   return L.divIcon({
     className: 'wave-arrow-marker',
-    html: `<div data-wave-arrow data-tier="${tier.id}" style="line-height:0;cursor:pointer;">${generateWaveArrowSvg(pt.height_m, pt.direction_deg, tier.size)}</div>`,
-    iconSize: [tier.size, tier.size],
-    iconAnchor: [tier.size / 2, tier.size / 2],
+    html: `<div data-wave-arrow data-tier="${tier.id}" data-hit="${box}" style="width:${box}px;height:${box}px;line-height:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">${generateWaveArrowSvg(pt.height_m, pt.direction_deg, tier.size)}</div>`,
+    iconSize: [box, box],
+    iconAnchor: [box / 2, box / 2],
   });
 }
 

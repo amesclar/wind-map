@@ -8,7 +8,9 @@ Two properties of the Marine API shape this module:
 - **It does not return null over land.** An inland request is snapped to the nearest sea cell
   (east of Seattle answered for a cell about 16 km away), so without a filter the layer would draw
   waves over land. A value whose cell is farther than the caller's tolerance from the requested
-  point is treated as "no waves" and cached as an empty row.
+  point is treated as "no waves" and cached as an empty row. Distance alone is not enough on a
+  narrow coast — the model's own mask is about 8 km wide, so an island cell can be two kilometres
+  away — so a cell on land in the 1 km GLOBE mask is dropped too (SCRUM-263).
 - **One request carries the whole UTC day.** The cache is keyed by (rounded lat, lon, hour) and one
   hourly request stores every hour of that day, as the currents cache does (SCRUM-166).
 
@@ -36,6 +38,7 @@ from backend.app.config import (
 from backend.app.database import db_connection
 from backend.app.models import WavePoint, WaveSeriesPoint
 from backend.app.services import open_meteo
+from backend.app.services.land_mask import is_land
 from backend.app.services.model_info import floor_hour
 from backend.app.services.time_window import hour_key
 from backend.app.units import coord_key
@@ -105,7 +108,7 @@ async def get_grid_waves(
         return _points_from(points, cached, hour)
 
     if at is None:
-        values = _drop_snapped(await _fetch_wave(missing), missing, tolerance_km)
+        values = _drop_on_land(_drop_snapped(await _fetch_wave(missing), missing, tolerance_km))
         _store(missing, values, hour, now)
         for point, value in zip(missing, values, strict=True):
             cached[coord_key(*point)] = value
@@ -114,7 +117,7 @@ async def get_grid_waves(
     # One response already carries the whole UTC day, so cache every hour of it (SCRUM-166).
     series = await _fetch_hourly(missing, at, at)
     for series_hour, values in series.items():
-        _store(missing, _drop_snapped(values, missing, tolerance_km), series_hour, now)
+        _store(missing, _drop_on_land(_drop_snapped(values, missing, tolerance_km)), series_hour, now)
     requested = hour_key(at)
     if requested not in series:
         raise httpx.HTTPError(f"Open-Meteo wave response did not include the requested hour {requested}")
@@ -143,7 +146,8 @@ async def get_point_waves(
         series = await _fetch_hourly([(lat, lon)], day_start, day_start)
         stamp = time.time()
         for series_hour, values in series.items():
-            _store([(lat, lon)], _drop_snapped(values, [(lat, lon)], tolerance_km), series_hour, stamp)
+            values = _drop_on_land(_drop_snapped(values, [(lat, lon)], tolerance_km))
+            _store([(lat, lon)], values, series_hour, stamp)
     if missing_days:
         cached = _read_series(lat, lon, [hour_key(moment) for moment in wanted])
 
@@ -333,6 +337,16 @@ def _drop_snapped(
             continue
         result.append(value)
     return result
+
+
+def _drop_on_land(values: list[Value]) -> list[Value]:
+    """Null values whose model cell is land (SCRUM-263).
+
+    The cell is where the arrow is drawn, and the wave models' mask is coarse enough to put one on
+    a narrow island (Whidbey Island, in the spike). The distance filter cannot see that: the cell
+    is close, it is simply not sea, so every surviving cell is tested against the 1 km land mask.
+    """
+    return [None if value is not None and is_land(value.latitude, value.longitude) else value for value in values]
 
 
 def _value(height: object, direction: object, period: object, cell: tuple[float, float]) -> Value:
