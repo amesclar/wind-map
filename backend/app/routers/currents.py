@@ -5,15 +5,16 @@ weather model, with its own 240-hour horizon.
 """
 
 import logging
-from datetime import UTC, datetime
-from math import ceil
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.app.config import CURRENT_HORIZON_HOURS, GRID_MAX_DIM
 from backend.app.models import CurrentGridResponse, CurrentPointResponse
+from backend.app.routers.errors import quota_exhausted
 from backend.app.services.currents_service import get_grid_currents, get_point_currents
+from backend.app.services.grid_box import grid_points, validate_bounds
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.services.time_window import hour_key, validate_current_time
 
@@ -26,24 +27,6 @@ TIME_QUERY = Query(
     description="Forecast hour (ISO 8601 with offset, hour-aligned) up to the ocean current "
     "horizon. Omit for current conditions.",
 )
-
-
-def quota_exhausted(exc: QuotaExceededError) -> HTTPException:
-    """503 with the reset instant, matching the wind grid's quota response (SCRUM-170)."""
-    detail = {
-        "code": "open_meteo_quota_exhausted",
-        "message": "Open-Meteo request limit reached",
-        "reset_at": exc.reset_at.isoformat() if exc.reset_at else None,
-    }
-    headers = None
-    if exc.reset_at:
-        seconds = max(0, ceil((exc.reset_at - datetime.now(UTC)).total_seconds()))
-        headers = {"Retry-After": str(seconds)}
-    return HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=detail,
-        headers=headers,
-    )
 
 
 @router.get("/grid", response_model=CurrentGridResponse)
@@ -61,16 +44,8 @@ async def get_current_grid(
     Land nodes and hours outside the model domain are absent from `points`.
     """
     at = validate_current_time(time)
-    if min_lat >= max_lat:
-        raise HTTPException(status_code=422, detail="min_lat must be less than max_lat")
-    if min_lon >= max_lon:
-        raise HTTPException(status_code=422, detail="min_lon must be less than max_lon")
-
-    lat_step = (max_lat - min_lat) / (rows - 1) if rows > 1 else 0
-    lon_step = (max_lon - min_lon) / (cols - 1) if cols > 1 else 0
-    points = [
-        (round(min_lat + r * lat_step, 6), round(min_lon + c * lon_step, 6)) for r in range(rows) for c in range(cols)
-    ]
+    validate_bounds(min_lat, max_lat, min_lon, max_lon)
+    points = grid_points(min_lat, max_lat, min_lon, max_lon, cols, rows)
 
     try:
         found = await get_grid_currents(points, at=at)
