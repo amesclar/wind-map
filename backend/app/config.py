@@ -290,6 +290,17 @@ FEEDBACK_MAX_PER_HOUR = _positive_int("FEEDBACK_MAX_PER_HOUR", 5)  # per client 
 FEEDBACK_GLOBAL_MAX_PER_HOUR = FEEDBACK_MAX_PER_HOUR * 4  # all clients together
 
 
+def _ip_set(name: str) -> frozenset[str]:
+    """Comma-separated literal addresses from the environment; empty when unset."""
+    return frozenset(part.strip() for part in os.getenv(name, "").split(",") if part.strip())
+
+
+# Proxies whose `X-Forwarded-For` may be believed (SCRUM-270). Empty by default on purpose: the
+# header is client-supplied, so believing it without knowing the proxy would let a caller pick its
+# own rate-limit bucket. Behind Cloud Run, set it to the proxy addresses the platform uses.
+TRUSTED_PROXY_IPS = _ip_set("TRUSTED_PROXY_IPS")
+
+
 def feedback_enabled() -> bool:
     """True when every Jira setting needed to file a ticket is present."""
     return bool(JIRA_BASE_URL and JIRA_EMAIL and JIRA_API_TOKEN)

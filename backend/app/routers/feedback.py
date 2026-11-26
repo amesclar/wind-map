@@ -11,6 +11,7 @@ from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
 from backend.app import config
+from backend.app.net import client_ip
 from backend.app.services import feedback_attachments, feedback_limiter, jira_service
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,8 @@ class FeedbackResponse(BaseModel):
 
 
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    """The address the limiter keys on, proxy-aware (SCRUM-270)."""
+    return client_ip(request)
 
 
 def _invalid(exc: ValidationError) -> JSONResponse:
