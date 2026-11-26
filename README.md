@@ -206,6 +206,27 @@ container does not use it. The password is never printed; read it with:
 gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
 ```
 
+### Self-Hosted Open-Meteo Fallback (prepared, not running)
+
+The SCRUM-236 spike recommended a self-hosted Open-Meteo instance as a fallback for the free API
+(SCRUM-265). The setup is committed, but **nothing is created or billing** until you ask for it:
+
+```bash
+scripts/open-meteo-fallback.sh plan          # what would be created, and the cost; the default
+scripts/open-meteo-fallback.sh status        # read-only check of the instance and firewall rule
+scripts/open-meteo-fallback.sh create --yes  # bills about $58.92/month while it exists
+scripts/open-meteo-fallback.sh delete --yes  # returns the project to $0
+```
+
+`create` builds one Compute Engine `e2-standard-2` in `us-west1-b` with a 100 GB boot disk that is
+also the Open-Meteo cache (`CACHE_SIZE=32GB`), running Container-Optimized OS. Its startup script
+starts the API pinned by digest plus a ten-minute warm-up loop for the default view, because the
+spike measured 133 s for a cold first request against 30 to 80 ms warm. Port 8080 is open only to
+the VPC connector's range; the instance's external address is for the outbound S3 download.
+
+Reaching it from Cloud Run needs a Serverless VPC Access connector (about $9/month) and the
+app-side fallback, which SCRUM-266 adds. `plan` and `status` are safe to run at any time.
+
 ### Google Cloud Run Deployment
 
 The public deployment runs the same image on Cloud Run behind HTTP Basic Auth, with SQLite
