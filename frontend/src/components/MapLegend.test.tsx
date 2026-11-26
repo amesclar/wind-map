@@ -1,6 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { MAP_KEY_ORIENTATION, MAP_KEY_WIND_COLOR, MAP_KEY_WIND_KNOTS, MapLegend } from './MapLegend';
+import {
+  MAP_KEY_GLYPH_PX,
+  MAP_KEY_ORIENTATION,
+  MAP_KEY_WIND_COLOR,
+  MAP_KEY_WIND_GLYPH_PX,
+  MAP_KEY_WIND_KNOTS,
+  MapLegend,
+} from './MapLegend';
 import { CURRENT_TIERS } from '../utils/currentTiers';
 import { WAVE_TIERS } from '../utils/waveTiers';
 
@@ -38,12 +45,40 @@ describe('MapLegend (SCRUM-263)', () => {
       expect(item.querySelectorAll(':scope > *')).toHaveLength(2);
       expect(item.querySelector('svg')).toBeTruthy();
       expect(item.lastElementChild?.textContent).toBe(String(knots));
+      // The glyph keeps a fixed slot, so its value starts at the same offset every time.
+      expect(item.firstElementChild?.className).toContain('shrink-0');
     });
 
-    // The row wraps like the others rather than aligning to the tallest item.
+    // The row is a column grid, not a flow that shifts with each label's width.
     const row = screen.getByTestId('map-legend-wind');
-    expect(row.className).toContain('flex-wrap');
-    expect(row.className).not.toContain('items-end');
+    expect(row.className).toContain('grid');
+    expect(row.className).not.toContain('flex-wrap');
+  });
+
+  it('aligns every row on a column grid with fixed glyph slots (SCRUM-304)', () => {
+    render(<MapLegend speedUnit="knots" unitSystem="metric" currents waves />);
+
+    for (const rowId of ['map-legend-currents', 'map-legend-waves']) {
+      const row = screen.getByTestId(rowId);
+      expect(row.querySelector('[class*="grid-cols-4"]')).toBeTruthy();
+      [...row.querySelectorAll('svg')].forEach((svg) => {
+        expect(svg.parentElement?.className).toContain('shrink-0');
+      });
+    }
+
+    // Wind keeps its inline label in the first cell, then three equal value columns.
+    expect(screen.getByTestId('map-legend-wind').className).toContain(
+      'grid-cols-[auto_repeat(3,minmax(0,1fr))]',
+    );
+  });
+
+  it('draws the wind barbs larger than the other key glyphs (SCRUM-304)', () => {
+    const { container } = render(<MapLegend speedUnit="knots" unitSystem="metric" />);
+    const barb = container.querySelector('[data-testid="map-legend-wind-5"] svg')!;
+
+    expect(MAP_KEY_WIND_GLYPH_PX).toBeGreaterThan(MAP_KEY_GLYPH_PX);
+    expect(MAP_KEY_WIND_GLYPH_PX).toBe(28);
+    expect(barb.getAttribute('width')).toBe(String(MAP_KEY_WIND_GLYPH_PX));
   });
 
   it('draws the three wind glyphs additively: half barb, full plus half, three fulls plus half', () => {
