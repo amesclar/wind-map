@@ -133,6 +133,7 @@ export const App: React.FC = () => {
     windColorOverlayVisible: mapSettings.windColorOverlayVisible,
     bcDepthVisible: mapSettings.bcDepthVisible,
     seamarksVisible: mapSettings.seamarksVisible,
+    wavesVisible: mapSettings.wavesVisible,
     weatherLoading: allWeather.loading,
   });
 
@@ -157,21 +158,30 @@ export const App: React.FC = () => {
     setSelection({ kind: 'saved', location });
   }, []);
 
-  // Startup: config, models, saved locations, then the user's position.
+  // Startup: config, models, saved locations and the user's position.
   const { applyServerConfig } = mapSettings;
   useEffect(() => {
     let cancelled = false;
     async function init() {
       try {
-        const config = await fetchAppConfig();
+        // The four independent requests go out together (SCRUM-284): they used to run strictly in
+        // series, so the map focus and the model selector waited for the sum of every round trip —
+        // each of which is a Basic Auth challenge on the public deployment.
+        const positionPromise = getCurrentPosition();
+        const [config, availableModels, saved] = await Promise.all([
+          fetchAppConfig(),
+          fetchModels(),
+          loadLocations(),
+        ]);
+        if (cancelled) return;
+        // Config still lands before the map needs the CARTO key; it just no longer holds up the
+        // other two requests.
         applyServerConfig(config);
-        if (!cancelled) setFeedbackEnabled(Boolean(config.feedback_enabled));
-        const availableModels = await fetchModels();
-        if (!cancelled) setModels(availableModels);
+        setFeedbackEnabled(Boolean(config.feedback_enabled));
+        setModels(availableModels);
 
-        const saved = await loadLocations();
         const fallback = saved[0] ?? null;
-        const position = await getCurrentPosition();
+        const position = await positionPromise;
         if (cancelled) return;
         // Startup only focuses the map: selecting here would open a details pop-up the user
         // never asked for (SCRUM-248).
@@ -287,6 +297,7 @@ export const App: React.FC = () => {
             windColorOverlayVisible={mapSettings.windColorOverlayVisible}
             windColorHighContrast={mapSettings.windColorHighContrast}
             waterCurrentsVisible={mapSettings.waterCurrentsVisible}
+            wavesVisible={mapSettings.wavesVisible}
             seamarksVisible={mapSettings.seamarksVisible}
             bcDepthVisible={mapSettings.bcDepthVisible}
             selectedGridPoint={selectedGridPoint}
@@ -337,6 +348,8 @@ export const App: React.FC = () => {
         onToggleWindColorHighContrast={mapSettings.setWindColorHighContrast}
         waterCurrentsVisible={mapSettings.waterCurrentsVisible}
         onToggleWaterCurrents={mapSettings.setWaterCurrentsVisible}
+        wavesVisible={mapSettings.wavesVisible}
+        onToggleWaves={mapSettings.setWavesVisible}
         seamarksVisible={mapSettings.seamarksVisible}
         onToggleSeamarks={mapSettings.setSeamarksVisible}
         bcDepthVisible={mapSettings.bcDepthVisible}

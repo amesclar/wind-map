@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from backend.app import config
 from backend.app.database import db_connection
 from backend.app.main import app
-from backend.app.services import open_meteo
+from backend.app.services import nws, open_meteo
 from backend.app.services.nws_parser import parse_nws_forecast
 from factories import http_response
 
@@ -300,3 +300,54 @@ def test_retry_warning_names_the_status_and_attempt_but_not_the_point(client, mo
     assert "48.2939" not in caplog.text
     assert "122.6064" not in caplog.text
     assert "api.weather.gov" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_two_documents_share_one_pooled_client(open_meteo, monkeypatch):
+    # A client per call paid two handshakes per forecast and reused no connection (SCRUM-285).
+    open_meteo.respond({"ok": True})
+    seen = []
+    real_get = httpx.AsyncClient.get
+
+    async def recording_get(client_self, url, **kwargs):
+        seen.append(client_self)
+        return await real_get(client_self, url, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", recording_get)
+
+    await nws._get_json("https://api.weather.gov/points/48.3,-122.6")
+    await nws._get_json("https://api.weather.gov/gridpoints/SEW/123,102")
+
+    assert len(seen) == 2
+    assert seen[0] is seen[1]
+
+
+@pytest.mark.asyncio
+async def test_a_transport_error_is_retried(open_meteo, monkeypatch):
+    calls = []
+
+    async def flaky_get(client_self, url, **kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            raise httpx.ConnectError("connection reset")
+        return http_response({"ok": True})
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", flaky_get)
+
+    assert await nws._get_json("https://api.weather.gov/points/48.3,-122.6") == {"ok": True}
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_persistent_transport_error_surfaces_after_the_budget(monkeypatch):
+    calls = []
+
+    async def always_fails(client_self, url, **kwargs):
+        calls.append(url)
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", always_fails)
+
+    with pytest.raises(httpx.ConnectError):
+        await nws._get_json("https://api.weather.gov/points/48.3,-122.6")
+    assert len(calls) == config.NWS_RETRIES + 1

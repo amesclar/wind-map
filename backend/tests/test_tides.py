@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from backend.app.config import OPEN_METEO_MARINE_URL
+from backend.app.database import db_connection
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.services.tide_service import (
     Height,
@@ -14,6 +15,7 @@ from backend.app.services.tide_service import (
     get_point_tide,
     window_hours,
 )
+from backend.app.services.time_window import hour_key
 from factories import upstream_error, upstream_status_error
 
 HOUR = datetime(2026, 11, 25, 12, tzinfo=UTC)
@@ -262,3 +264,45 @@ def test_quota_warning_keeps_the_reset_time_but_not_the_point(client, open_meteo
     assert "quota exhausted" in caplog.text
     assert "48.4" not in caplog.text
     assert "-122.7" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_cold_window_is_one_request_for_the_whole_range(open_meteo):
+    # Three contiguous missing days are a single range, so a first pop-up still costs one call.
+    open_meteo.respond(tide_payload(sine_heights()))
+
+    await get_point_tide(48.4, -122.7, HOUR)
+
+    assert open_meteo.call_count == 1
+    assert open_meteo.last_params["start_date"] == "2026-11-24"
+    assert open_meteo.last_params["end_date"] == "2026-11-26"
+
+
+@pytest.mark.asyncio
+async def test_a_warm_window_makes_no_request(open_meteo):
+    open_meteo.respond(tide_payload(sine_heights()))
+    await get_point_tide(48.4, -122.7, HOUR)
+
+    warm = await get_point_tide(48.4, -122.7, HOUR)
+
+    assert open_meteo.call_count == 1
+    assert warm.hour == "2026-11-25T12:00"
+
+
+@pytest.mark.asyncio
+async def test_one_missing_hour_refetches_only_its_utc_day(open_meteo):
+    # An expired row used to re-request all three days and rewrite all 72 rows (SCRUM-286).
+    open_meteo.respond(tide_payload(sine_heights()))
+    first = await get_point_tide(48.4, -122.7, HOUR)
+    with db_connection() as conn:
+        conn.execute(
+            "DELETE FROM tide_point_cache WHERE hour = ?",
+            (hour_key(HOUR),),
+        )
+
+    again = await get_point_tide(48.4, -122.7, HOUR)
+
+    assert open_meteo.call_count == 2
+    assert open_meteo.last_params["start_date"] == "2026-11-25"
+    assert open_meteo.last_params["end_date"] == "2026-11-25"
+    assert [sample.height_m for sample in again.points] == [sample.height_m for sample in first.points]

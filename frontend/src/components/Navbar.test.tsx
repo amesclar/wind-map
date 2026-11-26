@@ -109,6 +109,18 @@ describe('Navbar (SCRUM-92)', () => {
     renderNavbar({ feedbackEnabled: false });
     expect(screen.queryByRole('button', { name: 'Send feedback' })).toBeNull();
   });
+
+  it('shows the regional label the API gives a model (SCRUM-231)', () => {
+    const { selectWith } = renderNavbar({
+      models: [
+        { id: 'best_match', name: 'Open-Meteo (Best Match)' },
+        { id: 'ncep_rrfs_north_america', name: 'RRFS (North America)' },
+      ],
+    });
+
+    const labels = Array.from(selectWith('ncep_rrfs_north_america').options).map((o) => o.textContent);
+    expect(labels).toContain('RRFS (North America)');
+  });
 });
 
 describe('refresh hint (SCRUM-257)', () => {

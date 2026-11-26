@@ -12,6 +12,7 @@ import {
 } from '../components/mapTiles';
 import { CHART_TEMPERATURE_BANDS } from '../components/WindBarb';
 import type { UnitSystem, WindSpeedUnit } from '../types';
+import { WAVE_ATTRIBUTION_TEXT } from './waveTiers';
 import { formatStepLabel, floorToHour } from './forecastWindow';
 import { formatTemperatureFromF, roundKnotsInUnit, SPEED_UNIT_LABEL } from './units';
 
@@ -65,6 +66,8 @@ export interface ExportFooterInput {
   bcDepth?: boolean;
   /** Seamark overlay on: its credit and the not-for-navigation notice join the footer (SCRUM-175). */
   seamarks?: boolean;
+  /** Wave layer on: the Marine data credit joins the footer (SCRUM-234). */
+  waves?: boolean;
   version: string;
 }
 
@@ -78,12 +81,14 @@ export function buildExportFooter({
   attribution,
   bcDepth = false,
   seamarks = false,
+  waves = false,
   version,
 }: ExportFooterInput): string {
   const temperature = unitSystem === 'imperial' ? '°F' : '°C';
   const depthCredit = bcDepth ? ` · ${NONNA_ATTRIBUTION_TEXT} · ${NONNA_NOTICE}` : '';
   const seamarkCredit = seamarks ? ` · ${SEAMARK_ATTRIBUTION_TEXT} · ${SEAMARK_NOTICE}` : '';
-  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${depthCredit}${seamarkCredit} · Wind Map v${version}`;
+  const waveCredit = waves ? ` · ${WAVE_ATTRIBUTION_TEXT}` : '';
+  return `Units: ${SPEED_UNIT_LABEL[speedUnit]}, ${temperature} · ${attribution}${depthCredit}${seamarkCredit}${waveCredit} · Wind Map v${version}`;
 }
 
 export type ExportExtension = 'png' | 'jpeg' | 'pdf';

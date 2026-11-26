@@ -24,7 +24,12 @@ from backend.app.config import (
     OPEN_METEO_FORECAST_URL,
     model_horizon_days,
 )
-from backend.app.models import POINT_LOCATION_ID, LocationResponse, WeatherForecastResponse
+from backend.app.models import (
+    POINT_LOCATION_ID,
+    LocationResponse,
+    WeatherForecastPoint,
+    WeatherForecastResponse,
+)
 from backend.app.services import nws, open_meteo
 from backend.app.services.forecast_cache import (
     ForecastCache,
@@ -91,6 +96,49 @@ def forecast_days_for(at: datetime, model: str, now: datetime | None = None) -> 
     return max(FORECAST_DAYS, min(model_horizon_days(model), needed))
 
 
+def no_data_forecast(
+    identity: dict[str, Any],
+    model: str,
+    timezone: str,
+    at: datetime | None = None,
+) -> WeatherForecastResponse:
+    """A location the model does not cover, reported as no data rather than an error (SCRUM-231).
+
+    A regional model (RRFS) answers the coverage 400 for a point outside North America. That is
+    not an upstream failure: the saved marker and the barb pop-up must show "No data" exactly as
+    for a missing hour, so the response keeps its shape with no values and an empty forecast.
+    It is never cached, so a later request can pick the data up once the point is covered.
+    """
+    moment = at.astimezone(UTC) if at is not None else datetime.now(UTC)
+    point = WeatherForecastPoint(
+        time=moment.strftime("%Y-%m-%dT%H:%M"),
+        temperature_c=None,
+        temperature_f=None,
+        wind_speed_knots=None,
+        wind_speed_kmh=None,
+        wind_speed_mph=None,
+        wind_speed_ms=None,
+        wind_gust_knots=None,
+        wind_gust_kmh=None,
+        wind_gust_mph=None,
+        wind_gust_ms=None,
+        wind_direction_deg=None,
+        wind_direction_cardinal=None,
+        humidity=None,
+        weather_code=0,
+    )
+    return WeatherForecastResponse(
+        **identity,
+        model=model,
+        timezone=timezone,
+        cached=False,
+        cached_at=time.time(),
+        current=point,
+        forecast=[],
+        valid_time=moment.strftime("%Y-%m-%dT%H:%M") if at is not None else None,
+    )
+
+
 async def _get_forecast(
     cache: ForecastCache,
     identity: dict[str, Any],
@@ -117,13 +165,17 @@ async def _get_forecast(
         if not is_stale(hit.cached_at, clock):
             return WeatherForecastResponse(**{**hit.payload, **identity}, cached=True, cached_at=hit.cached_at)
 
-    raw = await fetch_forecast(
-        identity["latitude"],
-        identity["longitude"],
-        model,
-        timezone,
-        FORECAST_DAYS if at is None else forecast_days_for(at, model),
-    )
+    try:
+        raw = await fetch_forecast(
+            identity["latitude"],
+            identity["longitude"],
+            model,
+            timezone,
+            FORECAST_DAYS if at is None else forecast_days_for(at, model),
+        )
+    except open_meteo.CoverageError:
+        # Outside the model's domain (RRFS is North America only): no data, not a 502.
+        return no_data_forecast(identity, model, timezone, at)
     try:
         parsed = parse_provider_forecast(raw, model, at=at, timezone=timezone)
     except ValueError as exc:  # response did not cover the requested hour

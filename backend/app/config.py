@@ -132,6 +132,7 @@ AVAILABLE_MODELS = [
     {"id": "ecmwf_ifs", "name": "ECMWF IFS HRES 9 km"},
     {"id": "ecmwf_aifs025_single", "name": "ECMWF AIFS (AI)"},
     {"id": "gfs_seamless", "name": "NOAA GFS Seamless"},
+    {"id": "ncep_rrfs_north_america", "name": "RRFS (North America)"},
     {"id": "gem_seamless", "name": "CMC GEM Seamless"},
     {"id": "icon_seamless", "name": "DWD ICON Seamless"},
     {"id": NWS_MODEL, "name": "NOAA NWS NDFD"},
@@ -167,6 +168,11 @@ MODEL_METADATA: dict[str, dict[str, object]] = {
     "ecmwf_aifs025_single": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 360},
     # https://open-meteo.com/en/docs/gfs-api — GFS, 6-hourly, 16 days.
     "gfs_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 384},
+    # https://open-meteo.com/en/docs/gfs-api — NOAA RRFS North America (SCRUM-231), NOAA's
+    # successor to HRRR/NAM: 13 km, hourly values on 6-hourly cycles, documented 84 h. The last
+    # hours can still be null until the next cycle publishes (measured 79 h on 2026-11-26), and
+    # the grid only covers North America (SCRUM-229); the label says so.
+    "ncep_rrfs_north_america": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 84},
     # https://open-meteo.com/en/docs/gem-api — seamless blend (SCRUM-228) of the 12-hourly global
     # GEM with the 6-hourly regional RDPS and HRDPS runs; Open-Meteo caps the API at 10 days.
     "gem_seamless": {"update_hours": 6, "update_cycles_utc": [0, 6, 12, 18], "horizon_hours": 240},
@@ -231,6 +237,15 @@ GRID_REQUEST_MAX_POINTS = 150
 # which is the layer's horizon regardless of the selected weather model.
 CURRENT_HORIZON_HOURS = 240
 
+# Ocean waves (SCRUM-233): the Marine API's wave fields cover the same 10 days hourly, again
+# independent of the selected weather model. An inland request is snapped to the nearest sea
+# cell, so a value farther than half the grid spacing from the requested point is treated as
+# no waves; a single point has no spacing, so it uses a fixed tolerance. The floor keeps a very
+# fine grid from discarding coastal cells that the coarse wave models legitimately answer with.
+WAVES_HORIZON_HOURS = 240
+WAVES_POINT_LAND_TOLERANCE_KM = 5.0
+WAVES_MIN_LAND_TOLERANCE_KM = 3.0
+
 # A new location within this many degrees (~500 m) of a saved one is treated as the same.
 DUPLICATE_LOCATION_RADIUS_DEG = 0.005
 
@@ -273,6 +288,17 @@ def _positive_int(name: str, default: int) -> int:
 
 FEEDBACK_MAX_PER_HOUR = _positive_int("FEEDBACK_MAX_PER_HOUR", 5)  # per client IP
 FEEDBACK_GLOBAL_MAX_PER_HOUR = FEEDBACK_MAX_PER_HOUR * 4  # all clients together
+
+
+def _ip_set(name: str) -> frozenset[str]:
+    """Comma-separated literal addresses from the environment; empty when unset."""
+    return frozenset(part.strip() for part in os.getenv(name, "").split(",") if part.strip())
+
+
+# Proxies whose `X-Forwarded-For` may be believed (SCRUM-270). Empty by default on purpose: the
+# header is client-supplied, so believing it without knowing the proxy would let a caller pick its
+# own rate-limit bucket. Behind Cloud Run, set it to the proxy addresses the platform uses.
+TRUSTED_PROXY_IPS = _ip_set("TRUSTED_PROXY_IPS")
 
 
 def feedback_enabled() -> bool:

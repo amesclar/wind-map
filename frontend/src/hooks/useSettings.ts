@@ -21,6 +21,7 @@ const parseColorOverlay = (stored: string | null) => stored === 'true'; // defau
 // Off by default: the chart reduces the gradient on its own, so only other bases change (SCRUM-213).
 const parseHighContrast = (stored: string | null) => stored === 'true';
 const parseCurrents = (stored: string | null) => stored === 'true'; // default off (SCRUM-99)
+const parseWaves = (stored: string | null) => stored === 'true'; // default off (SCRUM-234)
 const parseSeamarks = (stored: string | null) => stored === 'true'; // default off (SCRUM-175)
 const parseBcDepth = (stored: string | null) => stored === 'true'; // default off (SCRUM-205)
 
@@ -62,6 +63,8 @@ export function useMapSettings() {
     parseCurrents,
   );
   // Nautical seamark overlay (SCRUM-175): a community tile server, so off unless asked for.
+  // Ocean waves (SCRUM-234): its own layer and fetch, like the currents.
+  const [wavesVisible, setWavesVisible] = useLocalStorageState(STORAGE_KEYS.waterWavesVisible, parseWaves);
   const [seamarksVisible, setSeamarksVisible] = useLocalStorageState(
     STORAGE_KEYS.seamarks,
     parseSeamarks,
@@ -110,6 +113,8 @@ export function useMapSettings() {
     setWindColorHighContrast,
     waterCurrentsVisible,
     setWaterCurrentsVisible,
+    wavesVisible,
+    setWavesVisible,
     seamarksVisible,
     setSeamarksVisible,
     bcDepthVisible,

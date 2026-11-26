@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from backend.app.config import NWS_BASE_URL, NWS_RETRIES, NWS_TIMEOUT_SECONDS, NWS_USER_AGENT
+from backend.app.services import open_meteo
 from backend.app.services.forecast_cache import NwsGridCache
 from backend.app.services.open_meteo import retry_delay
 
@@ -30,33 +31,41 @@ class NwsCoverageError(httpx.HTTPError):
 
 
 async def _get_json(url: str) -> Any:
-    """GET one api.weather.gov document.
+    """GET one api.weather.gov document through the shared pooled client (SCRUM-285).
 
     Raises NwsCoverageError outside coverage and httpx.HTTPError for anything else. Retries follow
     the Open-Meteo client: `Retry-After` when NWS sends one, else a short backoff, inside the same
-    attempt budget, so one upstream wobble does not become a 502 on the map.
+    attempt budget, and connection-level failures are retried too, so one upstream wobble does not
+    become a 502 on the map. A client per call used to pay two handshakes per forecast and reuse
+    no connection at all.
     """
     headers = {"User-Agent": NWS_USER_AGENT, "Accept": "application/geo+json"}
-    async with httpx.AsyncClient(timeout=NWS_TIMEOUT_SECONDS, headers=headers) as client:
-        attempt = 0
-        while True:
-            response = await client.get(url)
-            if response.status_code == 404:
-                # No coordinates in the message: they come from the request, and CodeQL treats
-                # request parameters as private data wherever they are written out.
-                raise NwsCoverageError("NWS has no grid for this point")
-            if response.status_code in RETRYABLE_STATUS and attempt < NWS_RETRIES:
-                logger.warning(
-                    "NWS answered %s; retrying (attempt %d of %d)",
-                    response.status_code,
-                    attempt + 1,
-                    NWS_RETRIES,
-                )
-                await asyncio.sleep(retry_delay(response, attempt))
-                attempt += 1
-                continue
-            response.raise_for_status()
-            return response.json()
+    client = open_meteo.shared_client()
+    attempt = 0
+    while True:
+        try:
+            response = await client.get(url, headers=headers, timeout=NWS_TIMEOUT_SECONDS)
+        except httpx.TransportError:
+            if attempt >= NWS_RETRIES:
+                raise
+            attempt += 1
+            continue
+        if response.status_code == 404:
+            # No coordinates in the message: they come from the request, and CodeQL treats
+            # request parameters as private data wherever they are written out.
+            raise NwsCoverageError("NWS has no grid for this point")
+        if response.status_code in RETRYABLE_STATUS and attempt < NWS_RETRIES:
+            logger.warning(
+                "NWS answered %s; retrying (attempt %d of %d)",
+                response.status_code,
+                attempt + 1,
+                NWS_RETRIES,
+            )
+            await asyncio.sleep(retry_delay(response, attempt))
+            attempt += 1
+            continue
+        response.raise_for_status()
+        return response.json()
 
 
 async def grid_for(latitude: float, longitude: float) -> tuple[str, int, int]:

@@ -27,6 +27,18 @@ async def test_get_json_returns_decoded_body_and_sends_params(open_meteo):
 
 
 @pytest.mark.asyncio
+async def test_get_json_raises_a_coverage_error_for_the_no_data_400(open_meteo):
+    """The regional-coverage 400 is its own error, so the grid can split instead of failing (SCRUM-231)."""
+    open_meteo.respond({"error": True, "reason": "No data is available for this location"}, status=400)
+
+    with pytest.raises(client.CoverageError) as raised:
+        await client.get_json(FORECAST_URL, {})
+
+    assert isinstance(raised.value, httpx.HTTPError)
+    assert raised.value.request is not None
+
+
+@pytest.mark.asyncio
 async def test_get_json_raises_for_error_status(open_meteo):
     open_meteo.respond({"reason": "bad"}, status=400)
 

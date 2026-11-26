@@ -6,15 +6,15 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import config
 from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
-from backend.app.routers import currents, feedback, geocode, grid, locations, tides, weather
-from backend.app.services import open_meteo
+from backend.app.routers import currents, feedback, geocode, grid, locations, tides, waves, weather
+from backend.app.services import land_mask, open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
     clean_expired_cache()
+    # Inflate the 1 km land mask before the first wave request needs it (SCRUM-273), off the loop.
+    await land_mask.preload()
     # NWS asks every client for a contact address (SCRUM-255): say so once at startup rather than
     # leaving it to be discovered in NOAA's traffic.
     if not config.nws_user_agent_is_custom():
@@ -88,11 +90,44 @@ async def static_cache_policy(request: Request, call_next):
     return response
 
 
+# The cheap defences for a single-page app behind one shared password (SCRUM-272). The policy
+# lists what the app actually loads: its own bundle and hashed assets, inline style attributes
+# (Leaflet and the Vite build both set them), tiles and upstream services over https, and the
+# blob:/data: URLs the map export's canvas work uses.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https:; "
+        "worker-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 # Register API routers
 app.include_router(locations.router)
 app.include_router(weather.router)
 app.include_router(grid.router)
 app.include_router(currents.router)
+app.include_router(waves.router)
 app.include_router(tides.router)
 app.include_router(geocode.router)
 app.include_router(feedback.router)
@@ -138,11 +173,28 @@ def resolve_static_file(full_path: str, static_dir: Path = STATIC_DIR) -> Path |
     return _static_file_index(static_dir).get(full_path)
 
 
+def is_api_path(full_path: str) -> bool:
+    """Whether a path belongs to the API namespace: `/api` itself or anything under it."""
+    return full_path == "api" or full_path.startswith("api/")
+
+
+def spa_response(full_path: str, static_dir: Path = STATIC_DIR):
+    """Answer one request from the build, or with JSON when it names a missing API route.
+
+    The catch-all route matches every path, so without the API branch an unknown endpoint would
+    answer the SPA shell with 200: a typo would look like a working route, clients would parse
+    HTML as JSON, and monitoring would never see the 404 (SCRUM-277). Every other path keeps the
+    shell so client-side routes such as `/map` still load.
+    """
+    if is_api_path(full_path):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse(resolve_static_file(full_path, static_dir) or static_dir / "index.html")
+
+
 # Serve static frontend if available
 if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # An existing file inside the build is served as-is; everything else is the SPA shell.
-        return FileResponse(resolve_static_file(full_path) or STATIC_DIR / "index.html")
+        return spa_response(full_path)

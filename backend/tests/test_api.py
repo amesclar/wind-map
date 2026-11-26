@@ -185,3 +185,16 @@ def test_nearby_location_returns_the_existing_one(client):
 def test_weather_for_unknown_location_is_404(client, open_meteo):
     assert client.get("/api/weather?location_id=9999").status_code == 404
     assert open_meteo.call_count == 0
+
+
+def test_every_response_carries_the_security_headers(client):
+    # A single-page app behind one shared password had none of these (SCRUM-272).
+    response = client.get("/api/health")
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["referrer-policy"] == "same-origin"
+    assert response.headers["x-frame-options"] == "DENY"
+    policy = response.headers["content-security-policy"]
+    assert "default-src 'self'" in policy
+    assert "frame-ancestors 'none'" in policy
+    assert "object-src 'none'" in policy

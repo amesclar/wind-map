@@ -2,6 +2,17 @@
 import L from 'leaflet';
 import type { MapTileLayer } from '../types';
 
+/**
+ * Light bases (SCRUM-221): the Map Settings modal follows the tone of the selected base. Seamap
+ * draws over the dark substrate, so it stays dark.
+ */
+const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>([
+  'osm_standard',
+  'paper_chart',
+]);
+
+export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAYERS.has(layer);
+
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';

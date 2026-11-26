@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 #   6 → 7 (SCRUM-238): cached current cells are re-checked against elevation, so land rows go.
 #   7 → 8 (SCRUM-195): sea-level cache for tide pop-ups, keyed by point and hour.
 #   8 → 9 (SCRUM-106): long-lived NWS grid mapping, so a coordinate's grid is looked up once.
-SCHEMA_VERSION = 9
+#   9 → 10 (SCRUM-233): ocean-wave grid cache, keyed by point and hour like the currents.
+SCHEMA_VERSION = 10
+
+# How long a writer waits for another connection's lock before SQLite raises "database is locked"
+# (SCRUM-274). Five seconds matches the driver default but is now explicit and documented.
+BUSY_TIMEOUT_MS = 5000
 
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
@@ -142,11 +147,31 @@ CREATE TABLE IF NOT EXISTS nws_grid_cache (
 );
 """
 
+# Ocean waves (SCRUM-233), keyed like the currents cache. A NULL height records a point that was
+# checked and has no waves there (inland or outside the wave model), so an inland view is not
+# refetched on every request. The cell is stored because a coastal request is snapped to water.
+GRID_WAVES_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS grid_waves_cache (
+    lat_key            REAL NOT NULL,
+    lon_key            REAL NOT NULL,
+    hour               TEXT NOT NULL DEFAULT 'current',
+    cached_at          REAL NOT NULL,
+    expires_at         REAL NOT NULL,
+    wave_height_m      REAL,
+    wave_direction_deg REAL,
+    wave_period_s      REAL,
+    cell_lat           REAL,
+    cell_lon           REAL,
+    PRIMARY KEY (lat_key, lon_key, hour)
+);
+"""
+
 CACHE_TABLE_DDL = {
     "weather_cache": WEATHER_CACHE_DDL,
     "point_weather_cache": POINT_CACHE_DDL,
     "grid_weather_cache": GRID_CACHE_DDL,
     "grid_currents_cache": GRID_CURRENTS_CACHE_DDL,
+    "grid_waves_cache": GRID_WAVES_CACHE_DDL,
     "tide_point_cache": TIDE_CACHE_DDL,
 }
 CACHE_TABLES = tuple(CACHE_TABLE_DDL)
@@ -159,6 +184,12 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # Off by default in SQLite; needed for weather_cache's ON DELETE CASCADE.
     conn.execute("PRAGMA foreign_keys = ON;")
+    # WAL lets a reader and a writer work at the same time (SCRUM-274): without it the loser of a
+    # concurrent write waited out the default 5 s and then failed with "database is locked". The
+    # busy timeout keeps the wait bounded when a writer really is in the way. Litestream replicates
+    # a WAL database the same way it replicates a rollback journal one.
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS};")
     return conn
 
 
@@ -183,6 +214,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Cache tables may predate the current definitions (e.g. a grid cache without
     # temperature_f, or point rows stored in weather_cache under location_id 0).
     # nws_grid_cache is not in that list on purpose: its rows stay correct across upgrades.
+    # grid_waves_cache is new in 9 → 10, so dropping it is harmless; the loop also covers it.
     for table in CACHE_TABLES:
         conn.execute(f"DROP TABLE IF EXISTS {table};")
     logger.info("Database schema upgraded from version %d to %d; caches reset", version, SCHEMA_VERSION)

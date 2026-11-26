@@ -1,5 +1,6 @@
 """Tests for the wind grid endpoint and grid_weather_service."""
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 import httpx
@@ -7,6 +8,7 @@ import pytest
 
 from backend.app.config import COORD_CACHE_PRECISION as CACHE_PRECISION
 from backend.app.config import GRID_MAX_DIM, GRID_REQUEST_MAX_POINTS
+from backend.app.services import grid_weather_service
 from backend.app.services.grid_weather_service import get_grid_wind
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.units import coord_key as _cache_key
@@ -648,3 +650,24 @@ def test_grid_endpoint_full_view_is_chunked(client, open_meteo):
 def test_the_grid_cap_fits_the_open_meteo_minute_budget():
     """One call per point against 600 per minute (SCRUM-194): a full view must fit, with headroom."""
     assert GRID_MAX_DIM * GRID_MAX_DIM <= 600
+
+
+@pytest.mark.asyncio
+async def test_a_forecast_hour_grid_writes_in_one_transaction(open_meteo, monkeypatch):
+    # The store used to open its own connection per UTC hour, so one day cost 24 write
+    # transactions on top of the read (SCRUM-274).
+    open_meteo.respond(grid_payload(grid_hourly_item("2026-11-25T12:00")))
+    opens: list[str] = []
+    real_connection = grid_weather_service.db_connection
+
+    @contextmanager
+    def counting():
+        opens.append("open")
+        with real_connection() as conn:
+            yield conn
+
+    monkeypatch.setattr(grid_weather_service, "db_connection", counting)
+
+    await get_grid_wind([(48.0, -122.0)], "best_match", datetime(2026, 11, 25, 12, tzinfo=UTC))
+
+    assert len(opens) == 2  # one read, one write — not one per hour of the day

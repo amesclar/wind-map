@@ -16,23 +16,25 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
 - **Wind Grid Overlay:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
 - **Wind Color Gradient:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
-- **Water Currents:** A grid of chevrons over the water, pointing where the surface current flows and coloured by speed — light (under 0.5 kt), moderate (0.5–1.5 kt), strong (1.5–3 kt) and extreme (3 kt and above). A chevron is drawn only where the point is at sea, so the land stays clear; clicking one opens a pop-up with its speed, compass direction and where it flows toward, in your units, naming the source and the selected forecast hour. The field comes from Open-Meteo Marine (Copernicus Marine, ~8 km), is independent of the selected weather model, follows the same forecast-time selector on its own 240-hour horizon, and retries and the quota 503 behave exactly as on the wind grid. Toggled in Map Settings (default: off); with it on, a compact key at the map's top-left lists the four tiers with their ranges in your speed unit.
+- **Water Currents:** A grid of chevrons over the water, pointing where the surface current flows and coloured by speed — light (under 0.5 kt), moderate (0.5–1.5 kt), strong (1.5–3 kt) and extreme (3 kt and above). A chevron is drawn only where the point is at sea, so the land stays clear; clicking one opens a pop-up with its speed, compass direction and where it flows toward, in your units, naming the source and the selected forecast hour. The field comes from Open-Meteo Marine (Copernicus Marine, ~8 km), is independent of the selected weather model, follows the same forecast-time selector on its own 240-hour horizon, and retries and the quota 503 behave exactly as on the wind grid. Toggled in Map Settings (default: off); with it on, the map key at the top-left adds a row of chevrons listing the four tiers with their ranges in your speed unit.
+- **Ocean Waves:** arrows over the water pointing where the waves travel, sized and coloured by significant wave height (0–1, 1–2, 2–4 and over 4 m; 0–3, 3–6, 6–13 and over 13 ft), at the same density as the currents and following the forecast time selector on their own 240-hour horizon. Arrows are drawn only over water: the wave models' own land mask is about 8 km wide, so their nearest "sea" cell can sit on a narrow island (Whidbey Island was the reported case), and every cell is checked against a bundled 1 km land mask before an arrow is placed. Clicking one shows the height, period and the direction the waves come from, plus the next 48 hours; waves and currents can be on together (arrows versus chevrons). Off by default in Map Settings, with its arrow tiers in the shared map key, and exports credit the Marine source while it is on.
 - **Clickable Barbs:** Clicking any grid barb selects it — drawn larger with a white highlight ring — and opens a small pop-up with that point's wind speed, direction and temperature in your units, without saving it as a location and without another request — useful over open water where no place name exists. Clicking a saved location marker switches back to that location's highlight and pop-up.
 - **Forecast Time Selector:** a bar under the map names the selected model with its update cadence, time horizon and last/next run time (for example `NOAA GFS Seamless · every 6 h · 16 days · run 12:00 UTC (next 18:00)`), and runs a track from now to that horizon with day labels, a "now" marker and a handle that moves in 1-hour steps. Drag or click the track, use the arrows, the keyboard (←/→ step, Home/End jump, Space plays) or play-pause (3 hours per tick, waiting for each step's data); Now returns to live values. Moving it redraws the barbs, the saved-location markers and the colour gradient for that hour, and both pop-ups name it. The selected hour is memory-only: the app opens at "now".
 - **Map export:** the download-icon button in the top bar, immediately left of the Preferences gear, opens an export dialog for the view on screen — PNG or JPEG at 2x (with a quality choice for JPEG), or a single-page PDF on Letter or A4 in portrait or landscape, fitted to the page with its aspect ratio kept. Every file carries a header (the hour shown in your timezone and in UTC, the model and its run, the capture time), a legend and a footer (units, the base-map attribution and the app version). With the wind colour gradient on, the legend draws the same wind-speed scale as the strip on screen (same colours and tick labels in your speed unit) and the barb row is captioned "colour = temperature"; with it off the legend keeps the barb feathers and the six temperature bands. The barb row shows six examples — calm, 5, 10, 15, 20 and 50 kt — so the additive mid-range glyphs (a full barb plus a half, two full barbs) can be read too, and a narrow export shrinks the glyph rather than the caption (SCRUM-240). Leaflet controls and pop-ups are left out, the dialog previews the file name (named after the model and hour, e.g. `ecmwf_ifs_2026-11-18_1400PST.pdf`, falling back to `wind-map_...` for an unknown model), and the capture library and jsPDF load only when you export. The dialog is titled "Download map image", uses the download artwork in its header, and lets you edit the file name before exporting: the extension follows the format and reserved characters are removed. It also has a **Range** mode: pick a start hour, an end hour and an interval (1, 2, 3, 6 or 12 h) inside the model's forecast window, see a summary such as "5 captures from Mon 14:00 to Mon 18:00 PST" and a 24-capture cap, then capture one frame per hour with that hour's data and header. Progress shows "n of N" with a Stop capturing button; cancelling downloads nothing, and a failure names the hour and offers the frames captured so far. A range saves as **one ZIP** of PNG or JPEG images (one file per hour, named after its hour) or **one multi-page PDF** with a page per hour on Letter or A4 in either orientation; a single-hour range downloads that image directly. Both formats are named after the model, the first hour and the frame count (e.g. `best_match_2026-11-23_1400PST_5hours.zip`), PDF pages keep the single-page margins and aspect ratio, and the ZIP and PDF libraries load only for those formats. The 24-capture cap keeps a full range's pages in memory until the PDF is saved.
-- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 15 for ECMWF AIFS, 16 for NOAA GFS, 10 for CMC GEM, 7.5 for DWD ICON, 7 for NOAA NWS NDFD), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
+- **Forecast-time data:** the weather endpoints accept an hour-aligned `time` for any hour from now up to the selected model's horizon (7 days for Open-Meteo Best Match, 15 for ECMWF IFS, 15 for ECMWF AIFS, 16 for NOAA GFS, 3.5 for NOAA RRFS, 10 for CMC GEM, 7.5 for DWD ICON, 7 for NOAA NWS NDFD), and `/api/weather/models` reports each model's update cadence, horizon and last/next run time. `MapView` and the grid hook take the resulting `validTime`, which the selector above sets; without a selection the app shows current conditions.
 - **Multiple Weather Models:** Dropdown selector supporting:
   - *Open-Meteo (Best Match)* (default)
   - *ECMWF IFS HRES 9 km*
   - *ECMWF AIFS (AI)*
   - *NOAA GFS Seamless*
+  - *RRFS (North America)* (North America only; outside its domain the map shows no data rather than failing)
   - *CMC GEM Seamless*
   - *DWD ICON Seamless*
   - *NOAA NWS NDFD* (US only; the forecaster-edited grids from `api.weather.gov`)
 - **Tide Pop-ups:** clicking a saved location or a wind barb also shows the tide there — height above mean sea level for the selected hour, plus the nearest low and high with their times. Tides come from Open-Meteo's Marine model, independent of the weather model, and the block is labelled *Not for navigation* because mean sea level is not a chart datum.
 - **Autocomplete Location Search:** Verified geocoding lookup via Open-Meteo Geocoding API with state/region and country disambiguation.
 - **Location Management:** Saved locations modal with instant selection and minus (`-`) buttons for removal.
-- **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees). Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
+- **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees), the last shown only in a barb's details pop-up. Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
 - **Quota Warning:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
@@ -66,7 +68,8 @@ wind-map/
 │   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
 │   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
 │   │                            # forecast_cache.py (saved-location, point & grid-day caches),
-│   │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+│       │                            # grid_weather_service.py, currents_service.py (marine grid & point),
+    │                            # waves_service.py (marine waves), land_mask.py (GLOBE 1 km land mask),
 │   │                            # tide_service.py (sea level, high & low),
 │   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
 │   │                            # horizons), time_window.py (forecast-hour validation)
@@ -74,7 +77,7 @@ wind-map/
 └── frontend/
     ├── src/
     │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
-    │   │                        # CurrentOverlay, CurrentLegend, WaterCurrentChevron,
+    │   │                        # CurrentOverlay, MapLegend, WaterCurrentChevron, WaveOverlay, WaveArrow,
     │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
     │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
     │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
@@ -202,6 +205,133 @@ container does not use it. The password is never printed; read it with:
 ```bash
 gcloud secrets versions access latest --secret=APP_PASSWORD --project=wind-app-515017
 ```
+
+### Self-Hosted Open-Meteo Fallback
+
+The SCRUM-236 spike recommended a self-hosted Open-Meteo instance as a fallback for the free API,
+for when the 10,000-calls-a-day limit starts to bite (SCRUM-265). The setup is committed as code and
+**creates nothing on its own**: `plan` is the default command, and `create` and `delete` refuse to
+run without `--yes`, so no script or agent can start billing by accident.
+
+```bash
+scripts/open-meteo-fallback.sh plan          # what would be created and what it costs (default)
+scripts/open-meteo-fallback.sh status        # read-only: does it exist, and is it running?
+scripts/open-meteo-fallback.sh create --yes  # creates it; about $58.92/month while it exists
+scripts/open-meteo-fallback.sh delete --yes  # deletes instance, disk and firewall; back to $0
+```
+
+#### 1. Before you start
+
+`gcloud` must work and be authenticated against the project that holds the app:
+
+```bash
+gcloud auth login
+gcloud config set project wind-app-515017
+gcloud auth list          # the account must be active
+```
+
+`create` enables the Compute Engine API and creates an instance and a firewall rule, so the account
+needs `roles/compute.instanceAdmin.v1`, `roles/compute.securityAdmin` and
+`roles/serviceusage.serviceUsageAdmin` on the project (project owner or editor covers all three).
+If `gcloud` fails with a `certifi/cacert.pem` `FileNotFoundError`, the SDK installation is broken
+rather than Python: run `gcloud components reinstall` before going further.
+
+#### 2. Look before you leap
+
+```bash
+scripts/open-meteo-fallback.sh plan
+```
+
+This prints the zone, instance name, machine type, disk, firewall source range and the monthly
+estimate, and it makes no Google Cloud calls at all. What `create` would build:
+
+- one Compute Engine `e2-standard-2` (2 vCPU, 8 GB) in `us-west1-b`, the same region as Cloud Run;
+- a 100 GB `pd-balanced` boot disk that is also the Open-Meteo cache (`CACHE_SIZE=32GB`);
+- Container-Optimized OS running the Open-Meteo image pinned by digest, pointed at the public AWS
+data, with a ten-minute warm-up loop for the default Oak Harbor view;
+- a firewall rule opening `tcp:8080` only to the Serverless VPC Access connector's range
+(`10.8.0.0/28`); the instance's own external address exists only for its outbound S3 download, and
+nothing on the internet can reach the API.
+
+Override any of it with environment variables, e.g.
+`OPEN_METEO_INSTANCE=open-meteo-dev OPEN_METEO_SOURCE_RANGES=10.9.0.0/28`; see
+`scripts/open-meteo-fallback.sh --help`.
+
+#### 3. Create it
+
+```bash
+scripts/open-meteo-fallback.sh create --yes
+```
+
+It creates the firewall rule before the instance, so port 8080 is never briefly open to the world,
+and it is idempotent: resources that already exist are left alone. The command ends by printing the
+verification steps below. Expect the first forecast request to take up to about two minutes while
+the VM pulls model metadata from S3; after that the same area answers in tens of milliseconds.
+
+#### 4. Verify it
+
+No public port is open, so reach it through an IAP tunnel:
+
+```bash
+gcloud compute ssh open-meteo-fallback --project=wind-app-515017 --zone=us-west1-b \
+  --tunnel-through-iap -- -N -L 8080:localhost:8080 &
+
+curl -fsS 'http://127.0.0.1:8080/v1/forecast?latitude=48.2939&longitude=-122.6064&current=temperature_2m,wind_speed_10m' \
+  | head -c 300
+```
+
+Then check both containers on the VM itself (the API, and the warm-up loop that keeps the default
+view fast):
+
+```bash
+gcloud compute ssh open-meteo-fallback --project=wind-app-515017 --zone=us-west1-b \
+  --tunnel-through-iap --command 'sudo docker ps; sudo docker logs --tail 20 open-meteo-warm'
+```
+
+A healthy instance shows `open-meteo` and `open-meteo-warm` as `Up`, and the warm log repeats
+`warm request failed` only while the API is still starting. `scripts/open-meteo-fallback.sh status`
+reports whether the instance exists and its state.
+
+#### 5. What it costs, and how to stop paying
+
+About **$58.92 a month** at us-west1 list prices: `e2-standard-2` $48.92 and the 100 GB disk
+$10.00. Leaving the VM stopped would still bill the disk, so the zero-cost state is deletion:
+
+```bash
+scripts/open-meteo-fallback.sh delete --yes
+```
+
+That removes the instance (with its boot disk, and with it the cache) and the firewall rule.
+Creating it again re-downloads what it needs. The Serverless VPC Access connector that lets Cloud
+Run reach it is **not** created here: it costs about $9 a month and belongs with the app-side
+fallback in SCRUM-266.
+
+#### 6. Using it from the app
+
+Not wired up yet. SCRUM-264 adds `OPEN_METEO_BASE_URL` and `OPEN_METEO_MARINE_BASE_URL`, and
+SCRUM-266 adds the connector plus the switch to the fallback on 429/503. At that point the app
+points at the instance's internal IP (printed by `status`) and the pre-warmed cache makes the first
+fallback request usable rather than cold.
+
+#### 7. Troubleshooting
+
+- **`gcloud` fails before doing anything** with `lib/third_party/requests/...` and
+  `certifi/cacert.pem`: the SDK is broken, not Python. `gcloud components reinstall`.
+- **`status` says the instance is absent after `create`**: the script and the previous command may
+  be looking at different projects or zones; check `GCP_PROJECT`, `GCP_ZONE` and
+  `gcloud config list`.
+- **Cloud Run cannot reach port 8080**: the firewall's source range must match the connector's
+  range, and the connector does not exist until SCRUM-266.
+- **The first request is very slow** (up to 133 s in the spike): the cache is cold. The warm-up
+  loop covers the default view every ten minutes; a new area pays a few seconds, and an S3
+  background update can still cost around 11 s.
+- **Disk full**: the cache is capped at 32 GB inside 100 GB, and container logs rotate at 50 MB × 3.
+
+#### Licence
+
+The Open-Meteo image is AGPL-3.0, so offering the app as a service requires offering its
+corresponding source even when the image is unmodified; the weather data is CC BY 4.0, which the
+app already attributes.
 
 ### Google Cloud Run Deployment
 
@@ -363,6 +493,8 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/weather/grid`   | Get wind for a lat/lon bounding box grid, now or at a forecast hour (powers the barb overlay) |
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
+| `GET`    | `/api/waves/grid`     | Get wave height, direction and period for a lat/lon bounding box grid, now or at a forecast hour |
+| `GET`    | `/api/waves/point`    | Get the 48-hour wave series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue, with up to 3 attachments (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
@@ -378,6 +510,8 @@ The exception is exhausted quota. When Open-Meteo keeps answering 429 after the 
 `/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time`: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
 
 `/api/currents/grid` and `/api/currents/point` take the same bounding box or coordinates and the same optional `time`, but no `model`: currents come from a single field (Open-Meteo Marine, Copernicus Marine) whose 240-hour horizon does not depend on the selected weather model, and a `time` beyond it is a 422 naming that limit. Land points are left out of a grid response — an inland box answers `{"points": []}` — and are cached along with the water ones, so panning back inland does not repeat the upstream call.
+
+`/api/waves/grid` and `/api/waves/point` take the same arguments with their own 240-hour `time` limit. The Marine API answers an inland request with its nearest sea cell, so a value whose cell is farther than half the grid spacing (3 km floor, 5 km for a single point) is treated as no waves: an inland node is absent instead of showing open-water height. Every surviving cell is also tested against the bundled GLOBE 1 km land mask (`backend/app/data/land_mask_1km.bin.z`, NOAA/NCEI, v1.0, doi:10.7289/V52R3PMS, rebuilt by `scripts/build-land-mask.py`), because the models' own 8 km mask puts sea cells on narrow islands; a cell on land is dropped as well, and a missing asset fails open. Heights are metres and `direction_deg` is where the waves come from.
 
 ---
 
@@ -423,6 +557,7 @@ Backend test suite coverage includes:
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
 - Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
+- Ocean waves — the grid and point endpoints, the snapped-cell land filter, the 240-hour limit, the schema 10 `grid_waves_cache` table and the shared retry/quota path
 - Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:

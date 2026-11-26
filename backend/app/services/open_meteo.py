@@ -39,11 +39,53 @@ def _client() -> httpx.AsyncClient:
     return client
 
 
+def shared_client() -> httpx.AsyncClient:
+    """The pooled client, for a caller that needs its own headers or timeout (SCRUM-285).
+
+    NWS used to open a client per request and so paid a handshake for each of the two documents a
+    forecast needs, with no connection ever reused. The pool is keyed by loop, so this is the same
+    object `get_json` uses and `close_client` closes at shutdown.
+    """
+    return _client()
+
+
 async def close_client() -> None:
     """Close the shared client for the running loop (app shutdown). Safe to call twice."""
     client = _CLIENTS.pop(asyncio.get_running_loop(), None)
     if client is not None:
         await client.aclose()
+
+
+# Open-Meteo answers this 400 when any point of a request is outside a regional model's domain.
+# It is the only 400 that means "coverage", not "bad request", so the grid can split the batch
+# instead of failing the view (SCRUM-229, SCRUM-231).
+COVERAGE_REASON = "no data is available for this location"
+
+
+class CoverageError(httpx.HTTPError):
+    """The upstream has no data for the requested location(s).
+
+    Raised only for the exact coverage 400 above; every other 400 keeps its HTTPStatusError so a
+    malformed request is never mistaken for a point outside a model's domain.
+    """
+
+    def __init__(
+        self, message: str = "No data is available for this location", *, request: httpx.Request | None = None
+    ):
+        super().__init__(message)
+        self.request = request
+
+
+def is_coverage_rejection(response: httpx.Response) -> bool:
+    """True when `response` is the coverage 400, identified by its reason rather than its status."""
+    if response.status_code != 400:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    reason = body.get("reason") if isinstance(body, dict) else None
+    return isinstance(reason, str) and reason.strip().lower() == COVERAGE_REASON
 
 
 class QuotaExceededError(httpx.HTTPError):
@@ -125,6 +167,8 @@ async def get_json(
         if resp.status_code in RETRYABLE_STATUS and attempt < retries:
             await asyncio.sleep(retry_delay(resp, attempt))
             continue
+        if is_coverage_rejection(resp):
+            raise CoverageError(request=resp.request)
         if resp.status_code == 429:
             raise QuotaExceededError(
                 "Open-Meteo request limit reached",
