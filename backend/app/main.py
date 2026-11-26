@@ -88,6 +88,38 @@ async def static_cache_policy(request: Request, call_next):
     return response
 
 
+# The cheap defences for a single-page app behind one shared password (SCRUM-272). The policy
+# lists what the app actually loads: its own bundle and hashed assets, inline style attributes
+# (Leaflet and the Vite build both set them), tiles and upstream services over https, and the
+# blob:/data: URLs the map export's canvas work uses.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https:; "
+        "worker-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 # Register API routers
 app.include_router(locations.router)
 app.include_router(weather.router)
