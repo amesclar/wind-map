@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { MAP_KEY_WIND_COLOR, MAP_KEY_WIND_KNOTS, MapLegend } from './MapLegend';
+import { MAP_KEY_ORIENTATION, MAP_KEY_WIND_COLOR, MAP_KEY_WIND_KNOTS, MapLegend } from './MapLegend';
 import { CURRENT_TIERS } from '../utils/currentTiers';
 import { WAVE_TIERS } from '../utils/waveTiers';
 
@@ -18,7 +18,10 @@ describe('MapLegend (SCRUM-263)', () => {
     expect(glyphs).toHaveLength(3);
     expect(glyphs.every((glyph) => glyph.innerHTML.includes(MAP_KEY_WIND_COLOR))).toBe(true);
     expect(screen.getByTestId('map-legend-wind-5').textContent?.trim()).toBe('5');
-    expect(screen.getByTestId('map-legend-wind-note').textContent?.trim()).toBe('colour = temperature');
+    expect(screen.getByTestId('map-legend-wind-direction').textContent?.trim()).toBe(
+      MAP_KEY_ORIENTATION.wind,
+    );
+    expect(screen.getByTestId('map-legend-wind-note').textContent).toContain('colour = temperature');
     expect(screen.getByTestId('map-legend').textContent).toContain('Map key');
     expect(screen.getByTestId('map-legend').textContent).toContain('Wind (kt)');
   });
@@ -40,7 +43,7 @@ describe('MapLegend (SCRUM-263)', () => {
     expect(screen.queryByTestId('map-legend-currents')).toBeNull();
     expect(screen.queryByTestId('map-legend-waves')).toBeNull();
     expect(screen.getByTestId('map-legend').getAttribute('aria-label')).toBe(
-      'Map key: wind barbs in knots, coloured by temperature',
+      `Map key: wind barbs in knots, ${MAP_KEY_ORIENTATION.wind}, coloured by temperature`,
     );
     unmount();
 
@@ -48,7 +51,7 @@ describe('MapLegend (SCRUM-263)', () => {
     expect(screen.getByTestId('map-legend-currents')).toBeTruthy();
     expect(screen.getByTestId('map-legend-waves')).toBeTruthy();
     expect(screen.getByTestId('map-legend').getAttribute('aria-label')).toBe(
-      'Map key: wind barbs in knots, coloured by temperature; currents in kt; wave heights in m',
+      `Map key: wind barbs in knots, ${MAP_KEY_ORIENTATION.wind}, coloured by temperature; currents in kt, ${MAP_KEY_ORIENTATION.currents}; wave heights in m, ${MAP_KEY_ORIENTATION.waves}`,
     );
   });
 
@@ -108,6 +111,26 @@ describe('MapLegend (SCRUM-263)', () => {
       '13+ ft',
     ]);
     expect(screen.getByTestId('map-legend-waves').textContent).toContain('Waves (ft)');
+  });
+
+  it('says what the orientation of each layer means (SCRUM-294)', () => {
+    const { unmount } = render(<MapLegend speedUnit="knots" unitSystem="metric" />);
+
+    // Wind is always on, so its explanation always is too; the other rows wait for their layer.
+    expect(screen.getByTestId('map-legend-wind-direction').textContent?.trim()).toBe(
+      MAP_KEY_ORIENTATION.wind,
+    );
+    expect(screen.queryByTestId('map-legend-currents-note')).toBeNull();
+    expect(screen.queryByTestId('map-legend-waves-note')).toBeNull();
+    unmount();
+
+    render(<MapLegend speedUnit="knots" unitSystem="metric" currents waves />);
+    expect(screen.getByTestId('map-legend-currents-note').textContent?.trim()).toBe(
+      MAP_KEY_ORIENTATION.currents,
+    );
+    expect(screen.getByTestId('map-legend-waves-note').textContent?.trim()).toBe(
+      MAP_KEY_ORIENTATION.waves,
+    );
   });
 
   it('never takes pointer events, so it cannot block the map', () => {

@@ -24,6 +24,16 @@ export const MAP_KEY_WIND_COLOR = '#cbd5e1';
 /** Every key glyph shares one size, whatever size the map draws that tier (SCRUM-263). */
 export const MAP_KEY_GLYPH_PX = 20;
 
+/**
+ * What each glyph's orientation means (SCRUM-294). One parallel line per layer, in the key and in
+ * its `aria-label`: shape and colour say how much, but never which way the glyph points.
+ */
+export const MAP_KEY_ORIENTATION = {
+  wind: 'staff points where the wind comes from',
+  currents: 'chevron points where the water flows',
+  waves: 'heads point where the waves travel',
+} as const;
+
 function windKeySvg(speedKnots: number): string {
   return generateWindBarbSvg({
     speedKnots,
@@ -55,9 +65,9 @@ export const MapLegend: React.FC<{
 }> = ({ speedUnit, unitSystem, currents = false, waves = false }) => {
   const speedLabel = SPEED_UNIT_LABEL[speedUnit];
   const waveUnit = unitSystem === 'imperial' ? 'ft' : 'm';
-  const parts = ['Map key: wind barbs in knots, coloured by temperature'];
-  if (currents) parts.push(`currents in ${speedLabel}`);
-  if (waves) parts.push(`wave heights in ${waveUnit}`);
+  const parts = [`Map key: wind barbs in knots, ${MAP_KEY_ORIENTATION.wind}, coloured by temperature`];
+  if (currents) parts.push(`currents in ${speedLabel}, ${MAP_KEY_ORIENTATION.currents}`);
+  if (waves) parts.push(`wave heights in ${waveUnit}, ${MAP_KEY_ORIENTATION.waves}`);
 
   return (
     <div
@@ -86,7 +96,8 @@ export const MapLegend: React.FC<{
         ))}
       </div>
       <div data-testid="map-legend-wind-note" className="mt-1 text-[9px] leading-tight text-gray-400">
-        colour = temperature
+        <div data-testid="map-legend-wind-direction">{MAP_KEY_ORIENTATION.wind}</div>
+        <div>colour = temperature</div>
       </div>
 
       {currents && (
@@ -111,6 +122,12 @@ export const MapLegend: React.FC<{
                 {tierRangeLabel(tier, speedUnit)}
               </span>
             ))}
+          </div>
+          <div
+            data-testid="map-legend-currents-note"
+            className="mt-1 text-[9px] leading-tight text-gray-400"
+          >
+            {MAP_KEY_ORIENTATION.currents}
           </div>
         </div>
       )}
@@ -138,6 +155,12 @@ export const MapLegend: React.FC<{
                 {waveRangeLabel(tier, unitSystem)}
               </span>
             ))}
+          </div>
+          <div
+            data-testid="map-legend-waves-note"
+            className="mt-1 text-[9px] leading-tight text-gray-400"
+          >
+            {MAP_KEY_ORIENTATION.waves}
           </div>
         </div>
       )}

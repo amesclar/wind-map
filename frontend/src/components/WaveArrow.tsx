@@ -8,7 +8,7 @@ const ARROW_VIEWBOX = 40;
 const CENTRE = ARROW_VIEWBOX / 2;
 
 /**
- * Where the waves travel: the API's `wave_direction` is where they come **from**, so an arrow
+ * Where the waves travel: the API's `wave_direction` is where they come **from**, so the glyph
  * rotates by direction + 180° (SCRUM-234).
  */
 export function travelDirection(directionDeg: number): number {
@@ -16,10 +16,45 @@ export function travelDirection(directionDeg: number): number {
 }
 
 /**
- * SVG for one wave glyph (SCRUM-234): an arrow pointing where the waves travel, sized and
- * coloured by height tier and drawn over a dark rim so it stays visible on light bases and over
- * the wind gradient. The arrow is a line with a head, deliberately unlike the current chevrons,
- * so both layers can be on at once.
+ * Distance between neighbouring lines, by line count (SCRUM-292). Four lines share one glyph, so
+ * the spacing tightens as the count rises and the stroke, wave amplitude and head width tighten
+ * with it; that keeps every rim clear of the next line at 28 px.
+ */
+const LINE_SPACING: Record<number, number> = { 1: 0, 2: 10, 3: 8.5, 4: 7.6 };
+
+/** Wave amplitude by line count: the fuller the glyph, the shallower the S. */
+const LINE_AMPLITUDE: Record<number, number> = { 1: 3.2, 2: 2.4, 3: 1.9, 4: 1.4 };
+
+/** Stroke by line count, so a four-line glyph stays open instead of filling in at 28 px. */
+const LINE_STROKE: Record<number, number> = { 1: 2.9, 2: 2.4, 3: 2.1, 4: 1.9 };
+
+/** A single line has room for the widest head; crowded glyphs narrow it to keep a gap. */
+const HEAD_HALF_WIDTH = 4;
+
+/** Centres of the parallel lines, symmetric about 0 and perpendicular to the travel direction. */
+export function lineOffsets(count: number): number[] {
+  if (count <= 1) return [0];
+  const spacing = LINE_SPACING[count] ?? LINE_SPACING[4];
+  return Array.from({ length: count }, (_, index) => (index - (count - 1) / 2) * spacing);
+}
+
+/** One wavy shaft ending under one chevron head, both centred on `x`. */
+function waveLinePaths(x: number, amplitude: number, headHalfWidth: number): string {
+  const control = amplitude * 1.15;
+  const shaft = `M ${x} 31 C ${x + control} 28.2 ${x + control} 25 ${x} 22.2 C ${x - control} 19.4 ${x - control} 16.2 ${x} 12.6`;
+  const head = `M ${x - headHalfWidth} 12 L ${x} 5.5 L ${x + headHalfWidth} 12`;
+  return `<path d="${shaft}" /><path d="${head}" />`;
+}
+
+/**
+ * SVG for one wave glyph (SCRUM-234, SCRUM-292): the swell drawn as counted wavy lines, each
+ * ending in one chevron head, pointing where the waves travel.
+ *
+ * The line count is the height cue — one line at 0–1 m, two at 1–2 m, three at 2–4 m and four at
+ * 4+ m — while the fill keeps the tier colour and the glyph keeps its size ramp. A wavy shaft
+ * plus a head is deliberately different from an open current chevron (which counts heads and has
+ * no shaft), so both layers can be on at once without being read for each other. Every path is
+ * drawn twice: a dark rim underneath, then the opaque tier colour on top.
  */
 export function generateWaveArrowSvg(
   heightM: number,
@@ -27,13 +62,20 @@ export function generateWaveArrowSvg(
   size: number = waveTier(heightM).size,
 ): string {
   const tier = waveTier(heightM);
-  const strokeWidth = tier.bold ? 2.75 : 2;
+  const count = tier.lines;
+  const spacing = LINE_SPACING[count] ?? LINE_SPACING[4];
+  const strokeWidth = (LINE_STROKE[count] ?? 2) + (tier.bold ? 0.15 : 0);
+  const headHalfWidth = count === 1 ? HEAD_HALF_WIDTH : Math.min(HEAD_HALF_WIDTH, spacing / 2 - 1.1);
+  const paths = lineOffsets(count)
+    .map((x) => waveLinePaths(x, LINE_AMPLITUDE[count] ?? 2, headHalfWidth))
+    .join('');
+  // One line has room for the full 2-unit rim; crowded glyphs take a thinner one so the rims of
+  // neighbouring lines and heads cannot merge.
+  const rimWidth = count === 1 ? 2 : 1.6;
   const rotation = `transform="rotate(${travelDirection(directionDeg)}, ${CENTRE}, ${CENTRE})" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
-  const shaft = 'M 20 31 L 20 12';
-  const head = 'M 13 18 L 20 9 L 27 18';
   const label = `${formatWaveHeight(heightM, 'metric')} waves from ${Math.round(directionDeg)}°`;
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${ARROW_VIEWBOX} ${ARROW_VIEWBOX}" role="img" aria-label="${escapeHtml(label)}" style="display:block;overflow:visible;">
-    <g ${rotation} stroke="${WAVE_TIER_OUTLINE}" stroke-width="${strokeWidth + 2}"><path d="${shaft}" /><path d="${head}" /></g><g ${rotation} stroke="${tier.color}" stroke-width="${strokeWidth}"><path d="${shaft}" /><path d="${head}" /></g>
+    <g ${rotation} stroke="${WAVE_TIER_OUTLINE}" stroke-width="${strokeWidth + rimWidth}">${paths}</g><g ${rotation} stroke="${tier.color}" stroke-width="${strokeWidth}">${paths}</g>
   </svg>`;
 }
 
