@@ -19,6 +19,7 @@ import {
   CHART_PANE,
   CHART_TILE_FAILURE_THRESHOLD,
   CHART_TILE_FAILURE_WINDOW_MS,
+  fetchGoogleSession,
   nonnaLayerConfig,
   NONNA_PANE,
   seamarkLayerConfig,
@@ -147,6 +148,30 @@ export function useBaseLayers(
         disposed = true;
         unregisterVector();
         seamapLayer?.remove();
+        layers.forEach((layer) => layer.remove());
+      };
+    } else if (tileLayerType === 'google_satellite') {
+      const substrate = tileLayerConfig('osm_dark');
+      if (substrate.kind === 'xyz') {
+        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
+      }
+      let disposed = false;
+      let googleLayer: L.TileLayer | null = null;
+      void fetchGoogleSession()
+        .then((session) => {
+          if (disposed) return;
+          const conf = tileLayerConfig('google_satellite', '', session.tile_url);
+          if (conf.kind === 'xyz' && conf.url) {
+            googleLayer = L.tileLayer(conf.url, conf.options).addTo(mapInstance);
+            layers.push(googleLayer);
+          }
+        })
+        .catch((err) => {
+          console.error('The Google Satellite base layer could not be loaded:', err);
+        });
+      return () => {
+        disposed = true;
+        googleLayer?.remove();
         layers.forEach((layer) => layer.remove());
       };
     } else {

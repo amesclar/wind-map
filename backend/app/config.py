@@ -125,6 +125,9 @@ OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
 
 # Map Settings
 CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
+GCP_MAP_KEY = os.getenv("GCP_MAP_KEY", "").strip()
+GOOGLE_MAPS_SESSION_CACHE_TTL_SECONDS = 13 * 24 * 3600  # 13 days (Google tokens valid for 14)
+GOOGLE_MAPS_CREATE_SESSION_URL = "https://tile.googleapis.com/v1/createSession"
 
 # Supported weather models
 AVAILABLE_MODELS = [

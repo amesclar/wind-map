@@ -40,4 +40,27 @@ describe('MapExportControl (SCRUM-116, SCRUM-117, SCRUM-157)', () => {
     fireEvent.click(button);
     expect(onOpen).not.toHaveBeenCalled();
   });
+
+  it('disables the button and shows the tooltip when export is disabled (SCRUM-311)', () => {
+    const onOpen = vi.fn();
+    render(
+      <MapExportControl
+        onOpen={onOpen}
+        busy={false}
+        disabled
+        disabledTooltip="Export is disabled on Google Maps. Switch to OSM, CARTO, or NOAA chart to export."
+      />,
+    );
+
+    const button = screen.getByRole('button', {
+      name: 'Export is disabled on Google Maps. Switch to OSM, CARTO, or NOAA chart to export.',
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('title')).toBe(
+      'Export is disabled on Google Maps. Switch to OSM, CARTO, or NOAA chart to export.',
+    );
+
+    fireEvent.click(button);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
 });

@@ -38,6 +38,10 @@ interface MapExportDialogProps {
   error?: MapExportError | null;
   onCancelRange?: () => void;
   onSaveCaptured?: () => void;
+  /** True when export is disabled (SCRUM-311). */
+  disabled?: boolean;
+  /** Reason shown in warning banner when export is disabled (SCRUM-311). */
+  disabledReason?: string;
 }
 
 /**
@@ -57,6 +61,8 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   error = null,
   onCancelRange,
   onSaveCaptured,
+  disabled = false,
+  disabledReason,
 }) => {
   const [mode, setMode] = useState<'view' | 'range'>('view');
   const [format, setFormat] = useState<MapExportFormat>('png');
@@ -166,6 +172,15 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+          {disabled && (
+            <div
+              data-testid="export-disabled-banner"
+              className="p-3 rounded-lg bg-amber-950/40 border border-amber-600/50 text-amber-200 text-xs"
+            >
+              {disabledReason ??
+                'Map image/PDF export is disabled on Google Maps due to licensing restrictions.'}
+            </div>
+          )}
           <ExportModeField mode={mode} busy={busy} onChange={setMode} />
 
           {mode === 'range' && (
@@ -244,8 +259,9 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
           )}
           <button
             onClick={exportNow}
-            disabled={busy || (mode === 'range' && !rangeReady)}
-            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-60 disabled:cursor-wait text-white transition"
+            disabled={busy || disabled || (mode === 'range' && !rangeReady)}
+            title={disabled ? (disabledReason ?? 'Export disabled') : undefined}
+            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-60 disabled:cursor-not-allowed text-white transition"
           >
             {busy ? (mode === 'range' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Exporting…') : 'Export'}
           </button>

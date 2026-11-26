@@ -123,6 +123,41 @@ export function seamapLayerConfig(): TileLayerConfig {
   };
 }
 
+export const GOOGLE_SATELLITE_ATTRIBUTION = '&copy; <a href="https://www.google.com/maps">Google</a>';
+export const GOOGLE_SATELLITE_ATTRIBUTION_TEXT = '© Google';
+export const GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP =
+  'Export is disabled on Google Maps. Switch to OSM, CARTO, or NOAA chart to export.';
+export const GOOGLE_MAP_EXPORT_DISABLED_REASON =
+  'Map image/PDF export is disabled on Google Maps due to licensing restrictions. Switch to OSM, CARTO, or NOAA chart to export.';
+
+export interface GoogleSessionData {
+  session: string;
+  expiry: number;
+  tile_url: string;
+  attribution: string;
+}
+
+let sessionPromise: Promise<GoogleSessionData> | null = null;
+
+export async function fetchGoogleSession(): Promise<GoogleSessionData> {
+  if (!sessionPromise) {
+    sessionPromise = fetch('/api/map/google-session')
+      .then((res) => {
+        if (!res.ok) throw new Error(`Google session failed: ${res.status}`);
+        return res.json() as Promise<GoogleSessionData>;
+      })
+      .catch((err) => {
+        sessionPromise = null;
+        throw err;
+      });
+  }
+  return sessionPromise;
+}
+
+export function resetGoogleSessionCache(): void {
+  sessionPromise = null;
+}
+
 /**
  * Bases drawn on a light sheet. They get the darker temperature ramp and the darker barb ring, and
  * the gradient is attenuated so their own symbols stay readable (SCRUM-203, SCRUM-206).
@@ -135,6 +170,7 @@ export function isLightBase(layer: MapTileLayer): boolean {
 export function attributionText(layer: MapTileLayer): string {
   if (layer === 'paper_chart') return `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`;
   if (layer === 'seamap') return `${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`;
+  if (layer === 'google_satellite') return GOOGLE_SATELLITE_ATTRIBUTION_TEXT;
   return layer === 'carto_dark' ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors';
 }
 
@@ -252,11 +288,20 @@ export function tileLayerConfig(
   cartoApiKey?: string,
 ): Extract<TileLayerConfig, { kind: 'vector' }>;
 export function tileLayerConfig(
-  layer: 'carto_dark' | 'osm_dark' | 'osm_standard',
+  layer: 'carto_dark' | 'osm_dark' | 'osm_standard' | 'google_satellite',
   cartoApiKey?: string,
+  googleTileUrl?: string,
 ): Extract<TileLayerConfig, { kind: 'xyz' }>;
-export function tileLayerConfig(layer: MapTileLayer, cartoApiKey?: string): TileLayerConfig;
-export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLayerConfig {
+export function tileLayerConfig(
+  layer: MapTileLayer,
+  cartoApiKey?: string,
+  googleTileUrl?: string,
+): TileLayerConfig;
+export function tileLayerConfig(
+  layer: MapTileLayer,
+  cartoApiKey = '',
+  googleTileUrl = '',
+): TileLayerConfig {
   switch (layer) {
     case 'carto_dark': {
       const key = cartoApiKey.trim();
@@ -285,5 +330,11 @@ export function tileLayerConfig(layer: MapTileLayer, cartoApiKey = ''): TileLaye
       return chartLayerConfig();
     case 'seamap':
       return seamapLayerConfig();
+    case 'google_satellite':
+      return {
+        kind: 'xyz',
+        url: googleTileUrl || '',
+        options: { attribution: GOOGLE_SATELLITE_ATTRIBUTION, maxZoom: 21, crossOrigin: true },
+      };
   }
 }

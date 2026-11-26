@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import L from 'leaflet';
 import {
   attributionText,
@@ -12,6 +12,12 @@ import {
   CHART_TILE_FAILURE_NOTICE,
   CHART_TILE_FAILURE_THRESHOLD,
   CHART_TILE_FAILURE_WINDOW_MS,
+  fetchGoogleSession,
+  resetGoogleSessionCache,
+  GOOGLE_MAP_EXPORT_DISABLED_REASON,
+  GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP,
+  GOOGLE_SATELLITE_ATTRIBUTION,
+  GOOGLE_SATELLITE_ATTRIBUTION_TEXT,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_NOTICE,
   NONNA_ATTRIBUTION_TEXT,
@@ -206,6 +212,61 @@ describe('paper chart tile config (SCRUM-203)', () => {
     expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
     expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
     expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
+    expect(attributionText('google_satellite')).toBe(GOOGLE_SATELLITE_ATTRIBUTION_TEXT);
+  });
+
+  it('configures google_satellite as xyz raster layer with attribution (SCRUM-311)', () => {
+    const config = tileLayerConfig('google_satellite', '', 'https://tile.googleapis.com/test/{z}/{x}/{y}');
+    expect(config.kind).toBe('xyz');
+    if (config.kind === 'xyz') {
+      expect(config.url).toBe('https://tile.googleapis.com/test/{z}/{x}/{y}');
+      expect(config.options.maxZoom).toBe(21);
+      expect(config.options.crossOrigin).toBe(true);
+      expect(config.options.attribution).toBe(GOOGLE_SATELLITE_ATTRIBUTION);
+    }
+  });
+
+  it('provides export disabled tooltip and reason strings for Google Maps', () => {
+    expect(GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP).toContain('Export is disabled on Google Maps');
+    expect(GOOGLE_MAP_EXPORT_DISABLED_REASON).toContain('licensing restrictions');
+  });
+
+  it('fetches the Google session once and fetches again after a reset (SCRUM-311)', async () => {
+    const payload = { session: 's1', expiry: 123, tile_url: 'https://tile/{z}', attribution: 'a' };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
+    vi.stubGlobal('fetch', fetchMock);
+    resetGoogleSessionCache();
+
+    try {
+      const first = await fetchGoogleSession();
+      const second = await fetchGoogleSession();
+      expect(first.session).toBe('s1');
+      expect(second).toBe(first);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith('/api/map/google-session');
+
+      resetGoogleSessionCache();
+      await fetchGoogleSession();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      resetGoogleSessionCache();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not cache a failed Google session request (SCRUM-311)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    resetGoogleSessionCache();
+
+    try {
+      await expect(fetchGoogleSession()).rejects.toThrow('Google session failed: 503');
+      await expect(fetchGoogleSession()).rejects.toThrow('Google session failed: 503');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      resetGoogleSessionCache();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('never puts the dark filter on a chart or a standard layer', () => {
