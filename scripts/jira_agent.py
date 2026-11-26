@@ -1,4 +1,4 @@
-"""File and update Jira issues as the agent's own service account (SCRUM-310).
+"""File and update Jira issues as the agent's own service account (SCRUM-310, SCRUM-313).
 
 The service account cannot sign in to the Jira integration, and its scoped API token is only
 accepted by the platform gateway (`https://api.atlassian.com/ex/jira/<cloudId>`), so this script is
@@ -6,9 +6,10 @@ the one write path for the agent. Reads may still use the connected integration.
 
     zsh -ic 'python scripts/jira_agent.py create --summary "..." --description-file - --points 1'
 
-The token comes from the environment (`FREEBUFF_JIRA_KEY`) and never from the repository. Because it
-lives in the user's shell profile, a non-interactive agent shell has to run this through
-`zsh -ic`, exactly like `scripts/rebuild-container.sh` (SCRUM-262).
+The token comes from the environment and never from the repository: `FREEBUFF_JIRA_KEY` by default, or
+the variable named with `--key-variable` (SCRUM-313, for example `KIRO_JIRA_KEY`), so two bots write as
+two different accounts. Because the key lives in the user's shell profile, a non-interactive agent
+shell has to run this through `zsh -ic`, exactly like `scripts/rebuild-container.sh` (SCRUM-262).
 """
 
 import argparse
@@ -24,7 +25,7 @@ import httpx
 DEFAULT_BASE_URL = "https://nehes.atlassian.net"
 GATEWAY = "https://api.atlassian.com/ex/jira"
 TIMEOUT_SECONDS = 10.0
-KEY_VARIABLE = "FREEBUFF_JIRA_KEY"
+DEFAULT_KEY_VARIABLE = "FREEBUFF_JIRA_KEY"
 ESTIMATE_FIELD = "customfield_10016"
 ISSUE_KEY = re.compile(r"[A-Z][A-Z0-9_]*-\d+")
 
@@ -75,10 +76,12 @@ class JiraAgent:
         base_url: str = "",
         cloud: str | None = None,
         transport: httpx.BaseTransport | None = None,
+        key_variable: str = DEFAULT_KEY_VARIABLE,
     ):
-        self._token = (token if token is not None else os.getenv(KEY_VARIABLE, "")).strip()
+        self.key_variable = key_variable
+        self._token = (token if token is not None else os.getenv(key_variable, "")).strip()
         if not self._token:
-            raise AgentError(f"{KEY_VARIABLE} is not set")
+            raise AgentError(f"{key_variable} is not set")
         self.base_url = (base_url or os.getenv("JIRA_BASE_URL", "") or DEFAULT_BASE_URL).rstrip("/")
         self._cloud = cloud
         self._transport = transport
@@ -212,8 +215,8 @@ def _json_object(text: str) -> dict:
     return value
 
 
-def _agent_from_env() -> JiraAgent:
-    return JiraAgent()
+def _agent_from_env(key_variable: str = DEFAULT_KEY_VARIABLE) -> JiraAgent:
+    return JiraAgent(key_variable=key_variable)
 
 
 def _text_options(parser: argparse.ArgumentParser, name: str, help_text: str) -> None:
@@ -226,10 +229,16 @@ def _text_options(parser: argparse.ArgumentParser, name: str, help_text: str) ->
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="jira_agent", description="File and update Jira as the agent account.")
     commands = parser.add_subparsers(dest="command", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--key-variable",
+        default=DEFAULT_KEY_VARIABLE,
+        help=f"Environment variable holding the token (default {DEFAULT_KEY_VARIABLE}).",
+    )
 
-    commands.add_parser("myself", help="Show the account the token belongs to.")
+    commands.add_parser("myself", parents=[common], help="Show the account the token belongs to.")
 
-    create = commands.add_parser("create", help="File one issue.")
+    create = commands.add_parser("create", parents=[common], help="File one issue.")
     create.add_argument("--project", default=os.getenv("JIRA_FEEDBACK_PROJECT", "SCRUM"))
     create.add_argument("--summary", required=True)
     create.add_argument("--type", dest="issue_type", default="Task")
@@ -238,22 +247,22 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--parent", help="Epic key, when the issue is a child.")
     _text_options(create, "description", "Issue description, as plain text.")
 
-    comment = commands.add_parser("comment", help="Add a comment.")
+    comment = commands.add_parser("comment", parents=[common], help="Add a comment.")
     comment.add_argument("key")
     _text_options(comment, "body", "Comment text.")
 
-    transition = commands.add_parser("transition", help="Move an issue to another status.")
+    transition = commands.add_parser("transition", parents=[common], help="Move an issue to another status.")
     transition.add_argument("key")
     target = transition.add_mutually_exclusive_group(required=True)
     target.add_argument("--to", help="Transition name, e.g. Done.")
     target.add_argument("--id", dest="transition_id", help="Transition id.")
     transition.add_argument("--resolution", help="Resolution to set after the transition, e.g. Done.")
 
-    field = commands.add_parser("set", help="Write raw field values.")
+    field = commands.add_parser("set", parents=[common], help="Write raw field values.")
     field.add_argument("key")
     field.add_argument("--fields", required=True, help="JSON object, e.g. '{\"customfield_10016\": 1}'.")
 
-    link = commands.add_parser("link", help="Link two issues.")
+    link = commands.add_parser("link", parents=[common], help="Link two issues.")
     link.add_argument("--inward", required=True, help="For Blocks, the blocker.")
     link.add_argument("--outward", required=True, help="For Blocks, the issue that is blocked.")
     link.add_argument("--type", dest="link_type", default="Blocks")
@@ -264,7 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
     try:
-        agent = _agent_from_env()
+        agent = _agent_from_env(args.key_variable)
         if args.command == "myself":
             me = agent.myself()
             name = me.get("displayName") or me.get("emailAddress") or "unknown"
