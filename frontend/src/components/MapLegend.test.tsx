@@ -26,6 +26,26 @@ describe('MapLegend (SCRUM-263)', () => {
     expect(screen.getByTestId('map-legend').textContent).toContain('Wind (kt)');
   });
 
+  it('puts each wind value beside its glyph, like the currents row (SCRUM-303)', () => {
+    render(<MapLegend speedUnit="knots" unitSystem="metric" />);
+
+    MAP_KEY_WIND_KNOTS.forEach((knots) => {
+      const item = screen.getByTestId(`map-legend-wind-${knots}`);
+
+      // One row per example: the glyph, then its value, not a stacked column.
+      expect(item.className).toContain('items-center');
+      expect(item.className).not.toContain('flex-col');
+      expect(item.querySelectorAll(':scope > *')).toHaveLength(2);
+      expect(item.querySelector('svg')).toBeTruthy();
+      expect(item.lastElementChild?.textContent).toBe(String(knots));
+    });
+
+    // The row wraps like the others rather than aligning to the tallest item.
+    const row = screen.getByTestId('map-legend-wind');
+    expect(row.className).toContain('flex-wrap');
+    expect(row.className).not.toContain('items-end');
+  });
+
   it('draws the three wind glyphs additively: half barb, full plus half, three fulls plus half', () => {
     const { container } = render(<MapLegend speedUnit="knots" unitSystem="metric" />);
     const glyph = (knots: number) =>
