@@ -335,3 +335,39 @@ def test_point_weather_failure_logs_the_exception_but_not_the_point(client, open
     assert "HTTPStatusError" in caplog.text
     assert "48.0" not in caplog.text
     assert "-122.0" not in caplog.text
+
+
+def test_an_unknown_timezone_is_rejected_before_any_upstream_call(client, open_meteo):
+    # A free-form zone used to reach Open-Meteo (a 502 from a client mistake), add a cache row per
+    # string, and crash the NWS parser's ZoneInfo lookup with a 500 (SCRUM-271).
+    response = client.get(
+        "/api/weather/point",
+        params={"lat": 48.29, "lon": -122.61, "timezone": "Bogus/Zone"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unknown timezone"
+    assert open_meteo.call_count == 0
+
+
+def test_an_unknown_timezone_is_rejected_for_ndfd_too(client, open_meteo):
+    response = client.get(
+        "/api/weather/point",
+        params={"lat": 48.29, "lon": -122.61, "timezone": "Bogus/Zone", "model": "nws_ndfd"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unknown timezone"
+    assert open_meteo.call_count == 0
+
+
+def test_a_valid_timezone_still_reaches_the_upstream(client, open_meteo):
+    open_meteo.respond(forecast_payload())
+
+    response = client.get(
+        "/api/weather/point",
+        params={"lat": 48.29, "lon": -122.61, "timezone": "America/New_York"},
+    )
+
+    assert response.status_code == 200
+    assert open_meteo.call_count == 1
