@@ -363,6 +363,8 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/weather/grid`   | Get wind for a lat/lon bounding box grid, now or at a forecast hour (powers the barb overlay) |
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
+| `GET`    | `/api/waves/grid`     | Get wave height, direction and period for a lat/lon bounding box grid, now or at a forecast hour |
+| `GET`    | `/api/waves/point`    | Get the 48-hour wave series for an arbitrary lat/lon point |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
 | `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue, with up to 3 attachments (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
@@ -378,6 +380,8 @@ The exception is exhausted quota. When Open-Meteo keeps answering 429 after the 
 `/api/weather`, `/api/weather/all`, `/api/weather/point` and `/api/weather/grid` also accept an optional `time`: an ISO 8601, hour-aligned instant with an offset (e.g. `2026-11-23T12:00:00Z`). It must fall between the current hour and the selected model's horizon; otherwise the response is 422 with a message naming the limit. Omit it for live `current` conditions, which is what the app still requests. With `time`, `current` describes that hour (and `valid_time` repeats it), grid points carry their hour in `time`, and both the grid and forecast caches are keyed by hour.
 
 `/api/currents/grid` and `/api/currents/point` take the same bounding box or coordinates and the same optional `time`, but no `model`: currents come from a single field (Open-Meteo Marine, Copernicus Marine) whose 240-hour horizon does not depend on the selected weather model, and a `time` beyond it is a 422 naming that limit. Land points are left out of a grid response — an inland box answers `{"points": []}` — and are cached along with the water ones, so panning back inland does not repeat the upstream call.
+
+`/api/waves/grid` and `/api/waves/point` take the same arguments with their own 240-hour `time` limit. The Marine API answers an inland request with its nearest sea cell, so a value whose cell is farther than half the grid spacing (3 km floor, 5 km for a single point) is treated as no waves: an inland node is absent instead of showing open-water height. Heights are metres and `direction_deg` is where the waves come from.
 
 ---
 
@@ -423,6 +427,7 @@ Backend test suite coverage includes:
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
 - Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
+- Ocean waves — the grid and point endpoints, the snapped-cell land filter, the 240-hour limit, the schema 10 `grid_waves_cache` table and the shared retry/quota path
 - Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:

@@ -95,9 +95,17 @@ def test_clean_expired_cache_removes_only_expired_rows_from_all_tables():
                 "VALUES (?, ?, 'current', ?, ?, 1.2);",
                 (lat, lat, now, now + expires_in),
             )
+        for lat, expires_in in ((1, -1), (2, 600)):
+            conn.execute(
+                "INSERT INTO grid_waves_cache "
+                "(lat_key, lon_key, hour, cached_at, expires_at, wave_height_m, "
+                "wave_direction_deg, wave_period_s) "
+                "VALUES (?, ?, 'current', ?, ?, 1.4, 280.0, 8.5);",
+                (lat, lat, now, now + expires_in),
+            )
     insert_grid_row(1, 1, "m", expires_in=-1)
     insert_grid_row(2, 2, "m", expires_in=600)
-    assert clean_expired_cache(now) == 5
+    assert clean_expired_cache(now) == 6
 
     with db_connection() as conn:
         for table in CACHE_TABLES:
@@ -155,6 +163,25 @@ def test_schema_upgrade_recreates_the_currents_cache_with_cell_coordinates():
 
     with db_connection() as conn:
         assert {"cell_lat", "cell_lon"} <= _columns(conn, "grid_currents_cache")
+        assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_schema_upgrade_creates_the_waves_cache():
+    """The wave cache arrives with SCRUM-233 (schema 10) on an existing database."""
+    with db_connection() as conn:
+        conn.execute("DROP TABLE grid_waves_cache;")
+        conn.execute("PRAGMA user_version = 9;")
+
+    init_db()
+
+    with db_connection() as conn:
+        assert {
+            "wave_height_m",
+            "wave_direction_deg",
+            "wave_period_s",
+            "cell_lat",
+            "cell_lon",
+        } <= _columns(conn, "grid_waves_cache")
         assert conn.execute("PRAGMA user_version;").fetchone()[0] == SCHEMA_VERSION
 
 

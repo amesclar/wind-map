@@ -131,6 +131,51 @@ class CurrentPointResponse(BaseModel):
     points: list[CurrentSeriesPoint]
 
 
+class WavePoint(BaseModel):
+    """A single wave observation for the map layer (SCRUM-233).
+
+    The coordinates are the marine model cell the value came from, not the requested map point:
+    Open-Meteo snaps an inland request to its nearest sea cell.
+    """
+
+    latitude: float
+    longitude: float
+    # Significant wave height in metres (the API's unit); the UI converts to feet.
+    height_m: float
+    # Direction the waves come from in degrees, meteorological convention like wind, so the
+    # frontend rotates an arrow by this + 180 to show where they travel.
+    direction_deg: float
+    # Peak period in seconds.
+    period_s: float
+    # Forecast hour these values describe; null means current conditions.
+    time: str | None = None
+
+
+class WaveGridResponse(BaseModel):
+    """GET /api/waves/grid payload (SCRUM-233); land nodes are absent, not zeroed."""
+
+    points: list[WavePoint]
+    time: str | None = None
+
+
+class WaveSeriesPoint(BaseModel):
+    """One hourly wave value for a single point."""
+
+    time: str
+    height_m: float
+    direction_deg: float
+    period_s: float
+
+
+class WavePointResponse(BaseModel):
+    """GET /api/waves/point payload (SCRUM-233): hourly values from the current hour."""
+
+    latitude: float
+    longitude: float
+    horizon_hours: int
+    points: list[WaveSeriesPoint]
+
+
 class TideSample(BaseModel):
     """One hourly sea-level sample (SCRUM-195)."""
 

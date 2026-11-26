@@ -13,7 +13,7 @@ from backend.app import config
 from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
-from backend.app.routers import currents, feedback, geocode, grid, locations, tides, weather
+from backend.app.routers import currents, feedback, geocode, grid, locations, tides, waves, weather
 from backend.app.services import open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -93,6 +93,7 @@ app.include_router(locations.router)
 app.include_router(weather.router)
 app.include_router(grid.router)
 app.include_router(currents.router)
+app.include_router(waves.router)
 app.include_router(tides.router)
 app.include_router(geocode.router)
 app.include_router(feedback.router)
