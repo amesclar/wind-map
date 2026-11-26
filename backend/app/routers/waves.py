@@ -12,7 +12,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.app.config import GRID_MAX_DIM, WAVES_HORIZON_HOURS, WAVES_POINT_LAND_TOLERANCE_KM
 from backend.app.models import WaveGridResponse, WavePointResponse
-from backend.app.routers.currents import quota_exhausted
+from backend.app.routers.errors import quota_exhausted
+from backend.app.services.grid_box import grid_points, validate_bounds
 from backend.app.services.open_meteo import QuotaExceededError
 from backend.app.services.time_window import hour_key, validate_wave_time
 from backend.app.services.waves_service import get_grid_waves, get_point_waves, land_tolerance_km
@@ -44,16 +45,10 @@ async def get_wave_grid(
     `points`, not drawn as flat water.
     """
     at = validate_wave_time(time)
-    if min_lat >= max_lat:
-        raise HTTPException(status_code=422, detail="min_lat must be less than max_lat")
-    if min_lon >= max_lon:
-        raise HTTPException(status_code=422, detail="min_lon must be less than max_lon")
-
+    validate_bounds(min_lat, max_lat, min_lon, max_lon)
+    points = grid_points(min_lat, max_lat, min_lon, max_lon, cols, rows)
     lat_step = (max_lat - min_lat) / (rows - 1) if rows > 1 else 0
     lon_step = (max_lon - min_lon) / (cols - 1) if cols > 1 else 0
-    points = [
-        (round(min_lat + r * lat_step, 6), round(min_lon + c * lon_step, 6)) for r in range(rows) for c in range(cols)
-    ]
     tolerance = land_tolerance_km(lat_step, lon_step, (min_lat + max_lat) / 2)
 
     try:
