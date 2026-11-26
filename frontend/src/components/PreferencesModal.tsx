@@ -133,6 +133,7 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
             </label>
             <select
               id="pref-direction"
+              aria-describedby="pref-direction-hint"
               value={dirDisplay}
               onChange={(e) => onSelectDirDisplay(e.target.value as WindDirDisplay)}
               className={SELECT_CLASS}
@@ -141,6 +142,10 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
               <option value="cardinal">Cardinal (N, SW)</option>
               <option value="deg">Degrees (0°-360°)</option>
             </select>
+            {/* The setting only changes the clicked barb's pop-up (SCRUM-239). */}
+            <p id="pref-direction-hint" className="mt-1 text-[11px] text-gray-500">
+              Only shown in a barb's details pop-up.
+            </p>
           </div>
         </div>
 

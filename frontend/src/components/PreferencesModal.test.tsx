@@ -60,3 +60,36 @@ describe('PreferencesModal (SCRUM-107)', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PreferencesModal direction hint (SCRUM-239)', () => {
+  it('says the direction display only affects the barb details pop-up', () => {
+    renderModal();
+    const select = screen.getByLabelText('Wind direction display');
+    const hint = screen.getByText("Only shown in a barb's details pop-up.");
+
+    expect(hint.id).toBe('pref-direction-hint');
+    expect(select.getAttribute('aria-describedby')).toBe(hint.id);
+  });
+
+  it('keeps the hint in the scrolling body, away from the Done button', () => {
+    renderModal();
+    const hint = screen.getByText("Only shown in a barb's details pop-up.");
+    const body = hint.closest('.overflow-y-auto');
+
+    expect(body).toBeTruthy();
+    expect(body!.contains(screen.getByText('Done'))).toBe(false);
+  });
+
+  it('leaves the label and the three option labels as they were', () => {
+    const { props } = renderModal();
+    const select = screen.getByLabelText('Wind direction display') as HTMLSelectElement;
+
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      'Barbs (feathers)',
+      'Cardinal (N, SW)',
+      'Degrees (0°-360°)',
+    ]);
+    fireEvent.change(select, { target: { value: 'barb' } });
+    expect(props.onSelectDirDisplay).toHaveBeenCalledWith('barb');
+  });
+});
