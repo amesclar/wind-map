@@ -14,7 +14,7 @@ from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
 from backend.app.routers import currents, feedback, geocode, grid, locations, tides, waves, weather
-from backend.app.services import open_meteo
+from backend.app.services import land_mask, open_meteo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
     clean_expired_cache()
+    # Inflate the 1 km land mask before the first wave request needs it (SCRUM-273), off the loop.
+    await land_mask.preload()
     # NWS asks every client for a contact address (SCRUM-255): say so once at startup rather than
     # leaving it to be discovered in NOAA's traffic.
     if not config.nws_user_agent_is_custom():
