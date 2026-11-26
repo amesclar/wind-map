@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import config
@@ -139,11 +139,28 @@ def resolve_static_file(full_path: str, static_dir: Path = STATIC_DIR) -> Path |
     return _static_file_index(static_dir).get(full_path)
 
 
+def is_api_path(full_path: str) -> bool:
+    """Whether a path belongs to the API namespace: `/api` itself or anything under it."""
+    return full_path == "api" or full_path.startswith("api/")
+
+
+def spa_response(full_path: str, static_dir: Path = STATIC_DIR):
+    """Answer one request from the build, or with JSON when it names a missing API route.
+
+    The catch-all route matches every path, so without the API branch an unknown endpoint would
+    answer the SPA shell with 200: a typo would look like a working route, clients would parse
+    HTML as JSON, and monitoring would never see the 404 (SCRUM-277). Every other path keeps the
+    shell so client-side routes such as `/map` still load.
+    """
+    if is_api_path(full_path):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse(resolve_static_file(full_path, static_dir) or static_dir / "index.html")
+
+
 # Serve static frontend if available
 if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # An existing file inside the build is served as-is; everything else is the SPA shell.
-        return FileResponse(resolve_static_file(full_path) or STATIC_DIR / "index.html")
+        return spa_response(full_path)
