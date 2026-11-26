@@ -214,7 +214,7 @@ user selects units
 Temperature: Celsius or Fahrenheit (default)
 Wind speed: knots (default), km/h, m/s, or mph
 Wind direction: Degrees (0, 90, 180, 270, 360) or cardinal directions (N, NE, SW) or wind barbs with feathers showing direction and speed (default)
-+ Preferences pop-up (SCRUM-107): timezone, temperature unit, wind speed unit and wind direction display are set in a Preferences pop-up opened from the gear icon in the top bar (reachable at every screen width). Changes apply immediately; the pop-up closes with its X and "Done" buttons.
++ Preferences pop-up (SCRUM-107): timezone, temperature unit, wind speed unit and wind direction display (shown in the barb details pop-up) are set in a Preferences pop-up opened from the gear icon in the top bar (reachable at every screen width). Changes apply immediately; the pop-up closes with its X and "Done" buttons. The direction control carries the hint "Only shown in a barb's details pop-up." (SCRUM-239), tied to the select with `aria-describedby` so a screen reader announces it, because the setting changes only the direction line of a clicked barb's pop-up — never the map barbs or the legend.
 + All four preferences are saved in localStorage (`unit_system`, `speed_unit`, `dir_display`, `timezone`) and restored on reload. Missing or invalid stored values fall back to the defaults (°F, knots, barbs, Pacific).
 + The four preferences are independent: choosing °F or °C changes only the temperature unit, never the wind speed unit.
 
