@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 #   9 → 10 (SCRUM-233): ocean-wave grid cache, keyed by point and hour like the currents.
 SCHEMA_VERSION = 10
 
+# How long a writer waits for another connection's lock before SQLite raises "database is locked"
+# (SCRUM-274). Five seconds matches the driver default but is now explicit and documented.
+BUSY_TIMEOUT_MS = 5000
+
 LOCATIONS_DDL = """
 CREATE TABLE IF NOT EXISTS locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,6 +184,12 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # Off by default in SQLite; needed for weather_cache's ON DELETE CASCADE.
     conn.execute("PRAGMA foreign_keys = ON;")
+    # WAL lets a reader and a writer work at the same time (SCRUM-274): without it the loser of a
+    # concurrent write waited out the default 5 s and then failed with "database is locked". The
+    # busy timeout keeps the wait bounded when a writer really is in the way. Litestream replicates
+    # a WAL database the same way it replicates a rollback journal one.
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS};")
     return conn
 
 

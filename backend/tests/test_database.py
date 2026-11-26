@@ -252,3 +252,35 @@ def test_upgrade_from_version_1_adds_timezone_to_forecast_cache_keys():
         assert "timezone" in _columns(conn, "weather_cache")
         assert "timezone" in _columns(conn, "point_weather_cache")
         assert conn.execute("SELECT COUNT(*) AS n FROM weather_cache;").fetchone()["n"] == 0
+
+
+def test_connections_use_wal_and_a_bounded_busy_timeout():
+    # Without WAL a reader and a writer collided and the loser failed with "database is locked"
+    # after the default 5 s (SCRUM-274).
+    with db_connection() as conn:
+        assert conn.execute("PRAGMA journal_mode;").fetchone()[0] == "wal"
+        assert conn.execute("PRAGMA busy_timeout;").fetchone()[0] == database.BUSY_TIMEOUT_MS
+
+
+def test_concurrent_writers_do_not_fail_with_database_is_locked():
+    import threading
+
+    errors: list[Exception] = []
+
+    def write(name: str) -> None:
+        try:
+            with db_connection() as conn:
+                conn.execute("INSERT INTO locations (name, latitude, longitude) VALUES (?, 1, 2);", (name,))
+        except sqlite3.OperationalError as exc:  # pragma: no cover - the failure being prevented
+            errors.append(exc)
+
+    threads = [threading.Thread(target=write, args=(f"T{index}",)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+
+    assert errors == []
+    with db_connection() as conn:
+        rows = conn.execute("SELECT COUNT(*) AS n FROM locations WHERE name LIKE 'T%';").fetchone()
+    assert rows["n"] == 8
