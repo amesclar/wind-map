@@ -29,6 +29,8 @@ const EMAIL_PATTERN = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/;
 interface FeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** The live map zoom, filed with the ticket (SCRUM-320). */
+  mapZoom?: number | null;
 }
 
 type FieldName = 'type' | 'subject' | 'comments' | 'email';
@@ -61,7 +63,7 @@ function failureMessage(err: unknown): string {
  * Feedback form (SCRUM-179). Submitting files a Jira issue through POST /api/feedback. A failure
  * keeps every field as typed and waits for the user to retry: a silent retry could duplicate a ticket.
  */
-export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
+export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, mapZoom = null }) => {
   const [type, setType] = useState('');
   const [subject, setSubject] = useState('');
   const [comments, setComments] = useState('');
@@ -193,6 +195,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
         app_version: client.app_version,
         timezone: client.timezone,
         user_agent: client.user_agent,
+        ...(mapZoom != null ? { map_zoom: mapZoom } : {}),
         ...(attachments.length > 0 ? { files: attachments.map((item) => item.file) } : {}),
       });
       setIssueKey(result.issue_key);

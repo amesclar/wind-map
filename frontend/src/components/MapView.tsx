@@ -42,6 +42,8 @@ interface MapViewProps {
   selectedLocation: SavedLocation | null;
   /** Where to look at startup without selecting it (SCRUM-248); flies, opens no pop-up. */
   focusLocation?: SavedLocation | null;
+  /** The live zoom, for the version copy and the feedback ticket (SCRUM-320). */
+  onZoomLevelChange?: (zoom: number) => void;
   onSelectLocation: (loc: SavedLocation) => void;
   weatherMap: Record<number, WeatherForecastResponse>;
   tileLayerType: MapTileLayer;
@@ -169,6 +171,7 @@ export const MapView: React.FC<MapViewProps> = ({
   locations,
   selectedLocation,
   focusLocation = null,
+  onZoomLevelChange,
   onSelectLocation,
   weatherMap,
   tileLayerType,
@@ -279,9 +282,15 @@ export const MapView: React.FC<MapViewProps> = ({
   // value, so the readable copy lives in the app's control and follows every zoom (wheel, buttons,
   // keyboard), not just its own buttons.
   const [zoomLevel, setZoomLevel] = useState<number | null>(null);
+  // The owner reads the same value for the version copy and the feedback ticket (SCRUM-320).
+  const onZoomLevelChangeRef = useLatest(onZoomLevelChange);
   useEffect(() => {
     if (!mapInstance) return;
-    const update = () => setZoomLevel(mapInstance.getZoom());
+    const update = () => {
+      const zoom = mapInstance.getZoom();
+      setZoomLevel(zoom);
+      onZoomLevelChangeRef.current?.(zoom);
+    };
     update();
     mapInstance.on('zoom', update);
     mapInstance.on('zoomend', update);
@@ -289,7 +298,7 @@ export const MapView: React.FC<MapViewProps> = ({
       mapInstance.off('zoom', update);
       mapInstance.off('zoomend', update);
     };
-  }, [mapInstance]);
+  }, [mapInstance, onZoomLevelChangeRef]);
 
   // Fill a pop-up's tide slot when it opens (SCRUM-195). The slot carries only the point; the
   // hour is this render's `validTime`, so the tide matches the rest of the pop-up.

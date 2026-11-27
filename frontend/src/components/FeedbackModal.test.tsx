@@ -133,8 +133,20 @@ describe('FeedbackModal (SCRUM-179)', () => {
     expect(payload.app_version).toBeTruthy();
     expect(payload.user_agent.length).toBeLessThanOrEqual(200);
     expect(typeof payload.timezone).toBe('string');
+    // No map is mounted in this render, so no zoom is claimed (SCRUM-320).
+    expect(payload.map_zoom).toBeUndefined();
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('files the map zoom when the map reports one (SCRUM-320)', async () => {
+    submit.mockResolvedValue({ issue_key: 'SCRUM-322', issue_url: '' });
+    render(<FeedbackModal isOpen onClose={vi.fn()} mapZoom={14} />);
+    fill();
+    send();
+    await screen.findByText('SCRUM-322');
+
+    expect(submit.mock.calls[0][0].map_zoom).toBe(14);
   });
 
   it('omits the email when blank', async () => {

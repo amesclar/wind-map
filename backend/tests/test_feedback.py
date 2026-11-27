@@ -145,6 +145,30 @@ def test_description_has_contact_and_breadcrumbs(client, jira):
     assert "User agent: Mozilla/5.0 (Test)" in description
 
 
+def test_description_names_the_map_zoom(client, jira):
+    post(client, map_zoom=11)
+    description = jira.fields["description"]
+    assert "Map zoom: 11" in description
+    # Beside the other breadcrumbs, after the version and before the timezone.
+    assert description.index("App version: ") < description.index("Map zoom: ")
+    assert description.index("Map zoom: ") < description.index("Timezone: ")
+
+
+def test_description_says_unknown_zoom_when_the_browser_sent_none(client, jira):
+    post(client)
+    assert "Map zoom: unknown" in jira.fields["description"]
+
+
+def test_multipart_carries_the_map_zoom(client, jira):
+    assert post_files(client, [("a.png", PNG, "image/png")], map_zoom=14).status_code == 201
+    assert "Map zoom: 14" in jira.fields["description"]
+
+
+def test_map_zoom_outside_the_map_range_is_rejected(client, jira):
+    assert post(client, map_zoom=99).status_code == 422
+    assert jira.calls == []
+
+
 def test_user_agent_is_truncated_to_200_characters(client, jira):
     assert post(client, user_agent="x" * 900).status_code == 201
     line = [ln for ln in jira.fields["description"].splitlines() if ln.startswith("User agent: ")][0]
