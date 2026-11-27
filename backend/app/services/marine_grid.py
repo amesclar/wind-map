@@ -39,6 +39,8 @@ class MarineSpec:
     value_columns: tuple[str, ...]
     # Extra request parameters, e.g. the unit conversion the currents request relies on.
     params: dict[str, Any] | None = None
+    # Name this layer's calls in the usage log (SCRUM-327): both layers share the marine URL.
+    label: str = "marine"
 
     @property
     def value_columns_sql(self) -> str:
@@ -175,6 +177,7 @@ async def fetch_current[V](
             "forecast_days": 1,
         },
         timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
+        label=spec.label,
     )
     items = as_list(data, len(points))
     return [parse(item.get("current") or {}, cell(item, point)) for item, point in zip(items, points, strict=True)]
@@ -198,6 +201,7 @@ async def fetch_hourly[V](
             "timezone": "UTC",
         },
         timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
+        label=spec.label,
     )
     items = as_list(data, len(points))
     cells = [cell(item, point) for item, point in zip(items, points, strict=True)]

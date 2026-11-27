@@ -73,7 +73,7 @@ async def fetch_forecast(
         "timezone": timezone,
         "forecast_days": days,
     }
-    return await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params)
+    return await open_meteo.get_json(OPEN_METEO_FORECAST_URL, params, label="point")
 
 
 def parse_provider_forecast(

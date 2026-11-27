@@ -83,6 +83,7 @@ async def _on_land(lat: float, lon: float) -> bool:
             OPEN_METEO_ELEVATION_URL,
             {"latitude": lat, "longitude": lon},
             timeout=OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+            label="tide",
         )
     except httpx.HTTPError as exc:
         logger.warning("Elevation lookup failed; keeping the tide: %s", exc)
@@ -232,6 +233,7 @@ async def _fetch_window(lat: float, lon: float, start: datetime, end: datetime) 
             "end_date": end.strftime("%Y-%m-%d"),
         },
         timeout=OPEN_METEO_MARINE_TIMEOUT_SECONDS,
+        label="tide",
     )
     item = data[0] if isinstance(data, list) else data
     hourly = item.get("hourly") or {}

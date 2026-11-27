@@ -123,6 +123,18 @@ OPEN_METEO_GEOCODING_TIMEOUT_SECONDS = 5.0  # interactive search box
 OPEN_METEO_RETRIES = 2  # connection retries for forecast requests
 OPEN_METEO_GEOCODING_RETRIES = 0  # don't make the search box wait on retries
 
+# Open-Meteo usage log (SCRUM-327). The free API is charged in weighted calls, roughly one per grid
+# point, and every response reports its own charge in X-RateLimit-Cost, so the log stores the
+# upstream's number instead of recomputing the weight formula. The free allowance is 10,000/day,
+# 5,000/hour and 600/minute (open-meteo.com/en/terms); the daily figure is what the free-versus-paid
+# decision turns on, because the daily cap is what empties the map.
+OPEN_METEO_DAILY_CALL_LIMIT = 10_000
+OPEN_METEO_USAGE_RETENTION_DAYS = 90
+OPEN_METEO_USAGE_FLUSH_SECONDS = 30.0
+OPEN_METEO_USAGE_FLUSH_ROWS = 100
+OPEN_METEO_USAGE_WARN_FRACTION = 0.8
+OPEN_METEO_USAGE_HISTORY_DAYS = 14
+
 # Map Settings
 CARTO_API_KEY = os.getenv("CARTO_API_KEY", "").strip()
 GCP_MAP_KEY = os.getenv("GCP_MAP_KEY", "").strip()
