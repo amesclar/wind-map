@@ -16,6 +16,7 @@ import { buildRefreshHint } from './utils/refreshHint';
 import {
   GOOGLE_MAP_EXPORT_DISABLED_REASON,
   GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP,
+  tileLayerName,
 } from './components/mapTiles';
 import { MapExportDialog } from './components/MapExportDialog';
 import { SavedLocationsModal } from './components/SavedLocationsModal';
@@ -277,6 +278,7 @@ export const App: React.FC = () => {
         onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
         onSelectAndAddLocation={handleSelectAndAddLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
+        mapName={tileLayerName(mapSettings.tileLayer)}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
         hasCartoKey={Boolean(mapSettings.cartoApiKey)}
         onOpenExportDialog={mapExport.openDialog}

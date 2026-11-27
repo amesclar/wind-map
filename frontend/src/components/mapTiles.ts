@@ -13,6 +13,21 @@ const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>([
 
 export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAYERS.has(layer);
 
+/**
+ * Short names shown in the base-map radios and on the navbar button (SCRUM-322, SCRUM-326).
+ * One table so the button cannot drift from the chosen layer's label.
+ */
+export const TILE_LAYER_NAMES: Record<MapTileLayer, string> = {
+  osm_dark: 'OSM-Dark',
+  carto_dark: 'CARTO',
+  osm_standard: 'OSM-Light',
+  paper_chart: 'NOAA',
+  seamap: 'OpenWater',
+  google_satellite: 'Satellite',
+};
+
+export const tileLayerName = (layer: MapTileLayer): string => TILE_LAYER_NAMES[layer];
+
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';

@@ -3,6 +3,7 @@ import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Mo
 import { MapTileLayer } from '../types';
 import {
   isLightTileLayer,
+  TILE_LAYER_NAMES,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_COVERAGE_NOTICE,
   NOAA_NOTICE,
@@ -259,7 +260,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                         <div
                           className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          OSM-Dark
+                          {TILE_LAYER_NAMES.osm_dark}
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                           >
@@ -299,7 +300,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                         <div
                           className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          CARTO
+                          {TILE_LAYER_NAMES.carto_dark}
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeKey}`}
                           >
@@ -338,7 +339,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       />
                       <div>
                         <div className={`text-sm font-medium ${theme.optionTitle}`}>
-                          OSM-Light
+                          {TILE_LAYER_NAMES.osm_standard}
                         </div>
                         {openInfo === 'osm_standard' && (
                           <InfoPanel id="osm_standard" theme={theme}>
@@ -373,7 +374,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                         <div
                           className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          NOAA
+                          {TILE_LAYER_NAMES.paper_chart}
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                           >
@@ -418,7 +419,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                         <div
                           className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          OpenWater
+                          {TILE_LAYER_NAMES.seamap}
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                           >
@@ -465,7 +466,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                         <div
                           className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          Satellite
+                          {TILE_LAYER_NAMES.google_satellite}
                           <span
                             className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                           >

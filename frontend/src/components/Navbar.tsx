@@ -23,6 +23,8 @@ interface NavbarProps {
   onOpenSavedLocations: () => void;
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
+  /** The selected base map's short name, shown instead of the generic "Map" (SCRUM-326). */
+  mapName: string;
   onOpenPreferences: () => void;
   hasCartoKey: boolean;
   /** Opens the export dialog (SCRUM-117). */
@@ -56,6 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSavedLocations,
   onSelectAndAddLocation,
   onOpenMapSettings,
+  mapName,
   onOpenPreferences,
   hasCartoKey,
   onOpenExportDialog,
@@ -152,10 +155,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           onClick={onOpenMapSettings}
           title="Map Layers & CARTO API Key"
+          data-testid="map-settings-button"
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 text-xs font-medium transition shrink-0"
         >
           <Map className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden md:inline">Map</span>
+          <span className="hidden md:inline">{mapName}</span>
           {hasCartoKey && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="API key active" />
           )}
