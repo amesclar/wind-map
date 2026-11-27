@@ -49,6 +49,7 @@ POINT_SERIES_HOURS = 48
 SPEC = marine_grid.MarineSpec(
     table="grid_currents_cache",
     variables=CURRENT_VARIABLES,
+    label="currents",
     value_columns=("velocity_knots", "direction_deg"),
     params=MARINE_PARAMS,
 )

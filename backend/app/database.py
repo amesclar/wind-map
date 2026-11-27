@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from backend.app.config import DATABASE_PATH, DEFAULT_LOCATION
+from backend.app.config import DATABASE_PATH, DEFAULT_LOCATION, OPEN_METEO_USAGE_RETENTION_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 #   7 → 8 (SCRUM-195): sea-level cache for tide pop-ups, keyed by point and hour.
 #   8 → 9 (SCRUM-106): long-lived NWS grid mapping, so a coordinate's grid is looked up once.
 #   9 → 10 (SCRUM-233): ocean-wave grid cache, keyed by point and hour like the currents.
-SCHEMA_VERSION = 10
+#  10 → 11 (SCRUM-327): the Open-Meteo usage log, which is kept across upgrades.
+SCHEMA_VERSION = 11
 
 # How long a writer waits for another connection's lock before SQLite raises "database is locked"
 # (SCRUM-274). Five seconds matches the driver default but is now explicit and documented.
@@ -166,6 +167,28 @@ CREATE TABLE IF NOT EXISTS grid_waves_cache (
 );
 """
 
+# Open-Meteo free-tier usage log (SCRUM-327): one row per upstream attempt, with the charge and
+# quota numbers Open-Meteo reported. It is deliberately outside CACHE_TABLE_DDL: unlike a cache it
+# cannot be refetched, so a schema bump must keep it (nws_grid_cache is kept for the same reason).
+OPEN_METEO_USAGE_DDL = """
+CREATE TABLE IF NOT EXISTS open_meteo_usage (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          REAL NOT NULL,
+    hour        TEXT NOT NULL,
+    day         TEXT NOT NULL,
+    endpoint    TEXT NOT NULL,
+    status      INTEGER NOT NULL,
+    cost        REAL NOT NULL DEFAULT 0,
+    quota_limit REAL,
+    remaining   REAL,
+    window_s    INTEGER,
+    reset_at    REAL
+);
+"""
+
+# Pruning deletes by `at`, so the oldest rows are found without scanning the whole log.
+OPEN_METEO_USAGE_INDEX_DDL = "CREATE INDEX IF NOT EXISTS idx_open_meteo_usage_at ON open_meteo_usage(at);"
+
 CACHE_TABLE_DDL = {
     "weather_cache": WEATHER_CACHE_DDL,
     "point_weather_cache": POINT_CACHE_DDL,
@@ -227,6 +250,8 @@ def init_db() -> None:
         for ddl in CACHE_TABLE_DDL.values():
             conn.execute(ddl)
         conn.execute(NWS_GRID_CACHE_DDL)
+        conn.execute(OPEN_METEO_USAGE_DDL)
+        conn.execute(OPEN_METEO_USAGE_INDEX_DDL)
         # PRAGMA values can't be bound as parameters; SCHEMA_VERSION is a constant int.
         conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)};")
 
@@ -246,6 +271,13 @@ def init_db() -> None:
                     DEFAULT_LOCATION.get("country"),
                 ),
             )
+
+
+def prune_open_meteo_usage(now: float | None = None) -> int:
+    """Delete usage rows older than the retention window (SCRUM-327). Returns rows deleted."""
+    cutoff = (time.time() if now is None else now) - OPEN_METEO_USAGE_RETENTION_DAYS * 86400
+    with db_connection() as conn:
+        return conn.execute("DELETE FROM open_meteo_usage WHERE at < ?;", (cutoff,)).rowcount
 
 
 def clean_expired_cache(now: float | None = None) -> int:

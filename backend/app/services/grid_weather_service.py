@@ -294,6 +294,7 @@ async def _covered_items(
             OPEN_METEO_FORECAST_URL,
             params_for(chunk),
             timeout=OPEN_METEO_GRID_TIMEOUT_SECONDS,
+            label="grid",
         )
     except open_meteo.CoverageError:
         if len(chunk) == 1:
