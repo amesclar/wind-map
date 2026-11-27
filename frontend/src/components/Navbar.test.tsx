@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Navbar } from './Navbar';
+import { APP_VERSION } from '../version';
 
 vi.mock('../api/client', () => ({ searchGeocode: vi.fn().mockResolvedValue([]) }));
 
@@ -165,5 +166,61 @@ describe('refresh hint (SCRUM-257)', () => {
     expect(screen.getByTestId('refresh-hint-box').textContent).toBe('Refresh data now');
     fireEvent.click(screen.getByTestId('refresh-data'));
     expect(props.onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('version badge copy (SCRUM-319)', () => {
+  const stubClipboard = (writeText: ReturnType<typeof vi.fn>) =>
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'clipboard');
+    vi.useRealTimers();
+  });
+
+  it('copies the version with the client details and confirms it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+    renderNavbar();
+
+    fireEvent.click(screen.getByTestId('app-version'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain(`Wind Map v${APP_VERSION}`);
+    expect(copied).toContain(
+      `Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'unknown'}`,
+    );
+    expect(copied).toContain('Browser: ');
+    expect(copied).toContain(navigator.userAgent.slice(0, 200));
+    expect(screen.getByTestId('version-copy-status').textContent).toBe(
+      `v${APP_VERSION} copied to clipboard`,
+    );
+  });
+
+  it('clears the confirmation by itself', async () => {
+    vi.useFakeTimers();
+    stubClipboard(vi.fn().mockResolvedValue(undefined));
+    renderNavbar();
+
+    fireEvent.click(screen.getByTestId('app-version'));
+    await act(async () => {});
+    expect(screen.getByTestId('version-copy-status')).toBeTruthy();
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.queryByTestId('version-copy-status')).toBeNull();
+  });
+
+  it('says so when the clipboard refuses', async () => {
+    stubClipboard(vi.fn().mockRejectedValue(new Error('denied')));
+    renderNavbar();
+
+    fireEvent.click(screen.getByTestId('app-version'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('version-copy-status').textContent).toBe(
+        'Could not copy the version',
+      ),
+    );
   });
 });
