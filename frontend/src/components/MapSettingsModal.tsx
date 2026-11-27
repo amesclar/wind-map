@@ -197,6 +197,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 </label>
                 <div className="space-y-2">
                   <label
+                    data-testid="tile-layer-osm-dark"
                     className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
                   >
                     <input
@@ -210,7 +211,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       <div
                         className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                       >
-                        OpenStreetMap Dark
+                        OSM-Dark
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                         >
@@ -224,6 +225,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   </label>
 
                   <label
+                    data-testid="tile-layer-carto-dark"
                     className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
                   >
                     <input
@@ -237,7 +239,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       <div
                         className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                       >
-                        CARTO Dark Matter
+                        CARTO
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeKey}`}
                         >
@@ -251,6 +253,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   </label>
 
                   <label
+                    data-testid="tile-layer-osm-standard"
                     className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
                   >
                     <input
@@ -262,7 +265,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     />
                     <div>
                       <div className={`text-sm font-medium ${theme.optionTitle}`}>
-                        OpenStreetMap Standard (Light)
+                        OSM-Light
                       </div>
                       <div className={`text-xs ${theme.description} mt-0.5`}>
                         Default light road map, completely keyless.
@@ -285,7 +288,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       <div
                         className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                       >
-                        Nautical Paper Chart
+                        NOAA
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                         >
@@ -317,7 +320,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       <div
                         className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                       >
-                        Open Waters Seamap
+                        OpenWater
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                         >
@@ -351,7 +354,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       <div
                         className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                       >
-                        Google Satellite (Hybrid)
+                        Satellite
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
                         >
@@ -394,7 +397,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   Get an instant free key from CARTO (up to 5 million requests/month) and paste it below to unlock watermark-free CARTO tiles.
                 </p>
                 <p className={`text-xs ${theme.note} mb-2.5`}>
-                  The key applies to CARTO Dark Matter only.
+                  The key applies to CARTO only.
                 </p>
 
                 <form onSubmit={handleSave} className="space-y-2.5">
