@@ -68,20 +68,16 @@ describe('seamapLayerConfig (SCRUM-206)', () => {
     expect(config.kind === 'vector' && config.attribution).toContain('OpenStreetMap');
   });
 
-  it('leaves the four existing attribution strings untouched', () => {
+  it('leaves the remaining attribution strings untouched', () => {
     expect(attributionText('paper_chart')).toBe('© NOAA Office of Coast Survey · Not for navigation');
     expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
-    expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
-    expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
   });
 });
 
 describe('TILE_LAYER_NAMES (SCRUM-322, SCRUM-326)', () => {
   it('names every base map once and resolves each id to its short label', () => {
     expect(TILE_LAYER_NAMES).toEqual({
-      osm_dark: 'OSM-Dark',
       carto_dark: 'CARTO',
-      osm_standard: 'OSM-Light',
       paper_chart: 'NOAA',
       seamap: 'OpenWater',
       google_satellite: 'Satellite',
@@ -96,7 +92,7 @@ describe('isLightBase (SCRUM-206)', () => {
   it('marks both light sheets, and no dark base', () => {
     expect(isLightBase('paper_chart')).toBe(true);
     expect(isLightBase('seamap')).toBe(true);
-    for (const layer of ['carto_dark', 'osm_dark', 'osm_standard'] as const) {
+    for (const layer of ['carto_dark', 'google_satellite'] as const) {
       expect(isLightBase(layer)).toBe(false);
     }
   });
@@ -109,10 +105,10 @@ describe('tileLayerConfig (SCRUM-92)', () => {
     expect(tileLayerConfig('carto_dark').options.attribution).toContain('CARTO');
   });
 
-  it('darkens OSM tiles only for the dark layer', () => {
-    expect(tileLayerConfig('osm_dark').options.className).toBe('osm-dark-tiles');
-    expect(tileLayerConfig('osm_standard').options.className).toBeUndefined();
-    expect(tileLayerConfig('osm_standard').url).toBe('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+  it('never asks the OpenStreetMap volunteer servers for a base tile (SCRUM-301)', () => {
+    for (const layer of ['carto_dark', 'paper_chart', 'seamap', 'google_satellite'] as const) {
+      expect(tileLayerConfig(layer).url).not.toContain('tile.openstreetmap.org');
+    }
   });
 });
 
@@ -136,11 +132,11 @@ describe('seamarkLayerConfig (SCRUM-175)', () => {
 describe('seamarksShownFor (SCRUM-214)', () => {
   it('hides the overlay on the paper chart and keeps it on every other base', () => {
     expect(seamarksShownFor('paper_chart', true)).toBe(false);
-    for (const layer of ['osm_dark', 'carto_dark', 'osm_standard'] as const) {
+    for (const layer of ['carto_dark', 'seamap', 'google_satellite'] as const) {
       expect(seamarksShownFor(layer, true)).toBe(true);
     }
     // The stored toggle still decides for every base; it is only overridden on the chart.
-    expect(seamarksShownFor('osm_dark', false)).toBe(false);
+    expect(seamarksShownFor('carto_dark', false)).toBe(false);
   });
 
   it('explains why the toggle does nothing on the chart', () => {
@@ -225,10 +221,8 @@ describe('paper chart tile config (SCRUM-203)', () => {
     expect(CHART_EDGE_NOTICE).toContain('base map');
   });
 
-  it('credits NOAA with the navigation notice and leaves the other three strings unchanged', () => {
+  it('credits NOAA with the navigation notice and leaves the other strings unchanged', () => {
     expect(attributionText('paper_chart')).toBe(`${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`);
-    expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
-    expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
     expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
     expect(attributionText('google_satellite')).toBe(GOOGLE_SATELLITE_ATTRIBUTION_TEXT);
   });
@@ -287,12 +281,13 @@ describe('paper chart tile config (SCRUM-203)', () => {
     }
   });
 
-  it('never puts the dark filter on a chart or a standard layer', () => {
-    expect(tileLayerConfig('paper_chart').options.className).not.toContain('osm-dark-tiles');
-    for (const layer of ['osm_standard', 'carto_dark'] as const) {
-      expect(tileLayerConfig(layer).options.className ?? '').not.toContain('osm-dark-tiles');
+  it('never puts the CSS dark filter on a base layer (SCRUM-301)', () => {
+    for (const layer of ['carto_dark', 'paper_chart', 'google_satellite'] as const) {
+      const config = tileLayerConfig(layer) as { options?: { className?: string } };
+      expect(config.options?.className ?? '').not.toContain('osm-dark-tiles');
     }
-    expect(tileLayerConfig('osm_dark').options.className).toContain('osm-dark-tiles');
+    // Seamap is a vector style, so a CSS tile filter cannot reach it at all.
+    expect(seamapLayerConfig().kind).toBe('vector');
   });
 });
 

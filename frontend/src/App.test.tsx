@@ -112,16 +112,17 @@ describe('App map integration (SCRUM-126)', () => {
     localStorage.removeItem(STORAGE_KEYS.tileLayer);
     render(<App />);
 
+    // SCRUM-301: CARTO is the base a fresh browser starts on.
     await waitFor(() =>
-      expect(screen.getByTestId('map-settings-button').textContent).toContain('OSM-Dark'),
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('CARTO'),
     );
 
     fireEvent.click(screen.getByTestId('map-settings-button'));
-    const carto = screen.getByTestId('tile-layer-carto-dark').querySelector('input')!;
-    fireEvent.click(carto);
+    const chart = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
+    fireEvent.click(chart);
 
     await waitFor(() =>
-      expect(screen.getByTestId('map-settings-button').textContent).toContain('CARTO'),
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('NOAA'),
     );
     localStorage.removeItem(STORAGE_KEYS.tileLayer);
   });

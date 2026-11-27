@@ -246,46 +246,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div className="space-y-2">
                   <div className="relative">
                     <label
-                      data-testid="tile-layer-osm-dark"
-                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
-                    >
-                      <input
-                        type="radio"
-                        name="tileLayer"
-                        checked={tileLayer === 'osm_dark'}
-                        onChange={() => onChangeTileLayer('osm_dark')}
-                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
-                      />
-                      <div>
-                        <div
-                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                        >
-                          {TILE_LAYER_NAMES.osm_dark}
-                          <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
-                          >
-                            Free • No Key Needed
-                          </span>
-                        </div>
-                        {openInfo === 'osm_dark' && (
-                          <InfoPanel id="osm_dark" theme={theme}>
-                            Clean, high-contrast dark theme without any watermark or API key limits.
-                          </InfoPanel>
-                        )}
-                      </div>
-                    </label>
-                    <InfoToggle
-                      id="osm_dark"
-                      label="OSM-Dark"
-                      theme={theme}
-                      open={openInfo === 'osm_dark'}
-                      onToggle={() => toggleInfo('osm_dark')}
-                      className="absolute right-2 top-2"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <label
                       data-testid="tile-layer-carto-dark"
                       className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
                     >
@@ -321,39 +281,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       theme={theme}
                       open={openInfo === 'carto_dark'}
                       onToggle={() => toggleInfo('carto_dark')}
-                      className="absolute right-2 top-2"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <label
-                      data-testid="tile-layer-osm-standard"
-                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
-                    >
-                      <input
-                        type="radio"
-                        name="tileLayer"
-                        checked={tileLayer === 'osm_standard'}
-                        onChange={() => onChangeTileLayer('osm_standard')}
-                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
-                      />
-                      <div>
-                        <div className={`text-sm font-medium ${theme.optionTitle}`}>
-                          {TILE_LAYER_NAMES.osm_standard}
-                        </div>
-                        {openInfo === 'osm_standard' && (
-                          <InfoPanel id="osm_standard" theme={theme}>
-                            Default light road map, completely keyless.
-                          </InfoPanel>
-                        )}
-                      </div>
-                    </label>
-                    <InfoToggle
-                      id="osm_standard"
-                      label="OSM-Light"
-                      theme={theme}
-                      open={openInfo === 'osm_standard'}
-                      onToggle={() => toggleInfo('osm_standard')}
                       className="absolute right-2 top-2"
                     />
                   </div>
