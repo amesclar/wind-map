@@ -87,6 +87,7 @@ describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
     const toggle = screen.getByTestId('seamarks-toggle') as HTMLButtonElement;
     expect(toggle.disabled).toBe(true);
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByTestId('info-seamarks'));
     expect(
       within(screen.getByTestId('map-settings-body')).getByText(/already draws NOAA's aids/),
     ).toBeTruthy();
@@ -127,6 +128,7 @@ describe('MapSettingsModal B.C. depth toggle (SCRUM-205)', () => {
     const body = screen.getByTestId('map-settings-body');
     expect(within(body).getByText(/B\.C\. Depth \(CHS NONNA\)/)).toBeTruthy();
     expect(within(body).getByText(/Bathymetry © CHS NONNA/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('info-bc_depth'));
     expect(within(body).getByText(/Canadian Hydrographic Service/)).toBeTruthy();
     expect(screen.getByTestId('bc-depth-toggle').getAttribute('aria-pressed')).toBe('true');
   });
@@ -149,6 +151,7 @@ describe('MapSettingsModal wave toggle (SCRUM-234)', () => {
     expect(screen.getByTestId('waves-toggle').getAttribute('aria-pressed')).toBe('true');
     const body = screen.getByTestId('map-settings-body');
     expect(within(body).getByText(/Show wave height and direction/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('info-waves'));
     expect(within(body).getByText(/together with the currents/)).toBeTruthy();
   });
 });
@@ -172,6 +175,7 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
 
     const body = screen.getByTestId('map-settings-body');
     expect(within(body).getByText(/© NOAA Office of Coast Survey/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('info-paper_chart'));
     expect(within(body).getByText(/Canadian border/)).toBeTruthy();
     expect(
       (screen.getByTestId('tile-layer-paper-chart').querySelector('input') as HTMLInputElement)
@@ -194,6 +198,7 @@ describe('MapSettingsModal Seamap radio (SCRUM-206)', () => {
     expect(
       within(body).getByText(/© Open Waters: Seamap · © OpenStreetMap contributors/),
     ).toBeTruthy();
+    fireEvent.click(screen.getByTestId('info-seamap'));
     expect(within(body).getByText(/not soundings/)).toBeTruthy();
     expect(within(body).getByText(/overzoom beyond that/)).toBeTruthy();
   });
@@ -265,17 +270,19 @@ describe('MapSettingsModal wind color gradient toggle (SCRUM-124)', () => {
 });
 
 describe('MapSettingsModal water currents note (SCRUM-238)', () => {
-  it('explains the model resolution under the water currents toggle', () => {
+  it('explains the model resolution when the currents info is opened', () => {
     render(<MapSettingsModal {...BASE_PROPS} />);
 
+    fireEvent.click(screen.getByTestId('info-currents'));
     const note = screen.getByTestId('currents-resolution-note');
     expect(note.textContent).toContain('6 to 9 km');
     expect(note.textContent).toContain('Port Susan');
   });
 
-  it('stays visible when the layer is on', () => {
+  it('stays available when the layer is on', () => {
     render(<MapSettingsModal {...BASE_PROPS} waterCurrentsVisible />);
 
+    fireEvent.click(screen.getByTestId('info-currents'));
     expect(screen.getByTestId('currents-resolution-note')).toBeTruthy();
   });
 });
@@ -331,6 +338,7 @@ describe('MapSettingsModal high contrast gradient (SCRUM-213)', () => {
     expect(screen.getByTestId('wind-color-high-contrast-toggle').getAttribute('aria-pressed')).toBe(
       'true',
     );
+    fireEvent.click(screen.getByTestId('info-wind_high_contrast'));
     expect(
       within(screen.getByTestId('map-settings-body')).getByText(
         /always does this so its soundings stay readable/,
@@ -368,6 +376,7 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
     const panel = screen.getByTestId('map-settings-panel');
     expect(panel.className).toContain('bg-slate-50');
     expect(panel.className).not.toContain('bg-dark-800');
+    fireEvent.click(screen.getByTestId('info-osm_dark'));
     const description = within(screen.getByTestId('map-settings-body')).getByText(
       /Clean, high-contrast dark theme/,
     );
@@ -387,9 +396,12 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
 
     const body = screen.getByTestId('map-settings-body');
     expect(body.innerHTML).not.toContain('text-[11px]');
-    const description = within(body).getByText(/Clean, high-contrast dark theme/);
-    expect(description.className).toContain('text-xs');
-    expect(within(body).getByText(/6 to 9 km/).className).toContain('text-xs');
+    fireEvent.click(screen.getByTestId('info-osm_dark'));
+    expect(within(body).getByText(/Clean, high-contrast dark theme/).className).toContain('text-xs');
+    fireEvent.click(screen.getByTestId('info-currents'));
+    expect(screen.getByTestId('info-panel-currents').textContent).toContain('6 to 9 km');
+    expect(screen.getByTestId('info-panel-currents').className).toContain('text-xs');
+    fireEvent.click(screen.getByTestId('info-paper_chart'));
     expect(within(body).getByText(/Canadian border/).className).toContain('text-xs');
   });
 
@@ -443,6 +455,76 @@ describe('MapSettingsModal base map names (SCRUM-322)', () => {
     ]) {
       expect(within(options).queryByText(old, { exact: true })).toBeNull();
     }
+  });
+});
+
+describe('MapSettingsModal info glyphs (SCRUM-323)', () => {
+  const INFO_IDS = [
+    'osm_dark',
+    'carto_dark',
+    'osm_standard',
+    'paper_chart',
+    'seamap',
+    'google_satellite',
+    'wind',
+    'wind_color',
+    'wind_high_contrast',
+    'currents',
+    'waves',
+    'seamarks',
+    'bc_depth',
+  ];
+
+  it('starts with every detail collapsed', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    for (const id of INFO_IDS) {
+      expect(screen.getByTestId(`info-${id}`).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId(`info-${id}-panel`)).toBeNull();
+    }
+  });
+
+  it('opens one detail at a time and closes it on a second click', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    fireEvent.click(screen.getByTestId('info-osm_dark'));
+    expect(screen.getByTestId('info-panel-osm_dark').textContent).toContain(
+      'Clean, high-contrast dark theme',
+    );
+    expect(screen.getByTestId('info-osm_dark').getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    expect(screen.queryByTestId('info-panel-osm_dark')).toBeNull();
+    expect(screen.getByTestId('info-panel-carto_dark')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    expect(screen.queryByTestId('info-panel-carto_dark')).toBeNull();
+  });
+
+  it('does not select a base map or flip a layer when the glyph is clicked', () => {
+    const onChange = vi.fn();
+    const onWind = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        onChangeTileLayer={onChange}
+        onToggleWindOverlay={onWind}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    fireEvent.click(screen.getByTestId('info-wind'));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onWind).not.toHaveBeenCalled();
+  });
+
+  it('keeps Not for navigation visible without opening any detail', () => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="paper_chart" />);
+
+    expect(
+      within(screen.getByTestId('map-settings-body')).getAllByText(/Not for navigation/).length,
+    ).toBeGreaterThanOrEqual(3);
   });
 });
 
