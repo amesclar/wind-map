@@ -37,7 +37,7 @@ SITUATIONAL = {
         "globs": ["backend/**", "frontend/**", ".github/**", "requirements*.txt", "Dockerfile", "scripts/**"],
     },
     "release-versioning.md": {
-        "description": "Version source of truth, build hash, releases and container rebuilds.",
+        "description": "Version source of truth, build hash, releases, container rebuilds and Google Cloud deploys.",
         "globs": [
             "VERSION",
             "frontend/package.json",

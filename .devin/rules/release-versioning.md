@@ -1,7 +1,7 @@
 ---
 trigger: glob
 globs: VERSION, frontend/package.json, frontend/package-lock.json, release-notes/**, Dockerfile, scripts/rebuild-container.sh, .github/workflows/**
-description: Version source of truth, build hash, releases and container rebuilds.
+description: Version source of truth, build hash, releases, container rebuilds and Google Cloud deploys.
 ---
 
 <!-- Generated from .kiro/steering/release-versioning.md. Run: python scripts/sync-ai-rules.py -->
