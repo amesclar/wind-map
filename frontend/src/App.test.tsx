@@ -158,7 +158,11 @@ describe('App map integration (SCRUM-126)', () => {
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
     // Without geolocation the first saved location is only focused, never selected.
     await waitFor(() =>
-      expect(currentMap().flyTo).toHaveBeenCalledWith([oak.latitude, oak.longitude], 9, expect.any(Object)),
+      expect(currentMap().flyTo).toHaveBeenCalledWith(
+        [oak.latitude, oak.longitude],
+        13,
+        expect.any(Object),
+      ),
     );
     expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
     expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).not.toContain('scale-110');
@@ -193,7 +197,11 @@ describe('App map integration (SCRUM-126)', () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(currentMap().flyTo).toHaveBeenCalledWith([48.1, -122.4], 9, expect.any(Object)),
+      expect(currentMap().flyTo).toHaveBeenCalledWith(
+        [48.1, -122.4],
+        13,
+        expect.any(Object),
+      ),
     );
     await waitFor(() => expect(markerAt(48.1, -122.4)).toBeDefined());
     expect(markerAt(48.1, -122.4)!.openPopup).not.toHaveBeenCalled();

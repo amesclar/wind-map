@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
+import { buildVersionReport, copyText } from '../utils/clientInfo';
 import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
@@ -74,6 +75,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const hintDescription = hint.detail ? `${hint.text} · ${hint.detail}` : hint.text;
   // A disabled button takes no pointer events and no focus, so the hint hangs off a wrapper.
   const [hintOpen, setHintOpen] = useState(false);
+  // SCRUM-319: the version badge copies the version with the client details a feedback ticket
+  // carries, and confirms it for a moment.
+  const [versionCopyStatus, setVersionCopyStatus] = useState<string | null>(null);
+  const versionCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (versionCopyTimer.current) clearTimeout(versionCopyTimer.current);
+    },
+    [],
+  );
+  const copyVersion = async () => {
+    const copied = await copyText(buildVersionReport());
+    if (versionCopyTimer.current) clearTimeout(versionCopyTimer.current);
+    setVersionCopyStatus(
+      copied ? `v${APP_VERSION} copied to clipboard` : 'Could not copy the version',
+    );
+    versionCopyTimer.current = setTimeout(() => setVersionCopyStatus(null), 2500);
+  };
 
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -85,11 +104,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-gray-100 tracking-wide flex items-center gap-1.5">
             Wind Map
-            <span
-              data-testid="app-version"
-              className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40"
-            >
-              v{APP_VERSION}
+            <span className="relative">
+              <button
+                type="button"
+                data-testid="app-version"
+                title="Copy version and browser details"
+                onClick={copyVersion}
+                className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40 transition hover:bg-sky-900 hover:text-sky-300"
+              >
+                v{APP_VERSION}
+              </button>
+              {versionCopyStatus && (
+                <span
+                  role="status"
+                  data-testid="version-copy-status"
+                  className="absolute left-0 top-full z-50 mt-1 whitespace-nowrap rounded border border-dark-600 bg-dark-900/95 px-2 py-1 text-[10px] font-normal text-gray-200 shadow-lg"
+                >
+                  {versionCopyStatus}
+                </span>
+              )}
             </span>
           </h1>
         </div>

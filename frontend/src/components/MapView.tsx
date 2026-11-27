@@ -259,8 +259,6 @@ export const MapView: React.FC<MapViewProps> = ({
       zoomControl: false,
     });
 
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
     mapInstanceRef.current = map;
     setMapInstance(map);
     // The export waits on this map's tile layers, including the window before new tiles exist
@@ -276,6 +274,22 @@ export const MapView: React.FC<MapViewProps> = ({
     // The Leaflet map is created once; selectedLocation only sets its initial center.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // SCRUM-319: the zoom control shows the level it is at. Leaflet's own control has no room for a
+  // value, so the readable copy lives in the app's control and follows every zoom (wheel, buttons,
+  // keyboard), not just its own buttons.
+  const [zoomLevel, setZoomLevel] = useState<number | null>(null);
+  useEffect(() => {
+    if (!mapInstance) return;
+    const update = () => setZoomLevel(mapInstance.getZoom());
+    update();
+    mapInstance.on('zoom', update);
+    mapInstance.on('zoomend', update);
+    return () => {
+      mapInstance.off('zoom', update);
+      mapInstance.off('zoomend', update);
+    };
+  }, [mapInstance]);
 
   // Fill a pop-up's tide slot when it opens (SCRUM-195). The slot carries only the point; the
   // hour is this render's `validTime`, so the tide matches the rest of the pop-up.
@@ -379,9 +393,11 @@ export const MapView: React.FC<MapViewProps> = ({
     const target = selectedLocation ?? focusLocation;
     if (!map || !target) return;
 
-    // The chart does not draw below its floor, so the initial flight has to land where it does
-    // (SCRUM-203); every other base keeps the original zoom.
-    const zoom = chartBaseRef.current ? CHART_MIN_ZOOM : 9;
+    // SCRUM-319: a selection moves the map, it does not reset the zoom. The flight keeps the level
+    // the user set; on the chart, which does not draw below its floor (SCRUM-203), it is raised to
+    // that floor and never lowered further.
+    const current = map.getZoom();
+    const zoom = chartBaseRef.current ? Math.max(current, CHART_MIN_ZOOM) : current;
     map.flyTo([target.latitude, target.longitude], zoom, {
       duration: 1.2,
       easeLinearity: 0.25,
@@ -416,6 +432,37 @@ export const MapView: React.FC<MapViewProps> = ({
         data-testid="map-canvas"
         className="w-full h-full"
       />
+      {/* SCRUM-319: +/- with the live level between them, where Leaflet put its own buttons. */}
+      <div
+        role="group"
+        aria-label="Map zoom"
+        data-testid="zoom-control"
+        className="absolute right-3 top-3 z-[800] flex w-7 flex-col items-stretch overflow-hidden rounded-lg border border-dark-600 bg-dark-800 shadow-lg"
+      >
+        <button
+          type="button"
+          aria-label="Zoom in"
+          onClick={() => mapInstance?.zoomIn()}
+          className="h-7 text-base leading-none text-gray-300 transition hover:bg-dark-700 hover:text-sky-400"
+        >
+          +
+        </button>
+        <span
+          data-testid="zoom-level"
+          aria-live="polite"
+          className="flex h-6 items-center justify-center border-y border-dark-600 text-[11px] tabular-nums text-gray-300"
+        >
+          {zoomLevel ?? '–'}
+        </span>
+        <button
+          type="button"
+          aria-label="Zoom out"
+          onClick={() => mapInstance?.zoomOut()}
+          className="h-7 text-base leading-none text-gray-300 transition hover:bg-dark-700 hover:text-sky-400"
+        >
+          −
+        </button>
+      </div>
       {gridHasNoData && (
         <div
           data-testid="no-wind-data-notice"

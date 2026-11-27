@@ -187,7 +187,11 @@ describe('MapView startup focus (SCRUM-248)', () => {
     render(<MapView {...baseProps} locations={[focus]} focusLocation={focus} />);
 
     const marker = markerAt(focus.latitude, focus.longitude)!;
-    expect(currentMap().flyTo).toHaveBeenCalledWith([focus.latitude, focus.longitude], 9, expect.any(Object));
+    expect(currentMap().flyTo).toHaveBeenCalledWith(
+      [focus.latitude, focus.longitude],
+      13,
+      expect.any(Object),
+    );
     expect(marker.openPopup).not.toHaveBeenCalled();
     expect((marker.icon as { html?: string }).html ?? '').not.toContain('scale-110');
   });
@@ -197,9 +201,72 @@ describe('MapView startup focus (SCRUM-248)', () => {
     render(<MapView {...baseProps} locations={[location]} selectedLocation={location} />);
 
     const marker = markerAt(location.latitude, location.longitude)!;
-    expect(currentMap().flyTo).toHaveBeenCalledWith([location.latitude, location.longitude], 9, expect.any(Object));
+    expect(currentMap().flyTo).toHaveBeenCalledWith(
+      [location.latitude, location.longitude],
+      13,
+      expect.any(Object),
+    );
     expect(marker.openPopup).toHaveBeenCalledTimes(1);
     expect((marker.icon as { html?: string }).html ?? '').toContain('scale-110');
+  });
+});
+
+describe('MapView zoom control (SCRUM-319)', () => {
+  it('shows the live zoom level and keeps the +/- steps in it', () => {
+    render(<MapView {...baseProps} locations={[]} />);
+    expect(screen.getByTestId('zoom-level').textContent).toBe('13');
+
+    fireEvent.click(screen.getByLabelText('Zoom in'));
+    expect(currentMap().zoomIn).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('zoom-level').textContent).toBe('14');
+
+    fireEvent.click(screen.getByLabelText('Zoom out'));
+    fireEvent.click(screen.getByLabelText('Zoom out'));
+    expect(currentMap().zoomOut).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('zoom-level').textContent).toBe('12');
+  });
+
+  it('follows a zoom made without the buttons', () => {
+    render(<MapView {...baseProps} locations={[]} />);
+
+    act(() => {
+      currentMap().zoom = 6;
+      currentMap().fire('zoomend');
+    });
+
+    expect(screen.getByTestId('zoom-level').textContent).toBe('6');
+  });
+
+  it('keeps the user zoom when a location is selected', () => {
+    const location = makeLocation();
+    const { rerender } = render(<MapView {...baseProps} locations={[location]} />);
+    const map = currentMap();
+    map.zoom = 15;
+
+    rerender(<MapView {...baseProps} locations={[location]} selectedLocation={location} />);
+
+    expect(map.flyTo).toHaveBeenCalledWith(
+      [location.latitude, location.longitude],
+      15,
+      expect.any(Object),
+    );
+  });
+
+  it('raises a selection to the chart floor and no further', () => {
+    const first = makeLocation({ id: 1 });
+    const second = makeLocation({ id: 2 });
+    const props = { ...baseProps, locations: [first, second], tileLayerType: 'paper_chart' as const };
+    const { rerender } = render(<MapView {...props} />);
+    const map = currentMap();
+    map.zoom = CHART_MIN_ZOOM - 2;
+
+    rerender(<MapView {...props} selectedLocation={second} />);
+
+    expect(map.flyTo).toHaveBeenCalledWith(
+      [second.latitude, second.longitude],
+      CHART_MIN_ZOOM,
+      expect.any(Object),
+    );
   });
 });
 
