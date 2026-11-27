@@ -108,6 +108,24 @@ describe('App map integration (SCRUM-126)', () => {
   it('allows each range hour 60 s for its grid data (SCRUM-164)', () => {
     expect(RANGE_FRAME_TIMEOUT_MS).toBe(60_000);
   });
+  it('labels the map button with the selected base map (SCRUM-326)', async () => {
+    localStorage.removeItem(STORAGE_KEYS.tileLayer);
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('OSM-Dark'),
+    );
+
+    fireEvent.click(screen.getByTestId('map-settings-button'));
+    const carto = screen.getByTestId('tile-layer-carto-dark').querySelector('input')!;
+    fireEvent.click(carto);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('CARTO'),
+    );
+    localStorage.removeItem(STORAGE_KEYS.tileLayer);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetLeafletMock();

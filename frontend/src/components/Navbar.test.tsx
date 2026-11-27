@@ -17,6 +17,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onOpenSavedLocations: vi.fn(),
     onSelectAndAddLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
+    mapName: 'OSM-Dark',
     onOpenPreferences: vi.fn(),
     onRefresh: vi.fn(),
     hasCartoKey: false,
@@ -41,6 +42,18 @@ describe('Navbar (SCRUM-92)', () => {
     expect(button.textContent).toContain('3');
     fireEvent.click(button);
     expect(props.onOpenSavedLocations).toHaveBeenCalled();
+  });
+
+  it('names the selected base map on the map-settings button (SCRUM-326)', () => {
+    const { props, rerender } = renderNavbar();
+    const button = screen.getByTitle('Map Layers & CARTO API Key');
+    expect(button.textContent).toContain('OSM-Dark');
+    expect(button.textContent).not.toContain('Map');
+
+    for (const name of ['OSM-Light', 'CARTO', 'NOAA', 'OpenWater', 'Satellite']) {
+      rerender(<Navbar {...props} mapName={name} />);
+      expect(screen.getByTestId('map-settings-button').textContent).toContain(name);
+    }
   });
 
   it('opens map settings and shows the API-key dot only when a key is set', () => {

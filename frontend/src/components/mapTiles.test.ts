@@ -43,6 +43,8 @@ import {
   seamarksShownFor,
   SEAMARK_HIDDEN_ON_CHART,
   tileLayerConfig,
+  TILE_LAYER_NAMES,
+  tileLayerName,
 } from './mapTiles';
 import { gridDimensions, MAX_GRID_DIM } from '../hooks/useWindGrid';
 
@@ -71,6 +73,22 @@ describe('seamapLayerConfig (SCRUM-206)', () => {
     expect(attributionText('carto_dark')).toBe('© OpenStreetMap contributors © CARTO');
     expect(attributionText('osm_dark')).toBe('© OpenStreetMap contributors');
     expect(attributionText('osm_standard')).toBe('© OpenStreetMap contributors');
+  });
+});
+
+describe('TILE_LAYER_NAMES (SCRUM-322, SCRUM-326)', () => {
+  it('names every base map once and resolves each id to its short label', () => {
+    expect(TILE_LAYER_NAMES).toEqual({
+      osm_dark: 'OSM-Dark',
+      carto_dark: 'CARTO',
+      osm_standard: 'OSM-Light',
+      paper_chart: 'NOAA',
+      seamap: 'OpenWater',
+      google_satellite: 'Satellite',
+    });
+    for (const layer of Object.keys(TILE_LAYER_NAMES) as (keyof typeof TILE_LAYER_NAMES)[]) {
+      expect(tileLayerName(layer)).toBe(TILE_LAYER_NAMES[layer]);
+    }
   });
 });
 
