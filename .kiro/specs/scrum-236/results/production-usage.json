@@ -1,0 +1,403 @@
+{
+  "input": "/tmp/wm-requests-lat.txt",
+  "requests": 390,
+  "window": {
+    "from": "2026-11-24T22:28:43.232319+00:00",
+    "to": "2026-11-26T00:02:42.380937+00:00"
+  },
+  "sessions": 8,
+  "calls_total": 96,
+  "points_total": 6979,
+  "sessions_in": [
+    {
+      "start": "2026-11-24T22:52:04.000778+00:00",
+      "ip": "50.34.168.100",
+      "minutes": 4.2,
+      "requests": 11,
+      "calls": 0,
+      "points_charged": 0,
+      "endpoints": {
+        "/": {
+          "requests": 9,
+          "calls": 0
+        },
+        "/favicon.ico": {
+          "requests": 2,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-24T23:31:56.323157+00:00",
+      "ip": "2605:59c8:75a:2c10:d8f6:870f:e183:f88c",
+      "minutes": 24.8,
+      "requests": 60,
+      "calls": 49,
+      "points_charged": 3405,
+      "endpoints": {
+        "/": {
+          "requests": 5,
+          "calls": 0
+        },
+        "/assets/index-DQCTRrzZ.css": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/assets/index-Y9AZbIxw.js": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/assets/refresh-icon-jgqP8jnP.png": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/assets/download-icon-iyXkInQ7.png": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/api/config": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/api/weather/all": {
+          "requests": 9,
+          "calls": 7
+        },
+        "/api/weather/grid": {
+          "requests": 13,
+          "calls": 18
+        },
+        "/api/weather/models": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/api/locations": {
+          "requests": 6,
+          "calls": 0
+        },
+        "/api/feedback": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/api/currents/grid": {
+          "requests": 8,
+          "calls": 24
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T00:51:08.479622+00:00",
+      "ip": "2605:59c8:75a:2c10:d8f6:870f:e183:f88c",
+      "minutes": 19.1,
+      "requests": 51,
+      "calls": 36,
+      "points_charged": 2777,
+      "endpoints": {
+        "/": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/assets/index-Dq0uaz_8.js": {
+          "requests": 2,
+          "calls": 0
+        },
+        "/assets/index-DQCTRrzZ.css": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/assets/refresh-icon-jgqP8jnP.png": {
+          "requests": 2,
+          "calls": 0
+        },
+        "/assets/download-icon-iyXkInQ7.png": {
+          "requests": 2,
+          "calls": 0
+        },
+        "/api/weather/all": {
+          "requests": 3,
+          "calls": 1
+        },
+        "/api/currents/grid": {
+          "requests": 11,
+          "calls": 21
+        },
+        "/api/config": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/api/weather/grid": {
+          "requests": 11,
+          "calls": 14
+        },
+        "/api/weather/models": {
+          "requests": 3,
+          "calls": 0
+        },
+        "/api/locations": {
+          "requests": 6,
+          "calls": 0
+        },
+        "/assets/index-Y9AZbIxw.js": {
+          "requests": 2,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T01:02:19.118161+00:00",
+      "ip": "98.91.77.46",
+      "minutes": 4.8,
+      "requests": 2,
+      "calls": 0,
+      "points_charged": 0,
+      "endpoints": {
+        "/": {
+          "requests": 2,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T01:45:55.380191+00:00",
+      "ip": "23.23.253.54",
+      "minutes": 0.0,
+      "requests": 1,
+      "calls": 0,
+      "points_charged": 0,
+      "endpoints": {
+        "/": {
+          "requests": 1,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T01:45:57.134491+00:00",
+      "ip": "98.91.77.46",
+      "minutes": 0.0,
+      "requests": 1,
+      "calls": 0,
+      "points_charged": 0,
+      "endpoints": {
+        "/": {
+          "requests": 1,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T18:39:44.966831+00:00",
+      "ip": "98.91.77.46",
+      "minutes": 0.0,
+      "requests": 1,
+      "calls": 0,
+      "points_charged": 0,
+      "endpoints": {
+        "/": {
+          "requests": 1,
+          "calls": 0
+        }
+      }
+    },
+    {
+      "start": "2026-11-25T18:42:05.029157+00:00",
+      "ip": "2605:59c8:75a:2c10:d8f6:870f:e183:f88c",
+      "minutes": 0.1,
+      "requests": 17,
+      "calls": 11,
+      "points_charged": 797,
+      "endpoints": {
+        "/assets/index-Y9AZbIxw.js": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/index-DQCTRrzZ.css": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/index-6INP2-BM.js": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/index-CHguVXSQ.css": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/rolldown-runtime-XKyaHtl9.js": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/download-icon-iyXkInQ7.png": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/assets/refresh-icon-jgqP8jnP.png": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/api/config": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/api/weather/all": {
+          "requests": 1,
+          "calls": 1
+        },
+        "/api/weather/grid": {
+          "requests": 2,
+          "calls": 4
+        },
+        "/api/currents/grid": {
+          "requests": 2,
+          "calls": 6
+        },
+        "/api/weather/models": {
+          "requests": 1,
+          "calls": 0
+        },
+        "/api/locations": {
+          "requests": 2,
+          "calls": 0
+        }
+      }
+    }
+  ],
+  "latency": {
+    "/": {
+      "count": 12,
+      "median": 0.031,
+      "p90": 0.059,
+      "max": 0.208,
+      "under_0_2s": 11
+    },
+    "/api/config": {
+      "count": 8,
+      "median": 0.013,
+      "p90": 0.847,
+      "max": 0.847,
+      "under_0_2s": 5
+    },
+    "/api/currents/grid": {
+      "count": 21,
+      "median": 0.505,
+      "p90": 1.088,
+      "max": 1.907,
+      "under_0_2s": 9
+    },
+    "/api/currents/point": {
+      "count": 2,
+      "median": 0.959,
+      "p90": 1.051,
+      "max": 1.051,
+      "under_0_2s": 0
+    },
+    "/api/geocode": {
+      "count": 2,
+      "median": 0.666,
+      "p90": 0.673,
+      "max": 0.673,
+      "under_0_2s": 0
+    },
+    "/api/health": {
+      "count": 43,
+      "median": 0.023,
+      "p90": 0.143,
+      "max": 6.888,
+      "under_0_2s": 40
+    },
+    "/api/locations": {
+      "count": 155,
+      "median": 0.004,
+      "p90": 0.007,
+      "max": 0.087,
+      "under_0_2s": 155
+    },
+    "/api/weather/all": {
+      "count": 14,
+      "median": 0.062,
+      "p90": 90.112,
+      "max": 90.47,
+      "under_0_2s": 9
+    },
+    "/api/weather/grid": {
+      "count": 27,
+      "median": 0.053,
+      "p90": 1.237,
+      "max": 21.351,
+      "under_0_2s": 19
+    },
+    "/api/weather/models": {
+      "count": 7,
+      "median": 0.005,
+      "p90": 0.014,
+      "max": 0.014,
+      "under_0_2s": 7
+    },
+    "/assets/download-icon-iyXkInQ7.png": {
+      "count": 4,
+      "median": 0.014,
+      "p90": 0.019,
+      "max": 0.019,
+      "under_0_2s": 4
+    },
+    "/assets/index-6INP2-BM.js": {
+      "count": 1,
+      "median": 0.055,
+      "p90": 0.055,
+      "max": 0.055,
+      "under_0_2s": 1
+    },
+    "/assets/index-CHguVXSQ.css": {
+      "count": 1,
+      "median": 0.029,
+      "p90": 0.029,
+      "max": 0.029,
+      "under_0_2s": 1
+    },
+    "/assets/index-DQCTRrzZ.css": {
+      "count": 3,
+      "median": 0.021,
+      "p90": 0.024,
+      "max": 0.024,
+      "under_0_2s": 3
+    },
+    "/assets/index-Dq0uaz_8.js": {
+      "count": 1,
+      "median": 0.018,
+      "p90": 0.018,
+      "max": 0.018,
+      "under_0_2s": 1
+    },
+    "/assets/index-Y9AZbIxw.js": {
+      "count": 2,
+      "median": 0.028,
+      "p90": 0.029,
+      "max": 0.029,
+      "under_0_2s": 2
+    },
+    "/assets/refresh-icon-jgqP8jnP.png": {
+      "count": 4,
+      "median": 0.013,
+      "p90": 0.016,
+      "max": 0.016,
+      "under_0_2s": 4
+    },
+    "/assets/rolldown-runtime-XKyaHtl9.js": {
+      "count": 1,
+      "median": 0.028,
+      "p90": 0.028,
+      "max": 0.028,
+      "under_0_2s": 1
+    }
+  },
+  "notes": [
+    "Calls are simulated through the app's own cache rules (30-minute TTL, rounded point keys).",
+    "Coverage splits for regional models are not modelled; the observed traffic is best_match.",
+    "One currents view also pays one elevation request per 100 points (SCRUM-238).",
+    "Free tier: 10000 calls/day and 600/minute per IP."
+  ]
+}
