@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EXPORT_TILE_BUDGET,
   MAX_RANGE_CAPTURES,
   RANGE_INTERVAL_HOURS,
   formatRangeBoundary,
@@ -7,6 +8,7 @@ import {
   isHourAligned,
   planExportRange,
   timeRangeHours,
+  tilesForViewport,
 } from './exportRange';
 
 const TZ = 'America/Los_Angeles';
@@ -151,5 +153,81 @@ describe('planExportRange (SCRUM-155)', () => {
 describe('formatRangeSummary (SCRUM-155)', () => {
   it('handles an empty list', () => {
     expect(formatRangeSummary([], TZ)).toBe('No captures');
+  });
+});
+
+describe('tilesForViewport (SCRUM-299)', () => {
+  it('counts 256 px tiles for a viewport, rounding both axes up', () => {
+    expect(tilesForViewport(1920, 1080)).toBe(40);
+    expect(tilesForViewport(3840, 2160)).toBe(135);
+    expect(tilesForViewport(300, 300)).toBe(4);
+    expect(tilesForViewport(0, 1080)).toBe(0);
+    expect(tilesForViewport(1920, -1)).toBe(0);
+  });
+});
+
+describe('planExportRange tile budget (SCRUM-299)', () => {
+  // 24 hourly captures: the capture cap itself.
+  const RANGE_START = '2026-11-23T22:00:00.000Z';
+  const RANGE_END = '2026-11-24T21:00:00.000Z';
+  const WINDOW_START = '2026-11-23T20:00:00.000Z';
+  const WINDOW_END = '2026-11-30T20:00:00.000Z';
+  const withTiles = (tilesPerFrame: number | undefined) =>
+    planExportRange(
+      {
+        start: RANGE_START,
+        end: RANGE_END,
+        intervalHours: 1,
+        windowStart: WINDOW_START,
+        windowEnd: WINDOW_END,
+        tilesPerFrame,
+      },
+      TZ,
+    );
+
+  it('keeps all 24 captures on a 1080p window, far inside the budget', () => {
+    const result = withTiles(tilesForViewport(1920, 1080));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.hours).toHaveLength(MAX_RANGE_CAPTURES);
+    expect(result.hours.length * 40).toBeLessThan(EXPORT_TILE_BUDGET);
+  });
+
+  it('refuses 24 captures on a 4K window, naming the tiles and the budget', () => {
+    const result = withTiles(tilesForViewport(3840, 2160));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // The hours come back with the failure, so the dialog can still show the plan.
+    expect(result.hours).toHaveLength(MAX_RANGE_CAPTURES);
+    expect(result.message).toBe(
+      `Too many tiles (3,240). One export captures at most ${EXPORT_TILE_BUDGET.toLocaleString('en-US')}; pick a longer interval, a shorter range, or a smaller window.`,
+    );
+  });
+
+  it('accepts a range exactly at the budget and refuses one tile more', () => {
+    expect(withTiles(125).ok).toBe(true); // 24 x 125 = 3,000
+    expect(withTiles(126).ok).toBe(false); // 24 x 126 = 3,024
+  });
+
+  it('skips the budget when the frame size is not known yet', () => {
+    expect(withTiles(0).ok).toBe(true);
+    expect(withTiles(undefined).ok).toBe(true);
+  });
+
+  it('reports the capture cap first when both limits would be exceeded', () => {
+    const result = planExportRange(
+      {
+        start: RANGE_START,
+        end: '2026-11-25T22:00:00.000Z',
+        intervalHours: 1,
+        windowStart: WINDOW_START,
+        windowEnd: WINDOW_END,
+        tilesPerFrame: 135,
+      },
+      TZ,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain('Too many captures');
   });
 });

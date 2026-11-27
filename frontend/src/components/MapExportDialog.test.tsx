@@ -321,3 +321,31 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     expect(button.getAttribute('title')).toContain('export is disabled on Google Maps');
   });
 });
+
+describe('MapExportDialog tile budget (SCRUM-299)', () => {
+  /** A full day of hourly captures: the largest range the capture cap allows. */
+  const HOURS_24 = Array.from({ length: 24 }, (_, index) =>
+    new Date(Date.parse('2026-11-23T22:00:00.000Z') + index * 3_600_000).toISOString(),
+  );
+  const exportButton = () => screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement;
+  const chooseFullDay = () => {
+    openRange();
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: HOURS_24[23] } });
+  };
+
+  it('refuses a full-day range on a 4K window and says why', () => {
+    renderDialog({ rangeHours: HOURS_24, viewportTiles: 135 });
+    chooseFullDay();
+
+    expect(screen.getByTestId('range-summary').textContent).toContain('Too many tiles (3,240)');
+    expect(exportButton().disabled).toBe(true);
+  });
+
+  it('allows the same full-day range on a 1080p window', () => {
+    renderDialog({ rangeHours: HOURS_24, viewportTiles: 40 });
+    chooseFullDay();
+
+    expect(screen.getByTestId('range-summary').textContent).toContain('24 captures');
+    expect(exportButton().disabled).toBe(false);
+  });
+});

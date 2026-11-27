@@ -11,6 +11,7 @@ import type {
 import { captureMapCanvas, saveMapImage } from '../utils/captureMap';
 import { waitForTiles } from '../utils/captureDom';
 import { buildSteps, floorToHour, formatStepLabel } from '../utils/forecastWindow';
+import { tilesForViewport } from '../utils/exportRange';
 import {
   barbLegendEntries,
   buildExportBaseName,
@@ -122,6 +123,21 @@ export function useMapExport({
     () => buildSteps(rangeWindowStart, selectedModelInfo?.horizon_hours ?? 48),
     [rangeWindowStart, selectedModelInfo?.horizon_hours],
   );
+
+  // Base-map tiles one exported frame asks for (SCRUM-299): the map's CSS size in 256 px tiles,
+  // measured while the dialog is open and again on resize, so the range plan can hold an export
+  // under its tile budget and not only under its capture cap.
+  const [viewportTiles, setViewportTiles] = useState(0);
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
+    const measure = () =>
+      setViewportTiles(tilesForViewport(container.clientWidth, container.clientHeight));
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isDialogOpen, mapContainerRef]);
 
   const modelId = selectedModelInfo?.id ?? selectedModel;
 
@@ -368,6 +384,7 @@ export function useMapExport({
     exportError: rangeError ?? viewError,
     rangeFrames,
     rangeHours,
+    viewportTiles,
     handleExport,
     handleCancelRange,
     handleSaveCaptured,

@@ -32,6 +32,8 @@ interface MapExportDialogProps {
   timezone: string;
   /** Selectable hours: the current hour through the model's horizon, hour-aligned. */
   rangeHours: string[];
+  /** Base-map tiles one captured frame asks for (SCRUM-299); 0 while the map size is unknown. */
+  viewportTiles?: number;
   /** Set while a range export runs, e.g. "3 of 12". */
   progress?: RangeProgress | null;
   /** Set when a range export stops on an error. */
@@ -57,6 +59,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   busy,
   timezone,
   rangeHours,
+  viewportTiles = 0,
   progress = null,
   error = null,
   onCancelRange,
@@ -108,10 +111,11 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
           intervalHours,
           windowStart: rangeHours[0] ?? '',
           windowEnd: rangeHours[rangeHours.length - 1] ?? '',
+          tilesPerFrame: viewportTiles,
         },
         timezone,
       ),
-    [start, end, intervalHours, rangeHours, timezone],
+    [start, end, intervalHours, rangeHours, timezone, viewportTiles],
   );
 
   if (!isOpen) return null;
