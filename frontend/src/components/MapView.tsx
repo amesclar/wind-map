@@ -18,7 +18,7 @@ import { MapLegend } from './MapLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
-import { buildTideBlockHtml, loadPointTide } from '../utils/tideBlock';
+import { buildTideBlockHtml, buildTideUnavailableHtml, loadPointTide } from '../utils/tideBlock';
 import { POPUP_OPTIONS, placePopupInView } from '../utils/popupPlacement';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
@@ -302,7 +302,11 @@ export const MapView: React.FC<MapViewProps> = ({
           }
         })
         .catch(() => {
-          // A tide that cannot be loaded leaves the rest of the pop-up untouched.
+          // A failed load says so (SCRUM-316); only a point with no water stays silent.
+          if (!cancelled) {
+            slot.innerHTML = buildTideUnavailableHtml();
+            placePopupInView(mapInstance, element);
+          }
         });
     };
     mapInstance.on('popupopen', onPopupOpen);

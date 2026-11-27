@@ -58,6 +58,14 @@ export function formatTideTime(stamp: string): string {
   return moment.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/**
+ * The slot's fallback when the request itself fails (SCRUM-316): an upstream error or a quota
+ * refusal is not the same as a point with no water, so it says so instead of staying empty.
+ */
+export function buildTideUnavailableHtml(): string {
+  return '<div style="margin-top: 6px; font-size: 11px; color: #9ca3af;">Tide unavailable</div>';
+}
+
 function extremeRow(
   extreme: TideExtreme | null,
   when: 'last' | 'next',
