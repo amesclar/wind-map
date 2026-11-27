@@ -1,0 +1,136 @@
+{
+  "label": "cold",
+  "base_url": "http://127.0.0.1:8080",
+  "points": 200,
+  "time": "2026-11-26T04:33:26.888739+00:00",
+  "shapes": {
+    "point_forecast": {
+      "runs": 1,
+      "ok": 1,
+      "median": 133.407,
+      "min": 133.407,
+      "max": 133.407,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 133.407,
+          "status": 200,
+          "bytes": 4976,
+          "points": 1
+        }
+      ]
+    },
+    "wind_grid_current": {
+      "runs": 1,
+      "ok": 1,
+      "median": 41.049,
+      "min": 41.049,
+      "max": 41.049,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 41.049,
+          "status": 200,
+          "bytes": 71864,
+          "points": 150
+        }
+      ]
+    },
+    "wind_grid_hourly": {
+      "runs": 1,
+      "ok": 1,
+      "median": 47.341,
+      "min": 47.341,
+      "max": 47.341,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 47.341,
+          "status": 200,
+          "bytes": 195493,
+          "points": 150
+        }
+      ]
+    },
+    "wind_grid_far": {
+      "runs": 1,
+      "ok": 1,
+      "median": 3.313,
+      "min": 3.313,
+      "max": 3.313,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 3.313,
+          "status": 200,
+          "bytes": 190478,
+          "points": 150
+        }
+      ]
+    },
+    "currents_current": {
+      "runs": 1,
+      "ok": 1,
+      "median": 3.727,
+      "min": 3.727,
+      "max": 3.727,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 3.727,
+          "status": 200,
+          "bytes": 62892,
+          "points": 150
+        }
+      ]
+    },
+    "currents_hourly": {
+      "runs": 1,
+      "ok": 1,
+      "median": 0.033,
+      "min": 0.033,
+      "max": 0.033,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 0.033,
+          "status": 200,
+          "bytes": 154860,
+          "points": 150
+        }
+      ]
+    },
+    "waves_grid": {
+      "runs": 1,
+      "ok": 1,
+      "median": 4.286,
+      "min": 4.286,
+      "max": 4.286,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 4.286,
+          "status": 200,
+          "bytes": 62382,
+          "points": 150
+        }
+      ]
+    },
+    "elevation": {
+      "runs": 1,
+      "ok": 1,
+      "median": 0.006,
+      "min": 0.006,
+      "max": 0.006,
+      "samples": [
+        {
+          "round": 1,
+          "seconds": 0.006,
+          "status": 200,
+          "bytes": 680,
+          "points": 1
+        }
+      ]
+    }
+  }
+}
