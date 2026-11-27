@@ -3,7 +3,12 @@ import type { TidePointResponse } from '../types';
 import { buildLocationPopup } from '../components/MapView';
 import { buildGridPointPopup } from '../components/WindOverlay';
 import { makeLocation } from '../test/fixtures';
-import { buildTideBlockHtml, formatTideHeight, formatTideTime } from './tideBlock';
+import {
+  buildTideBlockHtml,
+  buildTideUnavailableHtml,
+  formatTideHeight,
+  formatTideTime,
+} from './tideBlock';
 
 const tide: TidePointResponse = {
   latitude: 48.4,
@@ -72,6 +77,14 @@ describe('tide block (SCRUM-195)', () => {
     expect(
       buildTideBlockHtml({ ...tide, points: [], last_extreme: null, next_extreme: null }, 'metric', true, null),
     ).toBe('');
+  });
+
+  it('has a short fallback for a failed request (SCRUM-316)', () => {
+    const html = buildTideUnavailableHtml();
+
+    expect(html).toContain('Tide unavailable');
+    expect(html).not.toContain('Not for navigation');
+    expect(html).not.toContain('Tide · above MSL');
   });
 });
 

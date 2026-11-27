@@ -42,6 +42,7 @@ vi.mock('../api/client', () => ({
 beforeEach(() => {
   resetLeafletMock();
   vi.mocked(api.fetchWindGrid).mockReset();
+  vi.mocked(api.fetchPointTide).mockReset();
 });
 
 const baseProps = {
@@ -102,6 +103,79 @@ describe('MapView popups (SCRUM-92)', () => {
     expect(popup.style.marginTop).toBe('88px');
     expect(tip.style.display).toBe('none');
 
+    popup.remove();
+  });
+});
+
+describe('MapView popup tide block (SCRUM-316)', () => {
+  const tide = {
+    latitude: 48.19,
+    longitude: -122.74,
+    datum: 'msl',
+    unit: 'm',
+    hour: '2026-11-25T12:00',
+    points: [{ time: '2026-11-25T12:00', height_m: 1.4 }],
+    last_extreme: { type: 'low' as const, time: '2026-11-25T03:40', height_m: 0.2 },
+    next_extreme: { type: 'high' as const, time: '2026-11-25T15:38', height_m: 2.3 },
+    next_extreme_after: null,
+  };
+
+  /** A minimal pop-up element carrying the slot the builders write, opened on the map. */
+  function openPopupWithSlot(latitude: number, longitude: number) {
+    const popup = document.createElement('div');
+    popup.className = 'leaflet-popup';
+    popup.innerHTML = `<div data-tide-slot data-tide-lat="${latitude}" data-tide-lon="${longitude}"></div>`;
+    document.body.append(popup);
+    act(() => currentMap().fire('popupopen', { popup: { getElement: () => popup } }));
+    return { popup, slot: popup.querySelector<HTMLElement>('[data-tide-slot]')! };
+  }
+
+  it('fills the slot when the tide loads', async () => {
+    vi.mocked(api.fetchPointTide).mockResolvedValueOnce(tide);
+    render(<MapView {...baseProps} locations={[]} />);
+    const { popup, slot } = openPopupWithSlot(48.19, -122.74);
+
+    await waitFor(() => expect(slot.textContent).toContain('Tide · above MSL'));
+    expect(api.fetchPointTide).toHaveBeenCalledWith(48.19, -122.74, null);
+    popup.remove();
+  });
+
+  it('says the tide is unavailable when the request fails', async () => {
+    vi.mocked(api.fetchPointTide).mockRejectedValueOnce(new Error('502'));
+    render(<MapView {...baseProps} locations={[]} />);
+    const { popup, slot } = openPopupWithSlot(48.23, -122.71);
+
+    await waitFor(() => expect(slot.textContent).toContain('Tide unavailable'));
+    expect(slot.textContent).not.toContain('Not for navigation');
+    popup.remove();
+  });
+
+  it('stays silent over land', async () => {
+    vi.mocked(api.fetchPointTide).mockResolvedValueOnce({
+      ...tide,
+      points: [],
+      last_extreme: null,
+      next_extreme: null,
+    });
+    render(<MapView {...baseProps} locations={[]} />);
+    const { popup, slot } = openPopupWithSlot(48.26, -122.68);
+
+    await waitFor(() => expect(api.fetchPointTide).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(slot.innerHTML).toBe('');
+    popup.remove();
+  });
+
+  it('asks for no tide when the pop-up has no slot', () => {
+    render(<MapView {...baseProps} locations={[]} />);
+    const popup = document.createElement('div');
+    document.body.append(popup);
+
+    act(() => currentMap().fire('popupopen', { popup: { getElement: () => popup } }));
+
+    expect(api.fetchPointTide).not.toHaveBeenCalled();
     popup.remove();
   });
 });
