@@ -22,6 +22,9 @@ import httpx
 
 from backend.app.config import (
     CACHE_TTL_SECONDS,
+    LAND_ELEVATION_THRESHOLD_M,
+    OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+    OPEN_METEO_ELEVATION_URL,
     OPEN_METEO_MARINE_TIMEOUT_SECONDS,
     OPEN_METEO_MARINE_URL,
 )
@@ -67,6 +70,31 @@ def window_hours(moment: datetime) -> list[str]:
     return [hour_key(start + timedelta(hours=step)) for step in range(72)]
 
 
+async def _on_land(lat: float, lon: float) -> bool:
+    """True when the point itself sits above sea level (SCRUM-317).
+
+    The Marine model snaps a shore request to its nearest sea cell — 48.24, -122.74 comes back as
+    a cell about 4 km offshore — so a terrestrial point would otherwise inherit that cell's
+    tide. Elevation is the same land test the currents use (SCRUM-238). A failed lookup is not a
+    verdict: the tide is kept, because hiding real water is worse than a rare value on land.
+    """
+    try:
+        data = await open_meteo.get_json(
+            OPEN_METEO_ELEVATION_URL,
+            {"latitude": lat, "longitude": lon},
+            timeout=OPEN_METEO_ELEVATION_TIMEOUT_SECONDS,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Elevation lookup failed; keeping the tide: %s", exc)
+        return False
+    values = data.get("elevation") if isinstance(data, dict) else None
+    elevation = values[0] if isinstance(values, list) and values else values
+    if not isinstance(elevation, (int, float)):
+        logger.warning("Elevation lookup returned an unexpected payload; keeping the tide")
+        return False
+    return float(elevation) > LAND_ELEVATION_THRESHOLD_M
+
+
 async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> TidePointResponse:
     """Sea level around `at` (or now) with the nearest high and low on either side."""
     moment = (at or floor_hour(datetime.now(UTC))).astimezone(UTC)
@@ -74,7 +102,12 @@ async def get_point_tide(lat: float, lon: float, at: datetime | None = None) -> 
     cached = _read_window(lat, lon, hours)
     missing = [hour for hour in hours if hour not in cached]
     if missing:
-        cached = {**cached, **await _fetch_missing(lat, lon, missing)}
+        if await _on_land(lat, lon):
+            # The empty rows a null height already means double as the cached land verdict, so the
+            # point costs one elevation lookup per TTL and never a marine request.
+            _store(lat, lon, dict.fromkeys(missing), time.time())
+        else:
+            cached = {**cached, **await _fetch_missing(lat, lon, missing)}
 
     samples = [Height(_parse(hour), height) for hour in hours if (height := cached.get(hour)) is not None]
     last, following, after = derive_extremes(samples, moment)

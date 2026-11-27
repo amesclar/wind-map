@@ -7,6 +7,7 @@
 #   scripts/gcp-provision.sh                      # generates the shared password
 #   APP_PASSWORD='...' scripts/gcp-provision.sh   # uses the given shared password
 #   CARTO_API_KEY='...' scripts/gcp-provision.sh  # also stores the optional CARTO key
+#   GCP_MAP_KEY='...' scripts/gcp-provision.sh    # also stores the Google Maps key
 set -euo pipefail
 
 PROJECT="${GCP_PROJECT:-wind-app-515017}"
@@ -17,6 +18,7 @@ SERVICE_ACCOUNT_ID="${SERVICE_ACCOUNT%%@*}"
 PASSWORD_SECRET="APP_PASSWORD"
 CARTO_SECRET="CARTO_API_KEY"
 JIRA_SECRET="JIRA_API_TOKEN"
+GOOGLE_SECRET="GCP_MAP_KEY"
 
 if ! command -v gcloud >/dev/null 2>&1; then
   echo "gcp-provision: gcloud is not installed" >&2
@@ -99,6 +101,23 @@ else
   echo "    skipped: no JIRA_API_TOKEN supplied, in-app feedback stays off"
 fi
 
+echo "==> Secret $GOOGLE_SECRET (optional)"
+if [ -n "${GCP_MAP_KEY:-}" ]; then
+  if gcloud secrets describe "$GOOGLE_SECRET" --project="$PROJECT" >/dev/null 2>&1; then
+    printf '%s' "$GCP_MAP_KEY" | gcloud secrets versions add "$GOOGLE_SECRET" \
+      --project="$PROJECT" --data-file=- --quiet >/dev/null
+    echo "    exists; added the supplied value as a new version"
+  else
+    printf '%s' "$GCP_MAP_KEY" | gcloud secrets create "$GOOGLE_SECRET" --project="$PROJECT" \
+      --replication-policy="automatic" --data-file=- --quiet >/dev/null
+    echo "    created"
+  fi
+elif gcloud secrets describe "$GOOGLE_SECRET" --project="$PROJECT" >/dev/null 2>&1; then
+  echo "    exists; unchanged (no GCP_MAP_KEY supplied)"
+else
+  echo "    skipped: no GCP_MAP_KEY supplied, the Google Satellite layer stays hidden"
+fi
+
 echo "==> Service account $SERVICE_ACCOUNT"
 if gcloud iam service-accounts describe "$SERVICE_ACCOUNT" --project="$PROJECT" >/dev/null 2>&1; then
   echo "    exists"
@@ -112,7 +131,7 @@ echo "==> IAM"
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --project="$PROJECT" \
   --member="serviceAccount:$SERVICE_ACCOUNT" --role="roles/storage.objectAdmin" --quiet >/dev/null
 echo "    roles/storage.objectAdmin on gs://$BUCKET"
-for secret in "$PASSWORD_SECRET" "$CARTO_SECRET" "$JIRA_SECRET"; do
+for secret in "$PASSWORD_SECRET" "$CARTO_SECRET" "$JIRA_SECRET" "$GOOGLE_SECRET"; do
   if gcloud secrets describe "$secret" --project="$PROJECT" >/dev/null 2>&1; then
     gcloud secrets add-iam-policy-binding "$secret" --project="$PROJECT" \
       --member="serviceAccount:$SERVICE_ACCOUNT" \
@@ -180,5 +199,6 @@ echo
 echo "Cloud Run (SCRUM-136, SCRUM-190) needs:"
 echo "  --service-account=$SERVICE_ACCOUNT"
 echo "  --set-env-vars=LITESTREAM_BUCKET=$BUCKET"
-echo "  --set-secrets=APP_PASSWORD=${PASSWORD_SECRET}:latest,CARTO_API_KEY=${CARTO_SECRET}:latest,JIRA_API_TOKEN=${JIRA_SECRET}:latest"
+echo "  --set-secrets=APP_PASSWORD=${PASSWORD_SECRET}:latest,CARTO_API_KEY=${CARTO_SECRET}:latest,JIRA_API_TOKEN=${JIRA_SECRET}:latest,GCP_MAP_KEY=${GOOGLE_SECRET}:latest"
 echo "  (in-app feedback also needs JIRA_BASE_URL and JIRA_EMAIL; the workflow sets all of it)"
+echo "  (GCP_MAP_KEY enables the Google Satellite basemap; without it the option stays hidden)"

@@ -135,6 +135,52 @@ async def test_inland_point_is_empty_and_cached(open_meteo):
 
 
 @pytest.mark.asyncio
+async def test_land_point_gets_no_tide_and_no_marine_request(open_meteo):
+    """The Marine model snaps a shore request to the nearest sea cell (SCRUM-317)."""
+    open_meteo.respond_elevation(21.0)
+
+    tide = await get_point_tide(48.24, -122.74, HOUR)
+
+    assert tide.points == []
+    assert tide.last_extreme is None and tide.next_extreme is None
+    assert open_meteo.call_count == 0
+    assert open_meteo.elevation_calls[0]["params"]["latitude"] == 48.24
+
+
+@pytest.mark.asyncio
+async def test_sea_level_point_keeps_its_tide(open_meteo):
+    open_meteo.respond(tide_payload(sine_heights()))
+    open_meteo.respond_elevation(0.0)
+
+    tide = await get_point_tide(48.4, -122.7, HOUR)
+
+    assert len(tide.points) == 72
+    assert open_meteo.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_elevation_failure_keeps_the_tide(open_meteo):
+    """Without a land verdict, keep the tide: hiding real water is the worse mistake."""
+    open_meteo.respond(tide_payload(sine_heights()))
+    open_meteo.fail_elevation(upstream_error("elevation down"))
+
+    tide = await get_point_tide(48.4, -122.7, HOUR)
+
+    assert len(tide.points) == 72
+
+
+@pytest.mark.asyncio
+async def test_land_verdict_is_cached_without_another_lookup(open_meteo):
+    open_meteo.respond_elevation(21.0)
+
+    assert (await get_point_tide(48.24, -122.74, HOUR)).points == []
+    assert (await get_point_tide(48.24, -122.74, HOUR)).points == []
+
+    assert open_meteo.call_count == 0
+    assert len(open_meteo.elevation_calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_second_request_is_served_from_cache(open_meteo):
     open_meteo.respond(tide_payload(sine_heights()))
 

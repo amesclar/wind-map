@@ -15,7 +15,7 @@ def test_deploy_injects_every_runtime_secret():
     """A deploy that names only some secrets detaches the rest from the service."""
     secrets_line = _line_containing(WORKFLOW.read_text(encoding="utf-8"), "--set-secrets=")
 
-    for secret in ("APP_PASSWORD", "CARTO_API_KEY", "JIRA_API_TOKEN"):
+    for secret in ("APP_PASSWORD", "CARTO_API_KEY", "JIRA_API_TOKEN", "GCP_MAP_KEY"):
         assert f"{secret}={secret}:latest" in secrets_line
 
 

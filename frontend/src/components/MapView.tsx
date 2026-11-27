@@ -18,7 +18,7 @@ import { MapLegend } from './MapLegend';
 import type { GridWindPoint, SelectedGridPoint } from '../types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../constants';
 import { escapeHtml } from '../utils/html';
-import { buildTideBlockHtml, loadPointTide } from '../utils/tideBlock';
+import { buildTideBlockHtml, buildTideUnavailableHtml, loadPointTide } from '../utils/tideBlock';
 import { POPUP_OPTIONS, placePopupInView } from '../utils/popupPlacement';
 import { useLatest } from '../hooks/useLatest';
 import { useWindGrid } from '../hooks/useWindGrid';
@@ -35,6 +35,7 @@ import {
 import { registerCaptureMap } from '../utils/captureReadiness';
 import { formatDirection, formatSpeed, formatTemperature } from '../utils/units';
 import { useBaseLayers } from '../hooks/useBaseLayers';
+import googleMapsLogo from '../assets/google-maps-logo.png';
 
 interface MapViewProps {
   locations: SavedLocation[];
@@ -301,7 +302,11 @@ export const MapView: React.FC<MapViewProps> = ({
           }
         })
         .catch(() => {
-          // A tide that cannot be loaded leaves the rest of the pop-up untouched.
+          // A failed load says so (SCRUM-316); only a point with no water stays silent.
+          if (!cancelled) {
+            slot.innerHTML = buildTideUnavailableHtml();
+            placePopupInView(mapInstance, element);
+          }
         });
     };
     mapInstance.on('popupopen', onPopupOpen);
@@ -483,6 +488,15 @@ export const MapView: React.FC<MapViewProps> = ({
         timeLabel={validTimeLabel}
       />
       <WaveOverlay map={mapInstance} points={wavePoints} unitSystem={unitSystem} timeLabel={validTimeLabel} />
+      {/* Google branding requirement (SCRUM-311): the official Google logo badge, bottom-left */}
+      {tileLayerType === 'google_satellite' && (
+        <div
+          data-testid="google-maps-badge"
+          className="absolute bottom-2 left-2 z-[400] pointer-events-none px-1.5 py-1 rounded bg-black/60 shadow"
+        >
+          <img src={googleMapsLogo} alt="Google" className="h-3.5 w-auto select-none" />
+        </div>
+      )}
       {/* One key for every layer (SCRUM-263): wind always, currents and waves only while shown. */}
       <MapLegend
         speedUnit={speedUnit}

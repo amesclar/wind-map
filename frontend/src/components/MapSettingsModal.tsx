@@ -23,6 +23,8 @@ interface MapSettingsModalProps {
   onChangeTileLayer: (layer: MapTileLayer) => void;
   cartoApiKey: string;
   onSaveCartoApiKey: (key: string) => void;
+  /** The server holds a Google Maps key, so the hybrid layer can load (SCRUM-311). */
+  googleSatelliteEnabled?: boolean;
   windOverlayVisible: boolean;
   onToggleWindOverlay: (visible: boolean) => void;
   windColorOverlayVisible: boolean;
@@ -125,6 +127,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   onChangeTileLayer,
   cartoApiKey,
   onSaveCartoApiKey,
+  googleSatelliteEnabled = true,
   windOverlayVisible,
   onToggleWindOverlay,
   windColorOverlayVisible,
@@ -331,6 +334,39 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       </div>
                     </div>
                   </label>
+
+                  {googleSatelliteEnabled && (
+                  <label
+                    data-testid="tile-layer-google-satellite"
+                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
+                  >
+                    <input
+                      type="radio"
+                      name="tileLayer"
+                      checked={tileLayer === 'google_satellite'}
+                      onChange={() => onChangeTileLayer('google_satellite')}
+                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    />
+                    <div>
+                      <div
+                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
+                      >
+                        Google Satellite (Hybrid)
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                        >
+                          Satellite
+                        </span>
+                      </div>
+                      <div className={`text-xs ${theme.description} mt-0.5`}>
+                        High-resolution satellite imagery with coastal roads and place names.
+                      </div>
+                      <div className={`text-xs ${theme.note} mt-1`}>
+                        Export unavailable on Google Maps due to licensing restrictions.
+                      </div>
+                    </div>
+                  </label>
+                  )}
                 </div>
               </div>
 
