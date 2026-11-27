@@ -1038,3 +1038,106 @@ describe('MapView container ref (SCRUM-283)', () => {
     expect(screen.queryByTestId('google-maps-badge')).toBeNull();
   });
 });
+
+// SCRUM-302: a provider that refuses or breaks used to look like a rendering bug.
+describe('base map failure notice (SCRUM-302)', () => {
+  const baseLayerMock = () => {
+    const layers = createdTileLayers.filter(
+      (layer) => layer.kind === 'xyz' && layer.options?.pane !== 'seamarkPane',
+    );
+    return layers[layers.length - 1];
+  };
+
+  const failBatch = () => {
+    act(() => {
+      const base = baseLayerMock();
+      base.fire('tileerror');
+      base.fire('tileerror');
+      base.fire('tileerror');
+      // The load that follows an outage's failed tiles must not hide the notice again.
+      base.fire('load');
+    });
+  };
+
+  it('names the base map after a failed batch, with both actions', () => {
+    const onOpenMapSettings = vi.fn();
+    render(
+      <MapView
+        {...baseProps}
+        locations={[]}
+        tileLayerType="carto_dark"
+        onOpenMapSettings={onOpenMapSettings}
+      />,
+    );
+
+    failBatch();
+
+    const notice = screen.getByTestId('base-tile-error-notice');
+    expect(notice.textContent).toContain('CARTO');
+    expect(notice.textContent).toContain('not loading');
+
+    fireEvent.click(screen.getByTestId('base-open-settings'));
+    expect(onOpenMapSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a single stray tile', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
+
+    act(() => {
+      baseLayerMock().fire('tileerror');
+      baseLayerMock().fire('load');
+    });
+
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+  });
+
+  it('clears on a clean batch and stays dismissed until the next failure', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
+
+    failBatch();
+    expect(screen.getByTestId('base-tile-error-notice')).toBeTruthy();
+
+    // A recovered service clears it without the user doing anything.
+    act(() => baseLayerMock().fire('load'));
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+
+    failBatch();
+    fireEvent.click(screen.getByTestId('base-dismiss'));
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+  });
+
+  it('rebuilds the base layer when Retry is clicked', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
+    const before = createdTileLayers.length;
+    failBatch();
+
+    fireEvent.click(screen.getByTestId('base-retry'));
+
+    expect(createdTileLayers.length).toBe(before + 1);
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+  });
+
+  it('clears on a base change and leaves the chart notice alone', () => {
+    const { rerender } = render(
+      <MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />,
+    );
+    failBatch();
+    expect(screen.getByTestId('base-tile-error-notice')).toBeTruthy();
+
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+
+    // The chart's own failures belong to its own notice (SCRUM-217), never the base one.
+    const chart = createdTileLayers.find(
+      (layer) => layer.kind === 'wms' && layer.url?.includes('NOAAChartDisplay'),
+    )!;
+    act(() => {
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+      chart.fire('tileerror');
+      chart.fire('load');
+    });
+    expect(screen.getByTestId('chart-tile-error-notice')).toBeTruthy();
+    expect(screen.queryByTestId('base-tile-error-notice')).toBeNull();
+  });
+});

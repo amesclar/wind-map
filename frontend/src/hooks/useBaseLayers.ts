@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState } from 'react';
 import L from 'leaflet';
 import type { MapTileLayer } from '../types';
 import {
+  BASE_TILE_FAILURE_THRESHOLD,
+  BASE_TILE_FAILURE_WINDOW_MS,
   CHART_BOUNDS,
   CHART_COVERAGE_MAX_LAT,
   CHART_EDGE_PANE,
@@ -47,6 +49,10 @@ export interface BaseLayers {
   chartTilesFailed: boolean;
   /** Remounts the chart layers and clears the failure notice. */
   retryChart: () => void;
+  /** Enough base-map tiles failed in one window to say the provider is not serving us (SCRUM-302). */
+  baseTilesFailed: boolean;
+  /** Remounts the base layer and clears its failure notice. */
+  retryBase: () => void;
 }
 
 export function useBaseLayers(
@@ -58,10 +64,18 @@ export function useBaseLayers(
   const [chartStraddlesEdge, setChartStraddlesEdge] = useState(false);
   const [chartTilesFailed, setChartTilesFailed] = useState(false);
   const [chartRetryCount, setChartRetryCount] = useState(0);
+  // SCRUM-302: the base map's own failure state, reset by a base change or by its retry.
+  const [baseTilesFailed, setBaseTilesFailed] = useState(false);
+  const [baseRetryCount, setBaseRetryCount] = useState(0);
 
   const retryChart = useCallback(() => {
     setChartTilesFailed(false);
     setChartRetryCount((count) => count + 1);
+  }, []);
+
+  const retryBase = useCallback(() => {
+    setBaseTilesFailed(false);
+    setBaseRetryCount((count) => count + 1);
   }, []);
 
   // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
@@ -72,25 +86,58 @@ export function useBaseLayers(
   useEffect(() => {
     if (!mapInstance) return;
     const layers: L.Layer[] = [];
-    // Counted per tile batch, not per tile: one stray tile from a pan is not an outage.
-    let failures = 0;
-    let windowStartedAt = 0;
-    const noteTileError = () => {
-      const now = Date.now();
-      if (now - windowStartedAt > CHART_TILE_FAILURE_WINDOW_MS) {
-        failures = 0;
-        windowStartedAt = now;
+    /**
+     * One counter per layer, counted per tile batch rather than per tile so one stray tile from a
+     * pan is not an outage (SCRUM-217 for the chart, SCRUM-302 for the base map). Only a batch with
+     * no failures clears the notice: the load that follows an outage's failed tiles must not hide
+     * it again immediately, while a recovered service clears it with no click.
+     */
+    const tileWatcher = (setFailed: (failed: boolean) => void, threshold: number, windowMs: number) => {
+      let failures = 0;
+      let windowStartedAt = 0;
+      return {
+        error: () => {
+          const now = Date.now();
+          if (now - windowStartedAt > windowMs) {
+            failures = 0;
+            windowStartedAt = now;
+          }
+          failures += 1;
+          if (failures >= threshold) setFailed(true);
+        },
+        loaded: () => {
+          if (failures === 0) setFailed(false);
+          failures = 0;
+          windowStartedAt = 0;
+        },
+      };
+    };
+    const chartWatch = tileWatcher(
+      setChartTilesFailed,
+      CHART_TILE_FAILURE_THRESHOLD,
+      CHART_TILE_FAILURE_WINDOW_MS,
+    );
+    const baseWatch = tileWatcher(
+      setBaseTilesFailed,
+      BASE_TILE_FAILURE_THRESHOLD,
+      BASE_TILE_FAILURE_WINDOW_MS,
+    );
+
+    // The dark substrate under the chart, Seamap and the satellite imagery. Only the chart's own
+    // base is unwatched: that failure belongs to the chart notice (SCRUM-217, SCRUM-302).
+    const mountSubstrate = (watch: boolean) => {
+      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
+      if (substrate.kind !== 'xyz') return;
+      const layer = L.tileLayer(substrate.url, substrate.options);
+      if (watch) {
+        layer.on('tileerror', baseWatch.error);
+        layer.on('load', baseWatch.loaded);
       }
-      failures += 1;
-      if (failures >= CHART_TILE_FAILURE_THRESHOLD) setChartTilesFailed(true);
+      layers.push(layer.addTo(mapInstance));
     };
-    const noteBatchLoaded = () => {
-      // Only a batch with no failures clears the notice: the load that follows an outage's failed
-      // tiles must not hide it again immediately, but a recovered service clears it with no click.
-      if (failures === 0) setChartTilesFailed(false);
-      failures = 0;
-      windowStartedAt = 0;
-    };
+
+    // A base change or a retry starts clean, so an old notice cannot describe the new layer.
+    setBaseTilesFailed(false);
     const ensureChartPane = () => {
       if (!mapInstance.getPane(CHART_PANE)) {
         const pane = mapInstance.createPane(CHART_PANE);
@@ -101,10 +148,7 @@ export function useBaseLayers(
     };
 
     if (tileLayerType === 'paper_chart') {
-      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
-      if (substrate.kind === 'xyz') {
-        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
-      }
+      mountSubstrate(false);
       ensureChartPane();
       const chart = tileLayerConfig('paper_chart');
       if (chart.kind === 'wms') {
@@ -117,17 +161,14 @@ export function useBaseLayers(
             [CHART_BOUNDS.north, CHART_BOUNDS.east],
           ),
         });
-        chartLayer.on('tileerror', noteTileError);
-        chartLayer.on('load', noteBatchLoaded);
+        chartLayer.on('tileerror', chartWatch.error);
+        chartLayer.on('load', chartWatch.loaded);
         layers.push(chartLayer.addTo(mapInstance));
       }
     } else if (tileLayerType === 'seamap') {
       // SCRUM-206: a keyless dark substrate under a lazily loaded MapLibre style. The pane is the
       // chart's (205): above the base tiles, below the depth shading and the seamarks.
-      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
-      if (substrate.kind === 'xyz') {
-        layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
-      }
+      mountSubstrate(true);
       ensureChartPane();
       // The first selection downloads MapLibre; switching away, or a map React StrictMode already
       // replaced, while it loads must leave no layer behind, so the layer is only mounted on a
@@ -177,13 +218,18 @@ export function useBaseLayers(
       };
     } else {
       const base = tileLayerConfig(tileLayerType, cartoApiKey);
-      if (base.kind === 'xyz') layers.push(L.tileLayer(base.url, base.options).addTo(mapInstance));
+      if (base.kind === 'xyz') {
+        const layer = L.tileLayer(base.url, base.options);
+        layer.on('tileerror', baseWatch.error);
+        layer.on('load', baseWatch.loaded);
+        layers.push(layer.addTo(mapInstance));
+      }
     }
 
     return () => {
       layers.forEach((layer) => layer.remove());
     };
-  }, [mapInstance, tileLayerType, cartoApiKey, chartRetryCount]);
+  }, [mapInstance, tileLayerType, cartoApiKey, chartRetryCount, baseRetryCount]);
 
   // The chart draws only inside the clip; outside it the substrate shows, which is accurate but
   // needs saying, because the service has no "no chart here" tile to speak for itself.
@@ -283,5 +329,7 @@ export function useBaseLayers(
     chartStraddlesEdge,
     chartTilesFailed,
     retryChart,
+    baseTilesFailed,
+    retryBase,
   };
 }

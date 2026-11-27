@@ -25,6 +25,7 @@ import { useWindGrid } from '../hooks/useWindGrid';
 import { useCurrentGrid } from '../hooks/useCurrentGrid';
 import { useWaveGrid } from '../hooks/useWaveGrid';
 import {
+  baseTileFailureNotice,
   CHART_EDGE_NOTICE,
   CHART_MIN_ZOOM,
   CHART_TILE_FAILURE_NOTICE,
@@ -85,6 +86,8 @@ interface MapViewProps {
   onGridLoadingChange?: (loading: boolean) => void;
   /** One-shot refresh trigger for the visible grid (SCRUM-113). */
   refreshSeq?: number;
+  /** Opens Map Settings, so the base-map failure notice can offer a switch (SCRUM-302). */
+  onOpenMapSettings?: () => void;
 }
 
 interface LocationMarker {
@@ -197,6 +200,7 @@ export const MapView: React.FC<MapViewProps> = ({
   onGridQuotaExhausted,
   refreshSeq,
   onGridLoadingChange,
+  onOpenMapSettings,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -216,8 +220,15 @@ export const MapView: React.FC<MapViewProps> = ({
   // SCRUM-275: the base map, the paper chart and its edge rule, the Seamap style, the seamarks and
   // the depth shading live in their own hook. What stays here is the map itself, the markers and
   // pop-ups, and the wind, current and wave layers.
-  const { chartBase, chartOutsideCoverage, chartStraddlesEdge, chartTilesFailed, retryChart } =
+  const { chartBase, chartOutsideCoverage, chartStraddlesEdge, chartTilesFailed, retryChart, baseTilesFailed, retryBase } =
     useBaseLayers(mapInstance, { tileLayerType, cartoApiKey, seamarksShown, bcDepthVisible });
+
+  // SCRUM-302: a dismissal covers this failure only. A new base, or the notice clearing and
+  // tripping again, brings it back.
+  const [baseNoticeDismissed, setBaseNoticeDismissed] = useState(false);
+  useEffect(() => {
+    setBaseNoticeDismissed(false);
+  }, [tileLayerType, baseTilesFailed]);
 
   // Latest click handler, so marker click listeners never go stale (SCRUM-92).
   const onSelectLocationRef = useLatest(onSelectLocation);
@@ -537,6 +548,47 @@ export const MapView: React.FC<MapViewProps> = ({
               {NOAA_COVERAGE_NOTICE}
             </div>
           )}
+        </div>
+      )}
+      {/* SCRUM-302: a provider refusing or breaking used to look like a rendering bug - a handful of
+          tiles and an empty background. The chart keeps its own notice (SCRUM-217). */}
+      {!chartBase && baseTilesFailed && !baseNoticeDismissed && (
+        <div className="absolute right-3 top-24 z-[750] flex max-w-[260px] flex-col items-end gap-2">
+          <div
+            data-testid="base-tile-error-notice"
+            role="status"
+            className="rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg"
+          >
+            <div>{baseTileFailureNotice(tileLayerType)}</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="base-retry"
+                onClick={retryBase}
+                className="rounded-md border border-sky-500/60 bg-sky-600 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-sky-500"
+              >
+                Retry
+              </button>
+              {onOpenMapSettings && (
+                <button
+                  type="button"
+                  data-testid="base-open-settings"
+                  onClick={onOpenMapSettings}
+                  className="rounded-md border border-dark-500 px-2 py-0.5 text-[11px] font-medium text-gray-200 transition hover:border-sky-500/60 hover:text-white"
+                >
+                  Map settings
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="base-dismiss"
+                onClick={() => setBaseNoticeDismissed(true)}
+                className="px-1 py-0.5 text-[11px] text-gray-400 transition hover:text-gray-200"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {/* The grid is shared with the gradient, so the barbs must hide on their own toggle
