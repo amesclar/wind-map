@@ -25,13 +25,17 @@ def build_description(
     version: str,
     timezone: str,
     user_agent: str,
+    map_zoom: int | None = None,
 ) -> str:
     """Comments, the reported type, the optional contact, then the system breadcrumbs."""
     parts = [comments, f"Type: {feedback_type}"]
     if contact_email:
         parts.append(f"Contact: {contact_email}")
     parts.append(
-        f"App version: {version or 'unknown'}\nTimezone: {timezone or 'unknown'}\nUser agent: {user_agent or 'unknown'}"
+        f"App version: {version or 'unknown'}\n"
+        f"Map zoom: {'unknown' if map_zoom is None else map_zoom}\n"
+        f"Timezone: {timezone or 'unknown'}\n"
+        f"User agent: {user_agent or 'unknown'}"
     )
     return "\n\n".join(parts)
 

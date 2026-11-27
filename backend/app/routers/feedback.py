@@ -26,7 +26,16 @@ MAX_USER_AGENT = 200
 MAX_FORM_FIELDS = 20
 MAX_FORM_PART_BYTES = 1024 * 1024
 MULTIPART = "multipart/form-data"
-FEEDBACK_FIELDS = ("type", "subject", "comments", "contact_email", "app_version", "timezone", "user_agent")
+FEEDBACK_FIELDS = (
+    "type",
+    "subject",
+    "comments",
+    "contact_email",
+    "app_version",
+    "timezone",
+    "user_agent",
+    "map_zoom",
+)
 
 _TAGS = re.compile(r"<[^>]*>")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -54,6 +63,8 @@ class FeedbackRequest(BaseModel):
     app_version: str = Field("", max_length=50)
     timezone: str = Field("", max_length=64)
     user_agent: str = Field("", max_length=1000)
+    # The map zoom the report was made at, when the browser knew one (SCRUM-320).
+    map_zoom: int | None = Field(None, ge=0, le=30)
 
     @field_validator("subject", mode="before")
     @classmethod
@@ -229,6 +240,7 @@ async def submit_feedback(request: Request):
         data.app_version,
         data.timezone,
         data.user_agent[:MAX_USER_AGENT],
+        data.map_zoom,
     )
     try:
         issue = await jira_service.create_feedback_issue(data.subject, description, data.type)

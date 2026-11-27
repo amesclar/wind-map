@@ -193,9 +193,22 @@ describe('version badge copy (SCRUM-319)', () => {
     );
     expect(copied).toContain('Browser: ');
     expect(copied).toContain(navigator.userAgent.slice(0, 200));
+    // No map reported a zoom here.
+    expect(copied).toContain('Map zoom: unknown');
     expect(screen.getByTestId('version-copy-status').textContent).toBe(
       `v${APP_VERSION} copied to clipboard`,
     );
+  });
+
+  it('names the live map zoom (SCRUM-320)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+    renderNavbar({ mapZoom: 14 });
+
+    fireEvent.click(screen.getByTestId('app-version'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toContain('Map zoom: 14');
   });
 
   it('clears the confirmation by itself', async () => {

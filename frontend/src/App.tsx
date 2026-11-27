@@ -145,6 +145,8 @@ export const App: React.FC = () => {
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  // The live map zoom, so a copy or a feedback ticket says where the map was (SCRUM-320).
+  const [mapZoom, setMapZoom] = useState<number | null>(null);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   // The server holds a Google Maps key, so the hybrid base map can be offered (SCRUM-311).
   const [googleSatelliteEnabled, setGoogleSatelliteEnabled] = useState(false);
@@ -288,6 +290,7 @@ export const App: React.FC = () => {
         refreshing={dataRefresh.refreshing}
         refreshHint={refreshHint}
         refreshError={refreshError}
+        mapZoom={mapZoom}
       />
 
       <main className="flex-1 flex flex-col min-h-0 w-full">
@@ -296,6 +299,7 @@ export const App: React.FC = () => {
             locations={locations}
             selectedLocation={selectedLocation}
             focusLocation={focus}
+            onZoomLevelChange={setMapZoom}
             onSelectLocation={selectSaved}
             weatherMap={allWeather.weatherMap}
             tileLayerType={mapSettings.tileLayer}
@@ -366,7 +370,11 @@ export const App: React.FC = () => {
         onToggleBcDepth={mapSettings.setBcDepthVisible}
       />
 
-      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+        mapZoom={mapZoom}
+      />
       <QuotaWarningDialog
         isOpen={quotaWarning !== null}
         resetAt={quotaWarning?.resetAt ?? null}

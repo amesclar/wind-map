@@ -6,6 +6,8 @@ import { APP_VERSION } from '../version';
 
 export interface ClientInfo {
   app_version: string;
+  /** The map zoom the report was made at, when a map is on screen (SCRUM-320). */
+  map_zoom: number | null;
   timezone: string;
   user_agent: string;
 }
@@ -16,6 +18,7 @@ export const MAX_USER_AGENT_LENGTH = 200;
 export function clientInfo(): ClientInfo {
   return {
     app_version: APP_VERSION,
+    map_zoom: null,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
     user_agent: navigator.userAgent.slice(0, MAX_USER_AGENT_LENGTH),
   };
@@ -25,6 +28,7 @@ export function clientInfo(): ClientInfo {
 export function buildVersionReport(info: ClientInfo = clientInfo()): string {
   return [
     `Wind Map v${info.app_version}`,
+    `Map zoom: ${info.map_zoom ?? 'unknown'}`,
     `Timezone: ${info.timezone || 'unknown'}`,
     `Browser: ${info.user_agent || 'unknown'}`,
   ].join('\n');

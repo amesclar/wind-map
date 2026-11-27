@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
-import { buildVersionReport, copyText } from '../utils/clientInfo';
+import { buildVersionReport, clientInfo, copyText } from '../utils/clientInfo';
 import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
@@ -44,6 +44,8 @@ interface NavbarProps {
   refreshHint?: RefreshHint;
   /** Non-blocking failure of the last click; the old data stays on screen. */
   refreshError?: string | null;
+  /** The live map zoom, carried by the version copy (SCRUM-320). */
+  mapZoom?: number | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -67,6 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   refreshHint,
   refreshError = null,
+  mapZoom = null,
 }) => {
   const hint = refreshHint ?? {
     text: canRefresh ? 'Refresh data now' : 'Latest run already loaded',
@@ -86,7 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     [],
   );
   const copyVersion = async () => {
-    const copied = await copyText(buildVersionReport());
+    const copied = await copyText(buildVersionReport({ ...clientInfo(), map_zoom: mapZoom }));
     if (versionCopyTimer.current) clearTimeout(versionCopyTimer.current);
     setVersionCopyStatus(
       copied ? `v${APP_VERSION} copied to clipboard` : 'Could not copy the version',
