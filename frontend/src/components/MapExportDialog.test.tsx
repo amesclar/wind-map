@@ -349,3 +349,37 @@ describe('MapExportDialog tile budget (SCRUM-299)', () => {
     expect(exportButton().disabled).toBe(false);
   });
 });
+
+// SCRUM-333: the OpenStreetMap terms permit current-view viewing only, so the range mode is refused.
+describe('MapExportDialog range export on OpenStreetMap bases (SCRUM-333)', () => {
+  const REASON =
+    'Time-lapsed exports not supported on the OpenStreetMap base maps: their terms permit current-view viewing only. Switch to CARTO, NOAA or Seamap to export a range.';
+  const rangeRadio = () => screen.getByRole('radio', { name: /^Range/ }) as HTMLButtonElement;
+  const viewRadio = () => screen.getByRole('radio', { name: /^Current view/ }) as HTMLButtonElement;
+
+  it('disables the range mode and says why, leaving the view export alone', () => {
+    renderDialog({ rangeDisabledReason: REASON });
+
+    expect(rangeRadio().disabled).toBe(true);
+    expect(rangeRadio().getAttribute('title')).toContain('Time-lapsed exports');
+    expect(screen.getByTestId('export-range-disabled-note').textContent).toContain(
+      'Time-lapsed',
+    );
+
+    expect(viewRadio().disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('falls back to the view mode if the restriction arrives while range is chosen', () => {
+    const { rerender } = renderDialog();
+    openRange();
+    expect(rangeRadio().getAttribute('aria-checked')).toBe('true');
+
+    rerender({ rangeDisabledReason: REASON });
+
+    expect(viewRadio().getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByTestId('range-summary')).toBeNull();
+  });
+});

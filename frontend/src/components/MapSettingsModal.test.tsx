@@ -162,8 +162,9 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
     render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
 
     const options = within(screen.getByTestId('map-settings-column-options'));
-    // SCRUM-301 retired the two OpenStreetMap radios: CARTO, NOAA, OpenWater, Satellite.
-    expect(options.getAllByRole('radio')).toHaveLength(4);
+    // SCRUM-301 retired the OpenStreetMap radios and SCRUM-333 restored them: CARTO, OSM Dark,
+    // OSM Light, NOAA, OpenWater, Satellite.
+    expect(options.getAllByRole('radio')).toHaveLength(6);
 
     const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
     expect((radio as HTMLInputElement).checked).toBe(false);
@@ -544,5 +545,34 @@ describe('MapSettingsModal layout (SCRUM-183)', () => {
     expect(body.className).toContain('overflow-y-auto');
     expect(footer.contains(screen.getByRole('button', { name: 'Done' }))).toBe(true);
     expect(body.contains(footer)).toBe(false);
+  });
+});
+
+// SCRUM-333: the Foundation's tiles return as an opt-in, with the export limit stated here.
+describe('MapSettingsModal OpenStreetMap rows (SCRUM-333)', () => {
+  it.each(['osm-dark', 'osm-standard'])('shows the %s row with its credit and the time-lapse note', (id) => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+    const row = screen.getByTestId(`tile-layer-${id}`);
+    expect(row.textContent).toContain(id === 'osm-dark' ? 'OSM Dark' : 'OSM Light');
+    expect(row.textContent).toContain('Time-lapsed exports not supported');
+    expect(row.textContent).toContain('OpenStreetMap contributors');
+  });
+
+  it('selects a stored OpenStreetMap base and reports a change', () => {
+    const onChangeTileLayer = vi.fn();
+    render(
+      <MapSettingsModal
+        {...BASE_PROPS}
+        tileLayer={'osm_dark' as MapTileLayer}
+        onChangeTileLayer={onChangeTileLayer}
+      />,
+    );
+
+    const checked = screen.getByTestId('tile-layer-osm-dark').querySelector('input')!;
+    expect((checked as HTMLInputElement).checked).toBe(true);
+
+    const light = screen.getByTestId('tile-layer-osm-standard').querySelector('input')!;
+    fireEvent.click(light);
+    expect(onChangeTileLayer).toHaveBeenCalledWith('osm_standard');
   });
 });

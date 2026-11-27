@@ -122,13 +122,19 @@ describe('useMapSettings (SCRUM-92)', () => {
   });
 
   it.each(['osm_dark', 'osm_standard'])(
-    'reads a stored retired base %s as the CARTO default (SCRUM-301)',
-    (retired) => {
-      localStorage.setItem(STORAGE_KEYS.tileLayer, retired);
+    'keeps a stored OpenStreetMap base after its restore (SCRUM-333)',
+    (restored) => {
+      localStorage.setItem(STORAGE_KEYS.tileLayer, restored);
       const { result } = renderHook(() => useMapSettings());
-      expect(result.current.tileLayer).toBe('carto_dark');
+      expect(result.current.tileLayer).toBe(restored);
     },
   );
+
+  it('still lands an unknown stored base on the CARTO default', () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'mapbox_terrain');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.tileLayer).toBe('carto_dark');
+  });
 
   it('persists the overlay toggle', () => {
     const { result } = renderHook(() => useMapSettings());

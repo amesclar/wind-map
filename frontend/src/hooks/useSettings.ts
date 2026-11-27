@@ -4,15 +4,20 @@ import { DEFAULT_TIMEZONE, STORAGE_KEYS, TIMEZONES } from '../constants';
 import type { AppConfig, MapTileLayer, UnitSystem, WindDirDisplay, WindSpeedUnit } from '../types';
 import { useLocalStorageState } from './useLocalStorageState';
 
-const TILE_LAYER_IDS: readonly MapTileLayer[] = ['carto_dark', 'paper_chart', 'seamap'];
+const TILE_LAYER_IDS: readonly MapTileLayer[] = [
+  'carto_dark',
+  'osm_dark',
+  'osm_standard',
+  'paper_chart',
+  'seamap',
+];
 
-/** Bases the app no longer ships (SCRUM-301); a stored id lands on the CARTO default. */
-const RETIRED_TILE_LAYERS: ReadonlySet<string> = new Set(['osm_dark', 'osm_standard']);
-
-const parseTileLayer = (stored: string | null): MapTileLayer => {
-  if (stored !== null && RETIRED_TILE_LAYERS.has(stored)) return 'carto_dark';
-  return TILE_LAYER_IDS.includes(stored as MapTileLayer) ? (stored as MapTileLayer) : 'carto_dark';
-};
+/**
+ * Anything unknown, and any id from a version that does not have it, lands on the CARTO default.
+ * Since SCRUM-333 the OpenStreetMap ids are real again, so they hold their value.
+ */
+const parseTileLayer = (stored: string | null): MapTileLayer =>
+  TILE_LAYER_IDS.includes(stored as MapTileLayer) ? (stored as MapTileLayer) : 'carto_dark';
 const parseApiKey = (stored: string | null) => stored ?? '';
 const serializeApiKey = (key: string) => key || null; // empty key removes it
 const parseOverlay = (stored: string | null) => stored === null || stored === 'true'; // default on
