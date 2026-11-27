@@ -71,6 +71,8 @@ export interface MockMap {
   panes: Record<string, HTMLElement>;
   getZoom: ReturnType<typeof vi.fn>;
   setZoom: ReturnType<typeof vi.fn>;
+  zoomIn: ReturnType<typeof vi.fn>;
+  zoomOut: ReturnType<typeof vi.fn>;
   getBounds: ReturnType<typeof vi.fn>;
   getSize: ReturnType<typeof vi.fn>;
   getContainer: ReturnType<typeof vi.fn>;
@@ -184,6 +186,20 @@ function makeMap(container?: HTMLElement): MockMap {
     return map;
   });
   map.flyTo = vi.fn();
+  // The app's own zoom buttons (SCRUM-319) drive Leaflet's zoom methods, which announce the new
+  // level the way the real map does.
+  map.zoomIn = vi.fn((delta = 1) => {
+    map.zoom = Math.min(map.zoom + delta, 19);
+    map.fire('zoom');
+    map.fire('zoomend');
+    return map;
+  });
+  map.zoomOut = vi.fn((delta = 1) => {
+    map.zoom = Math.max(map.zoom - delta, 0);
+    map.fire('zoom');
+    map.fire('zoomend');
+    return map;
+  });
   map.remove = vi.fn();
   mapInstances.push(map);
   return map;

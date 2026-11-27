@@ -108,6 +108,24 @@ describe('App map integration (SCRUM-126)', () => {
   it('allows each range hour 60 s for its grid data (SCRUM-164)', () => {
     expect(RANGE_FRAME_TIMEOUT_MS).toBe(60_000);
   });
+  it('labels the map button with the selected base map (SCRUM-326)', async () => {
+    localStorage.removeItem(STORAGE_KEYS.tileLayer);
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('OSM-Dark'),
+    );
+
+    fireEvent.click(screen.getByTestId('map-settings-button'));
+    const carto = screen.getByTestId('tile-layer-carto-dark').querySelector('input')!;
+    fireEvent.click(carto);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-settings-button').textContent).toContain('CARTO'),
+    );
+    localStorage.removeItem(STORAGE_KEYS.tileLayer);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetLeafletMock();
@@ -158,7 +176,11 @@ describe('App map integration (SCRUM-126)', () => {
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
     // Without geolocation the first saved location is only focused, never selected.
     await waitFor(() =>
-      expect(currentMap().flyTo).toHaveBeenCalledWith([oak.latitude, oak.longitude], 9, expect.any(Object)),
+      expect(currentMap().flyTo).toHaveBeenCalledWith(
+        [oak.latitude, oak.longitude],
+        13,
+        expect.any(Object),
+      ),
     );
     expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
     expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).not.toContain('scale-110');
@@ -193,7 +215,11 @@ describe('App map integration (SCRUM-126)', () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(currentMap().flyTo).toHaveBeenCalledWith([48.1, -122.4], 9, expect.any(Object)),
+      expect(currentMap().flyTo).toHaveBeenCalledWith(
+        [48.1, -122.4],
+        13,
+        expect.any(Object),
+      ),
     );
     await waitFor(() => expect(markerAt(48.1, -122.4)).toBeDefined());
     expect(markerAt(48.1, -122.4)!.openPopup).not.toHaveBeenCalled();

@@ -116,6 +116,8 @@ export interface FeedbackPayload {
   app_version: string;
   timezone: string;
   user_agent: string;
+  /** The map zoom at the time of the report, when known (SCRUM-320). */
+  map_zoom?: number;
   /** Up to 3 validated files, sent in the same multipart request (SCRUM-219). */
   files?: File[];
 }

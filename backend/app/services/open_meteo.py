@@ -17,6 +17,7 @@ from backend.app.config import (
     OPEN_METEO_TIMEOUT_SECONDS,
     PROVIDER_ONLY_MODELS,
 )
+from backend.app.services import open_meteo_usage
 
 # Open-Meteo throttles with 429 and occasionally returns a transient gateway error. Retrying those
 # briefly (SCRUM-166) keeps a range export from turning a momentary limit into a failed hour.
@@ -147,9 +148,13 @@ async def get_json(
     params: dict[str, Any],
     timeout: float = OPEN_METEO_TIMEOUT_SECONDS,
     retries: int = OPEN_METEO_RETRIES,
+    label: str | None = None,
 ) -> Any:
     """GET `url` and return the decoded JSON body. Raises httpx.HTTPError on network
     errors and non-2xx responses.
+
+    Every attempt's quota headers are recorded for the usage log (SCRUM-327); `label` names the
+    caller, so the log can tell a grid view from a point forecast when both use the same URL.
 
     One retry policy only (SCRUM-174): the loop below honours `Retry-After`, so the client
     keeps its default transport retries off rather than stacking a second, invisible policy
@@ -164,6 +169,8 @@ async def get_json(
             if attempt == retries:
                 raise
             continue
+        # One row per attempt, retries included; recording never raises (SCRUM-327).
+        open_meteo_usage.record(url, resp, label)
         if resp.status_code in RETRYABLE_STATUS and attempt < retries:
             await asyncio.sleep(retry_delay(resp, attempt))
             continue

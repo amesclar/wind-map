@@ -46,6 +46,7 @@ POINT_SERIES_HOURS = 48
 SPEC = marine_grid.MarineSpec(
     table="grid_waves_cache",
     variables=WAVE_VARIABLES,
+    label="waves",
     value_columns=("wave_height_m", "wave_direction_deg", "wave_period_s"),
 )
 EARTH_RADIUS_KM = 6371.0088

@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Paperclip, X } from 'lucide-react';
 import { submitFeedback, ApiError } from '../api/client';
-import { APP_VERSION } from '../version';
+import { clientInfo } from '../utils/clientInfo';
 import type { FeedbackType } from '../types';
 import {
   ATTACHMENT_ACCEPT,
@@ -29,6 +29,8 @@ const EMAIL_PATTERN = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/;
 interface FeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** The live map zoom, filed with the ticket (SCRUM-320). */
+  mapZoom?: number | null;
 }
 
 type FieldName = 'type' | 'subject' | 'comments' | 'email';
@@ -61,7 +63,7 @@ function failureMessage(err: unknown): string {
  * Feedback form (SCRUM-179). Submitting files a Jira issue through POST /api/feedback. A failure
  * keeps every field as typed and waits for the user to retry: a silent retry could duplicate a ticket.
  */
-export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
+export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, mapZoom = null }) => {
   const [type, setType] = useState('');
   const [subject, setSubject] = useState('');
   const [comments, setComments] = useState('');
@@ -184,14 +186,16 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
     setSubmitting(true);
     setFailure(null);
     try {
+      const client = clientInfo();
       const result = await submitFeedback({
         type: type as FeedbackType,
         subject: subject.trim(),
         comments: comments.trim(),
         ...(email.trim() ? { contact_email: email.trim() } : {}),
-        app_version: APP_VERSION,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
-        user_agent: navigator.userAgent.slice(0, 200),
+        app_version: client.app_version,
+        timezone: client.timezone,
+        user_agent: client.user_agent,
+        ...(mapZoom != null ? { map_zoom: mapZoom } : {}),
         ...(attachments.length > 0 ? { files: attachments.map((item) => item.file) } : {}),
       });
       setIssueKey(result.issue_key);

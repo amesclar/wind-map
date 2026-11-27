@@ -13,8 +13,8 @@ from backend.app import config
 from backend.app.auth import BasicAuthMiddleware
 from backend.app.config import APP_VERSION, CARTO_API_KEY, CORS_ORIGINS, STATIC_DIR
 from backend.app.database import clean_expired_cache, init_db
-from backend.app.routers import currents, feedback, geocode, grid, locations, maps, tides, waves, weather
-from backend.app.services import land_mask, open_meteo
+from backend.app.routers import currents, feedback, geocode, grid, locations, maps, quota, tides, waves, weather
+from backend.app.services import land_mask, open_meteo, open_meteo_usage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite database and default seed, then drop expired cache rows
     init_db()
     clean_expired_cache()
+    # Drop usage rows past the retention window, then batch the new ones in the background (SCRUM-327).
+    open_meteo_usage.prune()
+    open_meteo_usage.start()
     # Inflate the 1 km land mask before the first wave request needs it (SCRUM-273), off the loop.
     await land_mask.preload()
     # NWS asks every client for a contact address (SCRUM-255): say so once at startup rather than
@@ -39,7 +42,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Release the pooled Open-Meteo client (SCRUM-174).
+        # Write the buffered usage rows, then release the pooled client (SCRUM-174, SCRUM-327).
+        await open_meteo_usage.stop()
         await open_meteo.close_client()
 
 
@@ -130,6 +134,7 @@ async def security_headers(request: Request, call_next):
 app.include_router(locations.router)
 app.include_router(weather.router)
 app.include_router(grid.router)
+app.include_router(quota.router)
 app.include_router(currents.router)
 app.include_router(waves.router)
 app.include_router(tides.router)

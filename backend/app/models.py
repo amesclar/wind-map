@@ -224,6 +224,53 @@ class ModelAvailabilityInfo(BaseModel):
     next_available_utc: str | None = None
 
 
+class OpenMeteoUsageDay(BaseModel):
+    """One UTC day of the Open-Meteo usage log (SCRUM-327)."""
+
+    day: str
+    # Weighted API calls Open-Meteo charged that day, from X-RateLimit-Cost.
+    calls: float
+    # Upstream attempts logged that day (a retry counts once).
+    requests: int
+    peak_hour: str | None = None
+    peak_hour_calls: float | None = None
+    # Smallest X-RateLimit-Remaining seen that day, as a cross-check on `calls`.
+    lowest_remaining: float | None = None
+
+
+class OpenMeteoUsageHour(BaseModel):
+    """One UTC hour of today's usage, so a burst is visible."""
+
+    hour: str
+    calls: float
+    requests: int
+
+
+class OpenMeteoUsageHeaders(BaseModel):
+    """The quota headers on the most recent logged attempt."""
+
+    at: str
+    endpoint: str
+    status: int
+    cost: float
+    quota_limit: float | None = None
+    remaining: float | None = None
+    window_seconds: int | None = None
+    reset_at: str | None = None
+
+
+class OpenMeteoUsageResponse(BaseModel):
+    """GET /api/weather/quota (SCRUM-327): what this app has spent of Open-Meteo's free quota."""
+
+    daily_limit: int
+    today: str
+    today_calls: float
+    today_peak_hour: str | None = None
+    days: list[OpenMeteoUsageDay]
+    hours_today: list[OpenMeteoUsageHour]
+    latest: OpenMeteoUsageHeaders | None = None
+
+
 class WeatherModelInfo(BaseModel):
     """One entry of GET /api/weather/models (SCRUM-115)."""
 

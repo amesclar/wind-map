@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, MoveRight, Anchor, Layers } from 'lucide-react';
+import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, MoveRight, Anchor, Layers, Info } from 'lucide-react';
 import { MapTileLayer } from '../types';
 import {
   isLightTileLayer,
+  TILE_LAYER_NAMES,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_COVERAGE_NOTICE,
   NOAA_NOTICE,
@@ -63,6 +64,8 @@ interface ModalTheme {
   optionTitle: string;
   description: string;
   note: string;
+  info: string;
+  infoPanel: string;
   input: string;
   subPanel: string;
   footer: string;
@@ -73,6 +76,43 @@ interface ModalTheme {
   positive: string;
   danger: string;
 }
+
+/** The circle-i control that reveals one row's long explanation (SCRUM-323). */
+const InfoToggle: React.FC<{
+  id: string;
+  label: string;
+  theme: ModalTheme;
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+}> = ({ id, label, theme, open, onToggle, className = '' }) => (
+  <button
+    type="button"
+    data-testid={`info-${id}`}
+    aria-label={`About ${label}`}
+    aria-expanded={open}
+    aria-controls={`info-panel-${id}`}
+    title={`About ${label}`}
+    onClick={onToggle}
+    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${theme.info} ${className}`}
+  >
+    <Info className="w-3 h-3" />
+  </button>
+);
+
+const InfoPanel: React.FC<{ id: string; theme: ModalTheme; children: React.ReactNode }> = ({
+  id,
+  theme,
+  children,
+}) => (
+  <div
+    id={`info-panel-${id}`}
+    data-testid={`info-panel-${id}`}
+    className={`mt-1.5 border-t pt-1.5 text-xs ${theme.infoPanel}`}
+  >
+    {children}
+  </div>
+);
 
 const DARK_THEME: ModalTheme = {
   panel: 'bg-dark-800 border-dark-600',
@@ -86,6 +126,8 @@ const DARK_THEME: ModalTheme = {
   optionTitle: 'text-gray-100',
   description: 'text-gray-400',
   note: 'text-gray-500',
+  info: 'border-dark-600 text-gray-400 hover:bg-dark-700 hover:text-gray-100',
+  infoPanel: 'border-dark-600/70 text-gray-400',
   input: 'bg-dark-900 border-dark-600 text-gray-100 placeholder:text-gray-500',
   subPanel: 'border-dark-600/70 bg-dark-900/40',
   footer: 'bg-dark-900 border-dark-600',
@@ -109,6 +151,8 @@ const LIGHT_THEME: ModalTheme = {
   optionTitle: 'text-slate-900',
   description: 'text-slate-600',
   note: 'text-slate-500',
+  info: 'border-slate-300 text-slate-500 hover:bg-slate-200 hover:text-slate-900',
+  infoPanel: 'border-slate-300 text-slate-600',
   input: 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400',
   subPanel: 'border-slate-300 bg-white',
   footer: 'bg-slate-100 border-slate-300',
@@ -149,6 +193,10 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   const chartBase = tileLayer === 'paper_chart';
   const light = isLightTileLayer(tileLayer);
   const theme = light ? LIGHT_THEME : DARK_THEME;
+  // One explanation open at a time keeps the modal short even while it is being read.
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
+  const toggleInfo = (id: string) =>
+    setOpenInfo((current) => (current === id ? null : id));
 
   if (!isOpen) return null;
 
@@ -196,176 +244,254 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   Base Map Style
                 </label>
                 <div className="space-y-2">
-                  <label
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'osm_dark'}
-                      onChange={() => onChangeTileLayer('osm_dark')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div>
-                      <div
-                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                      >
-                        OpenStreetMap Dark
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-osm-dark"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'osm_dark'}
+                        onChange={() => onChangeTileLayer('osm_dark')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          Free • No Key Needed
-                        </span>
+                          {TILE_LAYER_NAMES.osm_dark}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                          >
+                            Free • No Key Needed
+                          </span>
+                        </div>
+                        {openInfo === 'osm_dark' && (
+                          <InfoPanel id="osm_dark" theme={theme}>
+                            Clean, high-contrast dark theme without any watermark or API key limits.
+                          </InfoPanel>
+                        )}
                       </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        Clean, high-contrast dark theme without any watermark or API key limits.
-                      </div>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'carto_dark'}
-                      onChange={() => onChangeTileLayer('carto_dark')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    </label>
+                    <InfoToggle
+                      id="osm_dark"
+                      label="OSM-Dark"
+                      theme={theme}
+                      open={openInfo === 'osm_dark'}
+                      onToggle={() => toggleInfo('osm_dark')}
+                      className="absolute right-2 top-2"
                     />
-                    <div>
-                      <div
-                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                      >
-                        CARTO Dark Matter
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeKey}`}
+                  </div>
+
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-carto-dark"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'carto_dark'}
+                        onChange={() => onChangeTileLayer('carto_dark')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          API Key Required
-                        </span>
+                          {TILE_LAYER_NAMES.carto_dark}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeKey}`}
+                          >
+                            API Key Required
+                          </span>
+                        </div>
+                        {openInfo === 'carto_dark' && (
+                          <InfoPanel id="carto_dark" theme={theme}>
+                            CARTO requires an API key to remove the "API KEY REQUIRED" watermark.
+                            The free key applies to CARTO only.
+                          </InfoPanel>
+                        )}
                       </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        CARTO requires an API key to remove the "API KEY REQUIRED" watermark.
-                      </div>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'osm_standard'}
-                      onChange={() => onChangeTileLayer('osm_standard')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    </label>
+                    <InfoToggle
+                      id="carto_dark"
+                      label="CARTO"
+                      theme={theme}
+                      open={openInfo === 'carto_dark'}
+                      onToggle={() => toggleInfo('carto_dark')}
+                      className="absolute right-2 top-2"
                     />
-                    <div>
-                      <div className={`text-sm font-medium ${theme.optionTitle}`}>
-                        OpenStreetMap Standard (Light)
-                      </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        Default light road map, completely keyless.
-                      </div>
-                    </div>
-                  </label>
+                  </div>
 
-                  <label
-                    data-testid="tile-layer-paper-chart"
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'paper_chart'}
-                      onChange={() => onChangeTileLayer('paper_chart')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-osm-standard"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'osm_standard'}
+                        onChange={() => onChangeTileLayer('osm_standard')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                          {TILE_LAYER_NAMES.osm_standard}
+                        </div>
+                        {openInfo === 'osm_standard' && (
+                          <InfoPanel id="osm_standard" theme={theme}>
+                            Default light road map, completely keyless.
+                          </InfoPanel>
+                        )}
+                      </div>
+                    </label>
+                    <InfoToggle
+                      id="osm_standard"
+                      label="OSM-Light"
+                      theme={theme}
+                      open={openInfo === 'osm_standard'}
+                      onToggle={() => toggleInfo('osm_standard')}
+                      className="absolute right-2 top-2"
                     />
-                    <div>
-                      <div
-                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                      >
-                        Nautical Paper Chart
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                  </div>
+
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-paper-chart"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'paper_chart'}
+                        onChange={() => onChangeTileLayer('paper_chart')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          Free • No Key Needed
-                        </span>
+                          {TILE_LAYER_NAMES.paper_chart}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                          >
+                            Free • No Key Needed
+                          </span>
+                        </div>
+                        <div className={`text-xs ${theme.note} mt-0.5`}>
+                          {NOAA_ATTRIBUTION_TEXT} · {NOAA_NOTICE}
+                        </div>
+                        {openInfo === 'paper_chart' && (
+                          <InfoPanel id="paper_chart" theme={theme}>
+                            NOAA's official chart as the map itself: soundings, aids to navigation and
+                            channels, at about 0.5 s per tile because nothing is cached.{' '}
+                            {NOAA_COVERAGE_NOTICE}
+                          </InfoPanel>
+                        )}
                       </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        NOAA's official chart as the map itself: soundings, aids to navigation and
-                        channels, at about 0.5 s per tile because nothing is cached.
-                      </div>
-                      <div className={`text-xs ${theme.note} mt-1`}>
-                        {NOAA_ATTRIBUTION_TEXT} · {NOAA_NOTICE}. {NOAA_COVERAGE_NOTICE}
-                      </div>
-                    </div>
-                  </label>
-
-                  <label
-                    data-testid="tile-layer-seamap"
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'seamap'}
-                      onChange={() => onChangeTileLayer('seamap')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                    </label>
+                    <InfoToggle
+                      id="paper_chart"
+                      label="NOAA"
+                      theme={theme}
+                      open={openInfo === 'paper_chart'}
+                      onToggle={() => toggleInfo('paper_chart')}
+                      className="absolute right-2 top-2"
                     />
-                    <div>
-                      <div
-                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                      >
-                        Open Waters Seamap
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                  </div>
+
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-seamap"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'seamap'}
+                        onChange={() => onChangeTileLayer('seamap')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          Free • No Key Needed
-                        </span>
+                          {TILE_LAYER_NAMES.seamap}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                          >
+                            Free • No Key Needed
+                          </span>
+                        </div>
+                        <div className={`text-xs ${theme.note} mt-0.5`}>
+                          {SEAMAP_ATTRIBUTION_TEXT} · {SEAMAP_NOTICE}
+                        </div>
+                        {openInfo === 'seamap' && (
+                          <InfoPanel id="seamap" theme={theme}>
+                            Vector nautical detail: navigation aids and depth shading, not
+                            soundings. Its tiles stop at zoom 14 and overzoom beyond that. The wind
+                            gradient is drawn lighter here so the aids stay crisp; turning it off
+                            helps further.
+                          </InfoPanel>
+                        )}
                       </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        Vector nautical detail: navigation aids and depth shading, not soundings.
-                        Its tiles stop at zoom 14 and overzoom beyond that.
-                      </div>
-                      <div className={`text-xs ${theme.note} mt-1`}>
-                        {SEAMAP_ATTRIBUTION_TEXT} · {SEAMAP_NOTICE}. The wind gradient is drawn
-                        lighter here so the aids stay crisp; turning it off helps further.
-                      </div>
-                    </div>
-                  </label>
+                    </label>
+                    <InfoToggle
+                      id="seamap"
+                      label="OpenWater"
+                      theme={theme}
+                      open={openInfo === 'seamap'}
+                      onToggle={() => toggleInfo('seamap')}
+                      className="absolute right-2 top-2"
+                    />
+                  </div>
 
                   {googleSatelliteEnabled && (
-                  <label
-                    data-testid="tile-layer-google-satellite"
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tileLayer"
-                      checked={tileLayer === 'google_satellite'}
-                      onChange={() => onChangeTileLayer('google_satellite')}
-                      className="mt-0.5 text-sky-500 focus:ring-sky-500"
-                    />
-                    <div>
-                      <div
-                        className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
-                      >
-                        Google Satellite (Hybrid)
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-google-satellite"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'google_satellite'}
+                        onChange={() => onChangeTileLayer('google_satellite')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
                         >
-                          Satellite
-                        </span>
+                          {TILE_LAYER_NAMES.google_satellite}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                          >
+                            Satellite
+                          </span>
+                        </div>
+                        <div className={`text-xs ${theme.note} mt-0.5`}>
+                          Export unavailable on Google Maps due to licensing restrictions.
+                        </div>
+                        {openInfo === 'google_satellite' && (
+                          <InfoPanel id="google_satellite" theme={theme}>
+                            High-resolution satellite imagery with coastal roads and place names.
+                          </InfoPanel>
+                        )}
                       </div>
-                      <div className={`text-xs ${theme.description} mt-0.5`}>
-                        High-resolution satellite imagery with coastal roads and place names.
-                      </div>
-                      <div className={`text-xs ${theme.note} mt-1`}>
-                        Export unavailable on Google Maps due to licensing restrictions.
-                      </div>
-                    </div>
-                  </label>
+                    </label>
+                    <InfoToggle
+                      id="google_satellite"
+                      label="Satellite"
+                      theme={theme}
+                      open={openInfo === 'google_satellite'}
+                      onToggle={() => toggleInfo('google_satellite')}
+                      className="absolute right-2 top-2"
+                    />
+                  </div>
                   )}
                 </div>
               </div>
@@ -394,7 +520,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                   Get an instant free key from CARTO (up to 5 million requests/month) and paste it below to unlock watermark-free CARTO tiles.
                 </p>
                 <p className={`text-xs ${theme.note} mb-2.5`}>
-                  The key applies to CARTO Dark Matter only.
+                  The key applies to CARTO only.
                 </p>
 
                 <form onSubmit={handleSave} className="space-y-2.5">
@@ -464,13 +590,23 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Show wind barbs across map
+                      <InfoToggle
+                        id="wind"
+                        label="wind barbs"
+                        theme={theme}
+                        open={openInfo === 'wind'}
+                        onToggle={() => toggleInfo('wind')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Displays a continuous grid of wind direction and speed indicators over the visible viewport.
-                    </div>
+                    {openInfo === 'wind' && (
+                      <InfoPanel id="wind" theme={theme}>
+                        Displays a continuous grid of wind direction and speed indicators over the
+                        visible viewport.
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="wind-overlay-toggle"
@@ -501,15 +637,24 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Color the map by wind speed
+                      <InfoToggle
+                        id="wind_color"
+                        label="the wind colour gradient"
+                        theme={theme}
+                        open={openInfo === 'wind_color'}
+                        onToggle={() => toggleInfo('wind_color')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs keep a crisp outline so they stay readable.
-                      On the Nautical Paper Chart base the gradient draws lighter; turning it off
-                      keeps the chart's own symbols crisp.
-                    </div>
+                    {openInfo === 'wind_color' && (
+                      <InfoPanel id="wind_color" theme={theme}>
+                        Smooth gradient with a legend, drawn from the same grid as the barbs. Barbs
+                        keep a crisp outline so they stay readable. On the NOAA base the gradient
+                        draws lighter; turning it off keeps the chart's own symbols crisp.
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="wind-color-overlay-toggle"
@@ -532,15 +677,24 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`mt-2 flex items-center justify-between p-2.5 rounded-lg border ${theme.subPanel}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       High contrast gradient
+                      <InfoToggle
+                        id="wind_high_contrast"
+                        label="the high contrast gradient"
+                        theme={theme}
+                        open={openInfo === 'wind_high_contrast'}
+                        onToggle={() => toggleInfo('wind_high_contrast')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Draws the gradient at the chart's lighter strength on every base. The Nautical
-                      Paper Chart always does this so its soundings stay readable; turn this on for
-                      the same on the other bases.
-                    </div>
+                    {openInfo === 'wind_high_contrast' && (
+                      <InfoPanel id="wind_high_contrast" theme={theme}>
+                        Draws the gradient at the chart's lighter strength on every base. The NOAA
+                        chart always does this so its soundings stay readable; turn this on for the
+                        same on the other bases.
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="wind-color-high-contrast-toggle"
@@ -571,13 +725,29 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Show ocean currents
+                      <InfoToggle
+                        id="currents"
+                        label="ocean currents"
+                        theme={theme}
+                        open={openInfo === 'currents'}
+                        onToggle={() => toggleInfo('currents')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Chevrons point where the water flows, coloured by speed, and follow the selected forecast hour.
-                    </div>
+                    {openInfo === 'currents' && (
+                      <InfoPanel id="currents" theme={theme}>
+                        <div>
+                          Chevrons point where the water flows, coloured by speed, and follow the
+                          selected forecast hour.
+                        </div>
+                        <div data-testid="currents-resolution-note" className="mt-1">
+                          Currents come from a model with cells of about 6 to 9 km, so narrow waters
+                          such as Port Susan may show no current.
+                        </div>
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="water-currents-toggle"
@@ -595,13 +765,6 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                     />
                   </button>
                 </div>
-                <p
-                  data-testid="currents-resolution-note"
-                  className={`mt-2 text-xs ${theme.note}`}
-                >
-                  Currents come from a model with cells of about 6 to 9 km, so narrow waters such as
-                  Port Susan may show no current.
-                </p>
               </div>
 
               {/* Ocean Waves Toggle (SCRUM-234) */}
@@ -615,14 +778,23 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Show wave height and direction
+                      <InfoToggle
+                        id="waves"
+                        label="ocean waves"
+                        theme={theme}
+                        open={openInfo === 'waves'}
+                        onToggle={() => toggleInfo('waves')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Arrows point where the waves travel, sized and coloured by height, and follow
-                      the selected forecast hour. They can be shown together with the currents.
-                    </div>
+                    {openInfo === 'waves' && (
+                      <InfoPanel id="waves" theme={theme}>
+                        Arrows point where the waves travel, sized and coloured by height, and follow
+                        the selected forecast hour. They can be shown together with the currents.
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="waves-toggle"
@@ -653,20 +825,27 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Show buoys, beacons and lights
+                      <InfoToggle
+                        id="seamarks"
+                        label="nautical seamarks"
+                        theme={theme}
+                        open={openInfo === 'seamarks'}
+                        onToggle={() => toggleInfo('seamarks')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      {chartBase ? (
-                        SEAMARK_HIDDEN_ON_CHART
-                      ) : (
-                        <>
-                          OpenSeaMap overlay drawn under the wind layers. {SEAMARK_ATTRIBUTION_TEXT} ·{' '}
-                          {SEAMARK_NOTICE}.
-                        </>
-                      )}
+                    <div className={`text-xs ${theme.note} mt-0.5`}>
+                      {SEAMARK_ATTRIBUTION_TEXT} · {SEAMARK_NOTICE}
                     </div>
+                    {openInfo === 'seamarks' && (
+                      <InfoPanel id="seamarks" theme={theme}>
+                        {chartBase
+                          ? SEAMARK_HIDDEN_ON_CHART
+                          : 'OpenSeaMap overlay drawn under the wind layers.'}
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="seamarks-toggle"
@@ -698,16 +877,29 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                 <div
                   className={`flex items-center justify-between p-2.5 rounded-lg border transition ${theme.option}`}
                 >
-                  <div>
-                    <div className={`text-sm font-medium ${theme.optionTitle}`}>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-1.5`}>
                       Show bathymetry contours
+                      <InfoToggle
+                        id="bc_depth"
+                        label="B.C. depth"
+                        theme={theme}
+                        open={openInfo === 'bc_depth'}
+                        onToggle={() => toggleInfo('bc_depth')}
+                      />
                     </div>
-                    <div className={`text-xs ${theme.description} mt-0.5`}>
-                      Shaded depth and contours for B.C. waters, where the paper chart has no
-                      coverage. Drawn under the seamarks and the wind layers. {NONNA_ATTRIBUTION_TEXT} ·{' '}
-                      {NONNA_NOTICE}.
+                    <div className={`text-xs ${theme.note} mt-0.5`}>
+                      {NONNA_ATTRIBUTION_TEXT} · {NONNA_NOTICE}
                     </div>
-                    <div className={`text-xs ${theme.note} mt-1`}>{NONNA_DERIVATIVE_NOTICE}</div>
+                    {openInfo === 'bc_depth' && (
+                      <InfoPanel id="bc_depth" theme={theme}>
+                        <div>
+                          Shaded depth and contours for B.C. waters, where the paper chart has no
+                          coverage. Drawn under the seamarks and the wind layers.
+                        </div>
+                        <div className="mt-1">{NONNA_DERIVATIVE_NOTICE}</div>
+                      </InfoPanel>
+                    )}
                   </div>
                   <button
                     data-testid="bc-depth-toggle"

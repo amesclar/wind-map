@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { APP_VERSION } from '../version';
+import { buildVersionReport, clientInfo, copyText } from '../utils/clientInfo';
 import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
@@ -22,6 +23,8 @@ interface NavbarProps {
   onOpenSavedLocations: () => void;
   onSelectAndAddLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
+  /** The selected base map's short name, shown instead of the generic "Map" (SCRUM-326). */
+  mapName: string;
   onOpenPreferences: () => void;
   hasCartoKey: boolean;
   /** Opens the export dialog (SCRUM-117). */
@@ -43,6 +46,8 @@ interface NavbarProps {
   refreshHint?: RefreshHint;
   /** Non-blocking failure of the last click; the old data stays on screen. */
   refreshError?: string | null;
+  /** The live map zoom, carried by the version copy (SCRUM-320). */
+  mapZoom?: number | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -53,6 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSavedLocations,
   onSelectAndAddLocation,
   onOpenMapSettings,
+  mapName,
   onOpenPreferences,
   hasCartoKey,
   onOpenExportDialog,
@@ -66,6 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   refreshHint,
   refreshError = null,
+  mapZoom = null,
 }) => {
   const hint = refreshHint ?? {
     text: canRefresh ? 'Refresh data now' : 'Latest run already loaded',
@@ -74,6 +81,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const hintDescription = hint.detail ? `${hint.text} · ${hint.detail}` : hint.text;
   // A disabled button takes no pointer events and no focus, so the hint hangs off a wrapper.
   const [hintOpen, setHintOpen] = useState(false);
+  // SCRUM-319: the version badge copies the version with the client details a feedback ticket
+  // carries, and confirms it for a moment.
+  const [versionCopyStatus, setVersionCopyStatus] = useState<string | null>(null);
+  const versionCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (versionCopyTimer.current) clearTimeout(versionCopyTimer.current);
+    },
+    [],
+  );
+  const copyVersion = async () => {
+    const copied = await copyText(buildVersionReport({ ...clientInfo(), map_zoom: mapZoom }));
+    if (versionCopyTimer.current) clearTimeout(versionCopyTimer.current);
+    setVersionCopyStatus(
+      copied ? `v${APP_VERSION} copied to clipboard` : 'Could not copy the version',
+    );
+    versionCopyTimer.current = setTimeout(() => setVersionCopyStatus(null), 2500);
+  };
 
   return (
     <header className="h-14 bg-dark-900/90 backdrop-blur-md border-b border-dark-600 px-4 flex items-center justify-between z-40 relative gap-3">
@@ -85,11 +110,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-gray-100 tracking-wide flex items-center gap-1.5">
             Wind Map
-            <span
-              data-testid="app-version"
-              className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40"
-            >
-              v{APP_VERSION}
+            <span className="relative">
+              <button
+                type="button"
+                data-testid="app-version"
+                title="Copy version and browser details"
+                onClick={copyVersion}
+                className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800/40 transition hover:bg-sky-900 hover:text-sky-300"
+              >
+                v{APP_VERSION}
+              </button>
+              {versionCopyStatus && (
+                <span
+                  role="status"
+                  data-testid="version-copy-status"
+                  className="absolute left-0 top-full z-50 mt-1 whitespace-nowrap rounded border border-dark-600 bg-dark-900/95 px-2 py-1 text-[10px] font-normal text-gray-200 shadow-lg"
+                >
+                  {versionCopyStatus}
+                </span>
+              )}
             </span>
           </h1>
         </div>
@@ -116,10 +155,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           onClick={onOpenMapSettings}
           title="Map Layers & CARTO API Key"
+          data-testid="map-settings-button"
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 text-xs font-medium transition shrink-0"
         >
           <Map className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden md:inline">Map</span>
+          <span className="hidden md:inline">{mapName}</span>
           {hasCartoKey && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="API key active" />
           )}
