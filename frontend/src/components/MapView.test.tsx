@@ -759,8 +759,7 @@ describe('MapView Seamap base (SCRUM-206)', () => {
     // No GL layer is left behind and the plain base took its place.
     expect(
       createdTileLayers.filter(
-        (layer) =>
-          (layer.url ?? '').includes('basemaps.cartocdn.com') && layer.remove.mock.calls.length === 0,
+        (layer) => layer.options?.subdomains === 'abcd' && layer.remove.mock.calls.length === 0,
       ),
     ).toHaveLength(1);
   });
