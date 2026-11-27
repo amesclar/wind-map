@@ -231,6 +231,11 @@ export const MapView: React.FC<MapViewProps> = ({
   );
 
 
+  // SCRUM-196: a grid request that fails twice clears the barbs, so say why the layer is empty
+  // instead of leaving what looks like a frozen map.
+  const [gridFailed, setGridFailed] = useState(false);
+  const handleGridError = useCallback(() => setGridFailed(true), []);
+
   // One grid fetch per view change, shared by every layer that draws it (SCRUM-122);
   // either layer keeps it alive (SCRUM-124).
   const gridPoints = useWindGrid(
@@ -242,7 +247,12 @@ export const MapView: React.FC<MapViewProps> = ({
     onGridQuotaExhausted,
     onGridLoadingChange,
     refreshSeq,
+    handleGridError,
   );
+  // A response replaces the empty layer, so the failure notice goes with it.
+  useEffect(() => {
+    if (gridPoints.length > 0) setGridFailed(false);
+  }, [gridPoints]);
   // Currents have their own fetch and horizon: the layer follows the same selected hour
   // (SCRUM-99) but not the weather model or the wind layers.
   const currentPoints = useCurrentGrid(mapInstance, waterCurrentsVisible, validTime);
@@ -479,6 +489,15 @@ export const MapView: React.FC<MapViewProps> = ({
           className="absolute left-1/2 top-20 z-[750] -translate-x-1/2 rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
         >
           No data from {modelName ?? selectedModel} for this area
+        </div>
+      )}
+      {gridFailed && (windOverlayVisible || windColorOverlayVisible) && (
+        <div
+          data-testid="wind-grid-error-notice"
+          role="status"
+          className="absolute left-1/2 top-20 z-[750] -translate-x-1/2 rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
+        >
+          Wind data could not load. Pan or zoom to try again.
         </div>
       )}
       {chartBase && (chartOutsideCoverage || chartTilesFailed || chartStraddlesEdge) && (
