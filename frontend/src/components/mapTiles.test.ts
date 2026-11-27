@@ -78,6 +78,8 @@ describe('TILE_LAYER_NAMES (SCRUM-322, SCRUM-326)', () => {
   it('names every base map once and resolves each id to its short label', () => {
     expect(TILE_LAYER_NAMES).toEqual({
       carto_dark: 'CARTO',
+      osm_dark: 'OSM Dark',
+      osm_standard: 'OSM Light',
       paper_chart: 'NOAA',
       seamap: 'OpenWater',
       google_satellite: 'Satellite',

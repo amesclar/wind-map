@@ -44,6 +44,8 @@ interface MapExportDialogProps {
   disabled?: boolean;
   /** Reason shown in warning banner when export is disabled (SCRUM-311). */
   disabledReason?: string;
+  /** Set on a base whose terms forbid a time-lapsed export (SCRUM-333); the view export stays. */
+  rangeDisabledReason?: string;
 }
 
 /**
@@ -66,6 +68,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   onSaveCaptured,
   disabled = false,
   disabledReason,
+  rangeDisabledReason,
 }) => {
   const [mode, setMode] = useState<'view' | 'range'>('view');
   const [format, setFormat] = useState<MapExportFormat>('png');
@@ -101,6 +104,13 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen, onClose]);
+
+  // A base that forbids time-lapsed exports can never leave the dialog in range mode, even if the
+  // prop arrives while it is open (SCRUM-333).
+  const rangeBlocked = Boolean(rangeDisabledReason);
+  useEffect(() => {
+    if (rangeBlocked && mode === 'range') setMode('view');
+  }, [rangeBlocked, mode]);
 
   const plan = useMemo(
     () =>
@@ -185,7 +195,12 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
                 'Map image/PDF export is disabled on Google Maps due to licensing restrictions.'}
             </div>
           )}
-          <ExportModeField mode={mode} busy={busy} onChange={setMode} />
+          <ExportModeField
+            mode={mode}
+            busy={busy}
+            onChange={setMode}
+            rangeDisabledReason={rangeDisabledReason}
+          />
 
           {mode === 'range' && (
             <ExportRangeFields

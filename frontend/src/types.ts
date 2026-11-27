@@ -91,7 +91,13 @@ export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
  * `seamap` the Open Waters vector style (SCRUM-206). The last two are light sheets and must not be
  * darkened.
  */
-export type MapTileLayer = 'carto_dark' | 'paper_chart' | 'seamap' | 'google_satellite';
+export type MapTileLayer =
+  | 'carto_dark'
+  | 'osm_dark'
+  | 'osm_standard'
+  | 'paper_chart'
+  | 'seamap'
+  | 'google_satellite';
 
 /** Body of POST /api/locations. */
 export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' | 'admin1' | 'country'>;

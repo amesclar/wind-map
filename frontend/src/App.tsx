@@ -16,6 +16,7 @@ import { buildRefreshHint } from './utils/refreshHint';
 import {
   GOOGLE_MAP_EXPORT_DISABLED_REASON,
   GOOGLE_MAP_EXPORT_DISABLED_TOOLTIP,
+  osmRangeExportBlockedReason,
   tileLayerName,
 } from './components/mapTiles';
 import { MapExportDialog } from './components/MapExportDialog';
@@ -413,6 +414,7 @@ export const App: React.FC = () => {
         onSaveCaptured={mapExport.handleSaveCaptured}
         disabled={mapSettings.tileLayer === 'google_satellite'}
         disabledReason={GOOGLE_MAP_EXPORT_DISABLED_REASON}
+        rangeDisabledReason={osmRangeExportBlockedReason(mapSettings.tileLayer)}
       />
     </div>
   );

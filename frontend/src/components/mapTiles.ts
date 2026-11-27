@@ -6,7 +6,10 @@ import type { MapTileLayer } from '../types';
  * Light bases (SCRUM-221): the Map Settings modal follows the tone of the selected base. Seamap
  * draws over the dark substrate, so it stays dark.
  */
-const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>(['paper_chart']);
+const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>([
+  'paper_chart',
+  'osm_standard',
+]);
 
 export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAYERS.has(layer);
 
@@ -16,6 +19,8 @@ export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAY
  */
 export const TILE_LAYER_NAMES: Record<MapTileLayer, string> = {
   carto_dark: 'CARTO',
+  osm_dark: 'OSM Dark',
+  osm_standard: 'OSM Light',
   paper_chart: 'NOAA',
   seamap: 'OpenWater',
   google_satellite: 'Satellite',
@@ -25,6 +30,27 @@ export const tileLayerName = (layer: MapTileLayer): string => TILE_LAYER_NAMES[l
 
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
+
+/**
+ * The Foundation's own tiles (SCRUM-333, restored after SCRUM-301 removed them). Their terms permit
+ * "normal interactive viewing by a human ... only the tiles needed for the current viewport" and
+ * forbid pre-emptive fetching, which is exactly what a range export does: it moves the map and
+ * captures frames nobody is looking at. So the bases are an opt-in, never the default, and the
+ * range export is refused on them - the copy is the owner's (2026-11-27).
+ */
+export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+export const OSM_ATTRIBUTION_TEXT = '© OpenStreetMap contributors';
+export const OSM_RANGE_EXPORT_NOTE = 'Time-lapsed exports not supported';
+export const OSM_RANGE_EXPORT_REASON =
+  'Time-lapsed exports not supported on the OpenStreetMap base maps: their terms permit current-view viewing only. Switch to CARTO, NOAA or Seamap to export a range.';
+
+/** The two OpenStreetMap bases, which carry the range-export restriction. */
+export const isOsmLayer = (layer: MapTileLayer): boolean =>
+  layer === 'osm_dark' || layer === 'osm_standard';
+
+/** Why the range mode is unavailable on this base, or undefined when it is available. */
+export const osmRangeExportBlockedReason = (layer: MapTileLayer): string | undefined =>
+  isOsmLayer(layer) ? OSM_RANGE_EXPORT_REASON : undefined;
 
 /**
  * One layer from the table. `kind` lets the mount code tell a WMS from an XYZ template and from the
@@ -183,7 +209,7 @@ export function resetGoogleSessionCache(): void {
  * the gradient is attenuated so their own symbols stay readable (SCRUM-203, SCRUM-206).
  */
 export function isLightBase(layer: MapTileLayer): boolean {
-  return layer === 'paper_chart' || layer === 'seamap';
+  return layer === 'paper_chart' || layer === 'seamap' || layer === 'osm_standard';
 }
 
 /** Plain-text attribution for the exported image (SCRUM-116); every provider requires it. */
@@ -191,6 +217,7 @@ export function attributionText(layer: MapTileLayer): string {
   if (layer === 'paper_chart') return `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`;
   if (layer === 'seamap') return `${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`;
   if (layer === 'google_satellite') return GOOGLE_SATELLITE_ATTRIBUTION_TEXT;
+  if (isOsmLayer(layer)) return OSM_ATTRIBUTION_TEXT;
   // CARTO's credit is ODbL on its data, so both names are required (SCRUM-301).
   return '© OpenStreetMap contributors © CARTO';
 }
@@ -310,7 +337,7 @@ export function tileLayerConfig(
   cartoApiKey?: string,
 ): Extract<TileLayerConfig, { kind: 'vector' }>;
 export function tileLayerConfig(
-  layer: 'carto_dark' | 'google_satellite',
+  layer: 'carto_dark' | 'osm_dark' | 'osm_standard' | 'google_satellite',
   cartoApiKey?: string,
   googleTileUrl?: string,
 ): Extract<TileLayerConfig, { kind: 'xyz' }>;
@@ -335,6 +362,25 @@ export function tileLayerConfig(
         options: { attribution: CARTO_ATTRIBUTION, subdomains: 'abcd', maxZoom: 19, crossOrigin: true },
       };
     }
+    case 'osm_standard':
+      return {
+        kind: 'xyz',
+        url: OSM_TILE_URL,
+        options: { attribution: OSM_ATTRIBUTION, maxZoom: 19, crossOrigin: true },
+      };
+    case 'osm_dark':
+      return {
+        kind: 'xyz',
+        url: OSM_TILE_URL,
+        // SCRUM-301 kept this filter and its export handling precisely so the light tiles could
+        // come back dark without a second provider.
+        options: {
+          attribution: OSM_ATTRIBUTION,
+          maxZoom: 19,
+          crossOrigin: true,
+          className: 'osm-dark-tiles',
+        },
+      };
     case 'paper_chart':
       return chartLayerConfig();
     case 'seamap':

@@ -3,6 +3,7 @@ import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, Mo
 import { MapTileLayer } from '../types';
 import {
   isLightTileLayer,
+  OSM_RANGE_EXPORT_NOTE,
   TILE_LAYER_NAMES,
   NOAA_ATTRIBUTION_TEXT,
   NOAA_COVERAGE_NOTICE,
@@ -284,6 +285,40 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       className="absolute right-2 top-2"
                     />
                   </div>
+
+                  {/* SCRUM-333: the Foundation's own tiles, opt-in only. The note states the export
+                      limit where the base is chosen, not only in the export dialog. */}
+                  {(['osm_dark', 'osm_standard'] as const).map((osmLayer) => (
+                    <div className="relative" key={osmLayer}>
+                      <label
+                        data-testid={`tile-layer-${osmLayer.replace('_', '-')}`}
+                        className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition ${theme.option}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tileLayer"
+                          checked={tileLayer === osmLayer}
+                          onChange={() => onChangeTileLayer(osmLayer)}
+                          className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                        />
+                        <div>
+                          <div
+                            className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
+                          >
+                            {TILE_LAYER_NAMES[osmLayer]}
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                            >
+                              Free • No Key Needed
+                            </span>
+                          </div>
+                          <div className={`text-xs ${theme.note} mt-0.5`}>
+                            {OSM_RANGE_EXPORT_NOTE} · © OpenStreetMap contributors
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  ))}
 
                   <div className="relative">
                     <label
