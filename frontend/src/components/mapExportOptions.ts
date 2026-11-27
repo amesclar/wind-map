@@ -25,7 +25,7 @@ export interface MapExportRangeOptions {
   jpegQuality: number;
   pageSize: PdfPageSize;
   orientation: PdfOrientation;
-  /** The hours to capture, from `planExportRange` (SCRUM-155). */
+  /** The times to capture, from `planExportTimes` (SCRUM-155, SCRUM-332). */
   hours: string[];
 }
 

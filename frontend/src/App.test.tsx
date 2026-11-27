@@ -473,14 +473,14 @@ describe('App map integration (SCRUM-126)', () => {
 
     fireEvent.click(screen.getByTitle('Export map image'));
     fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
-    const start = (screen.getByLabelText('Start') as HTMLSelectElement).value;
-    const end = new Date(Date.parse(start) + 2 * 3_600_000).toISOString();
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: end } });
-
-    expect(screen.getByTestId('range-summary').textContent).toMatch(/^3 captures from /);
+    // The dialog opens on the forecast window's first three times (SCRUM-332).
+    expect(screen.getByTestId('range-summary').textContent).toMatch(/^3 captures: /);
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
-    await waitFor(() => expect(vi.mocked(saveRangeImages)).toHaveBeenCalledTimes(1));
+    // Two 750 ms pace gaps sit between the three frames (SCRUM-332).
+    await waitFor(() => expect(vi.mocked(saveRangeImages)).toHaveBeenCalledTimes(1), {
+      timeout: 5_000,
+    });
     const [frames, options] = vi.mocked(saveRangeImages).mock.calls[0];
     expect(frames).toHaveLength(3);
     expect(options).toEqual({
@@ -514,7 +514,7 @@ describe('App map integration (SCRUM-126)', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Landscape' }));
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
-    await waitFor(() => expect(vi.mocked(saveRangePdf)).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(vi.mocked(saveRangePdf)).toHaveBeenCalledTimes(1), { timeout: 5_000 });
     const [frames, options] = vi.mocked(saveRangePdf).mock.calls[0];
     expect(frames).toHaveLength(3);
     expect(options).toEqual({
