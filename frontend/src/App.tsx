@@ -327,6 +327,7 @@ export const App: React.FC = () => {
             onGridQuotaExhausted={handleGridQuotaExhausted}
             onGridLoadingChange={mapExport.handleGridLoadingChange}
             refreshSeq={refreshSeq}
+            onOpenMapSettings={() => setIsMapSettingsOpen(true)}
           />
         </div>
         <ForecastTimeSelector

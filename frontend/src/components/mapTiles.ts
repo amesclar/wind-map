@@ -77,6 +77,17 @@ export const CHART_TILE_FAILURE_NOTICE =
 export const CHART_TILE_FAILURE_THRESHOLD = 3;
 export const CHART_TILE_FAILURE_WINDOW_MS = 10_000;
 
+/**
+ * The same per-batch rule for the base map (SCRUM-302). A provider that blocks or breaks shows an
+ * empty map, which reads as a rendering bug, so the notice names the base and offers a retry.
+ */
+export const BASE_TILE_FAILURE_THRESHOLD = 3;
+export const BASE_TILE_FAILURE_WINDOW_MS = 10_000;
+
+/** "The CARTO base map is not loading — try another base map." */
+export const baseTileFailureNotice = (layer: MapTileLayer): string =>
+  `The ${tileLayerName(layer)} base map is not loading — try another base map.`;
+
 /** Coverage box the chart layer is clipped to; shared by the mount and its tests. */
 export const CHART_BOUNDS = { south: -85, west: -180, north: CHART_COVERAGE_MAX_LAT, east: -60 };
 
