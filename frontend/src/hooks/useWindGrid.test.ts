@@ -72,6 +72,15 @@ describe('gridDimensions (SCRUM-92)', () => {
     expect(gridDimensions({ x: 10, y: 10 })).toEqual({ cols: 2, rows: 2 });
     expect(gridDimensions({ x: 5000, y: 5000 })).toEqual({ cols: MAX_GRID_DIM, rows: MAX_GRID_DIM });
   });
+
+  it('takes a coarser spacing for the mid-gesture preview (SCRUM-196)', () => {
+    expect(gridDimensions({ x: 1600, y: 800 }, 160)).toEqual({ cols: 10, rows: 5 });
+    // The floor and the cap hold at any spacing.
+    expect(gridDimensions({ x: 10, y: 10 }, 160)).toEqual({ cols: 2, rows: 2 });
+    expect(gridDimensions({ x: 5000, y: 5000 }, 160)).toEqual({ cols: MAX_GRID_DIM, rows: MAX_GRID_DIM });
+    // The same window at the default is the fine grid the settle request keeps.
+    expect(gridDimensions({ x: 1600, y: 800 })).toEqual({ cols: 20, rows: 10 });
+  });
 });
 
 describe('useWindGrid loading report (SCRUM-242)', () => {
@@ -119,7 +128,7 @@ describe('useWindGrid loading report (SCRUM-242)', () => {
   });
 
   it('reports a failed request as finished, so an export is not held for the deadline', async () => {
-    vi.mocked(api.fetchWindGrid).mockRejectedValueOnce(new Error('network down'));
+    vi.mocked(api.fetchWindGrid).mockRejectedValue(new Error('network down'));
     const { map } = fakeMap();
     const onLoading = vi.fn();
 
@@ -272,6 +281,8 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
 
     await waitFor(() => expect(onQuotaExhausted).toHaveBeenCalledWith('2026-11-24T00:00:29+00:00'));
     expect(console.error).not.toHaveBeenCalled();
+    // The quota path returns before the retry: a spent budget is not a transient failure.
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(1);
   });
 
   it('does not refetch for the pan Leaflet makes to fit an edge pop-up (SCRUM-251)', async () => {
@@ -309,20 +320,101 @@ describe('useWindGrid shared fetch (SCRUM-92, SCRUM-122)', () => {
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
   });
 
-  it('retries the same viewport after a failed request', async () => {
+  it('retries a failed settle request once and keeps the points it gets (SCRUM-196)', async () => {
     vi.mocked(api.fetchWindGrid)
       .mockRejectedValueOnce(new Error('network down'))
       .mockResolvedValueOnce([point(48)]);
 
-    const { map, fire } = fakeMap();
+    const { map } = fakeMap();
+    const { result } = renderHook(() => useWindGrid(map, 'best_match', true));
+
+    await waitFor(() => expect(result.current.map((p) => p.latitude)).toEqual([48]), { timeout: 4000 });
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(2);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('clears the stale barbs and reports a second failure (SCRUM-196)', async () => {
+    vi.mocked(api.fetchWindGrid)
+      .mockResolvedValueOnce([point(48)]) // a good first view, so there is something stale to clear
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'));
+    const onError = vi.fn();
+    const { map, fire, setBounds } = fakeMap();
+    const { result } = renderHook(() =>
+      useWindGrid(map, 'best_match', true, null, undefined, undefined, undefined, 0, onError),
+    );
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('moveend');
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    expect(result.current).toEqual([]); // no barbs from the earlier view left behind
+    expect(console.error).toHaveBeenCalled();
+  });
+});
+
+describe('useWindGrid adaptive density (SCRUM-196)', () => {
+  it('costs one request for a pan shorter than the preview delay', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    renderHook(() => useWindGrid(map, 'best_match', true));
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    // A flick: over before PREVIEW_DELAY_MS, so only the debounced settle request runs.
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('movestart');
+    fire('moveend');
+
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    // Both at the fine 80 px grid: no coarse 5 x 4 request was made.
+    expect(vi.mocked(api.fetchWindGrid).mock.calls.map(([req]) => [req.cols, req.rows])).toEqual([
+      [10, 8],
+      [10, 8],
+    ]);
+  });
+
+  it('draws one coarse grid mid-gesture and the fine grid after it settles', async () => {
+    const preview = deferred<GridWindPoint[]>();
+    const settle = deferred<GridWindPoint[]>();
+    vi.mocked(api.fetchWindGrid)
+      .mockResolvedValueOnce([point(48)]) // the first view
+      .mockReturnValueOnce(preview.promise) // coarse, while the gesture goes on
+      .mockReturnValueOnce(settle.promise); // fine, after moveend
+
+    const { map, fire, setBounds } = fakeMap();
     const { result } = renderHook(() => useWindGrid(map, 'best_match', true));
     await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(console.error).toHaveBeenCalled();
 
-    // Same bounds: the failed key must not be remembered.
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('movestart');
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[1][0]).toMatchObject({ cols: 5, rows: 4 });
+
     fire('moveend');
-    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(result.current.map((p) => p.latitude)).toEqual([48]));
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(3), { timeout: 2000 });
+    expect(vi.mocked(api.fetchWindGrid).mock.calls[2][0]).toMatchObject({ cols: 10, rows: 8 });
+
+    settle.resolve([point(49)]);
+    await waitFor(() => expect(result.current.map((p) => p.latitude)).toEqual([49]));
+
+    // The slow preview must not put its coarse points back over the fine ones.
+    preview.resolve([point(50)]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.map((p) => p.latitude)).toEqual([49]);
+  });
+
+  it('previews once per gesture, not once per move', async () => {
+    vi.mocked(api.fetchWindGrid).mockResolvedValue([point(48)]);
+    const { map, fire, setBounds } = fakeMap();
+    renderHook(() => useWindGrid(map, 'best_match', true));
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(1));
+
+    setBounds({ south: 46, north: 50, west: -124, east: -120 });
+    fire('movestart');
+    fire('movestart'); // Leaflet fires it again as the drag keeps going
+    await waitFor(() => expect(api.fetchWindGrid).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(api.fetchWindGrid).toHaveBeenCalledTimes(2);
   });
 });

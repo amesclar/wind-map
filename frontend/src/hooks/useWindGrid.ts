@@ -19,8 +19,26 @@ import type { GridWindPoint } from '../types';
 export const BARB_SPACING_PX = 80;
 export const MAX_GRID_DIM = 20;
 
-export function gridDimensions(size: { x: number; y: number }): { cols: number; rows: number } {
-  const dim = (px: number) => Math.min(Math.max(2, Math.round(px / BARB_SPACING_PX)), MAX_GRID_DIM);
+/**
+ * Coarse grid drawn while a gesture is still going (SCRUM-196). 160 px gives a quarter of the
+ * barbs (10 x 5 = 50 points on a 1600 x 800 window against 200 at 80 px), which is enough to read
+ * the field mid-pan without paying for the fine grid twice.
+ */
+export const PREVIEW_SPACING_PX = 160;
+/** A pan or zoom must last this long before the preview fires, so a flick costs one request. */
+export const PREVIEW_DELAY_MS = 350;
+/** The settle request waits out a burst of pans, so dragging across the map costs one request. */
+export const SETTLE_DEBOUNCE_MS = 300;
+/** One retry after a failed settle request, before the stale barbs are cleared (SCRUM-196). */
+export const RETRY_DELAY_MS = 1500;
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export function gridDimensions(
+  size: { x: number; y: number },
+  spacing = BARB_SPACING_PX,
+): { cols: number; rows: number } {
+  const dim = (px: number) => Math.min(Math.max(2, Math.round(px / spacing)), MAX_GRID_DIM);
   return { cols: dim(size.x), rows: dim(size.y) };
 }
 
@@ -30,8 +48,17 @@ export function gridDimensions(size: { x: number; y: number }): { cols: number; 
  * (SCRUM-122), so turning another layer on never adds a request. `enabled` is true when
  * at least one such layer is on; otherwise the points are cleared and nothing is fetched.
  *
- * A newer request aborts the previous one, so only the latest response is used; a failed
- * request is retried on the next pan or zoom, even for the same view.
+ * Two tiers (SCRUM-196). A gesture that lasts `PREVIEW_DELAY_MS` draws one coarse grid at
+ * `PREVIEW_SPACING_PX`, so the barbs are never blank while the map is still moving; the fine
+ * grid follows the gesture end, debounced by `SETTLE_DEBOUNCE_MS` so a burst of pans costs one
+ * request. The preview is never repeated within a gesture and never starts while a settle
+ * request is in flight. A request sequence number means a preview answered late is discarded
+ * instead of overwriting the finer points that arrived after it.
+ *
+ * A settle request that fails is retried once after `RETRY_DELAY_MS`; a second failure clears the
+ * points, so a broken grid shows an empty layer rather than barbs from an earlier view, and
+ * reports through `onError`. The Open-Meteo quota path is not retried: it is not a transient
+ * failure and the dialog already explains it (SCRUM-170).
  *
  * `validTime` (SCRUM-115) is the selected forecast hour; null means current conditions. A new
  * hour refetches the same view, and hours are cached separately by the backend.
@@ -53,6 +80,8 @@ export function useWindGrid(
   onLoadingChange?: (loading: boolean) => void,
   /** One-shot refresh trigger (SCRUM-113): a new value sends `refresh=true` exactly once. */
   refreshSeq = 0,
+  /** A settle request failed twice and the barbs were cleared; `MapView` says so (SCRUM-196). */
+  onError?: () => void,
 ): GridWindPoint[] {
   const [points, setPoints] = useState<GridWindPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,7 +93,7 @@ export function useWindGrid(
 
   useEffect(() => {
     // Read before the early returns: a click while the layer is off must not fire later.
-    let refreshOnce = refreshSeq !== servedRefresh.current;
+    const refreshOnce = refreshSeq !== servedRefresh.current;
     servedRefresh.current = refreshSeq;
     if (!map) return;
     if (!enabled) {
@@ -73,13 +102,21 @@ export function useWindGrid(
       return;
     }
 
-    let lastKey = '';
-    let controller: AbortController | null = null;
     let disposed = false;
+    /** View and hour of the last accepted settle request, so a repeat view costs nothing. */
+    let settledKey = '';
+    /** Bumped by every request; only the latest one is allowed to replace the points. */
+    let seq = 0;
+    let settleController: AbortController | null = null;
+    let previewController: AbortController | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let previewTimer: ReturnType<typeof setTimeout> | null = null;
+    let settleInFlight = false;
+    let previewedThisGesture = false;
 
-    const refresh = async () => {
+    const requestFor = (spacing: number) => {
       const bounds = map.getBounds();
-      const { cols, rows } = gridDimensions(map.getSize());
+      const { cols, rows } = gridDimensions(map.getSize(), spacing);
       const box = {
         min_lat: Number(bounds.getSouth().toFixed(4)),
         max_lat: Number(bounds.getNorth().toFixed(4)),
@@ -87,42 +124,110 @@ export function useWindGrid(
         max_lon: Number(bounds.getEast().toFixed(4)),
       };
       const key = `${box.min_lat},${box.max_lat},${box.min_lon},${box.max_lon},${cols},${rows},${validTime ?? 'current'}`;
-      if (key === lastKey) return; // same view and hour as the last request
-      lastKey = key;
+      return { box, cols, rows, key };
+    };
 
-      controller?.abort();
+    /**
+     * One grid request. A `preview` adopts its points but never reports them: the range export
+     * waits on the settle response, so it cannot capture the coarse grid. A preview is not
+     * retried and does not report a failure either, because the settle right behind it decides.
+     */
+    const load = async (spacing: number, options: { preview: boolean; refresh: boolean }) => {
+      const { box, cols, rows, key } = requestFor(spacing);
+      if (!options.preview) {
+        if (key === settledKey) return; // same view and hour as the last accepted request
+        settledKey = key;
+      }
+
       const current = new AbortController();
-      controller = current;
+      if (options.preview) {
+        previewController?.abort();
+        previewController = current;
+      } else {
+        settleController?.abort();
+        settleController = current;
+        settleInFlight = true;
+      }
+      const mySeq = ++seq;
+      const send = (refresh: boolean) =>
+        fetchWindGrid({ ...box, cols, rows, model, time: validTime }, { signal: current.signal, refresh });
+
       setLoading(true);
-      // Only the click's own request refreshes; a pan in the same effect must not repeat it.
-      const refresh = refreshOnce;
-      refreshOnce = false;
       try {
-        const next = await fetchWindGrid(
-          { ...box, cols, rows, model, time: validTime },
-          { signal: current.signal, refresh },
-        );
-        if (!current.signal.aborted) {
-          setPoints(next);
-          onLoaded?.({ validTime, points: next });
+        let next: GridWindPoint[];
+        try {
+          next = await send(options.refresh);
+        } catch (err) {
+          if (current.signal.aborted) return; // superseded or unmounted
+          const quota = parseQuotaExhausted(err);
+          if (quota) {
+            onQuotaExhausted?.(quota.resetAt);
+            return;
+          }
+          if (options.preview) return;
+          // The request is over, so an export waiting on the barbs must not sit out its deadline;
+          // the retry below sets the flag again when it starts.
+          if (mySeq === seq) setLoading(false);
+          await wait(RETRY_DELAY_MS);
+          if (current.signal.aborted || disposed) return;
+          setLoading(true);
+          try {
+            next = await send(false);
+          } catch (retryErr) {
+            if (current.signal.aborted) return;
+            // Two failures in a row: the old points are what made the layer look frozen.
+            if (mySeq === seq) {
+              settledKey = ''; // a later pan or zoom may retry this view
+              setPoints([]);
+            }
+            console.error('Failed to load wind grid:', retryErr);
+            onError?.();
+            return;
+          }
         }
-      } catch (err) {
-        if (current.signal.aborted) return; // superseded or unmounted
-        if (lastKey === key) lastKey = ''; // allow a retry of the same view
-        const quota = parseQuotaExhausted(err);
-        if (quota) {
-          onQuotaExhausted?.(quota.resetAt);
-          return;
-        }
-        console.error('Failed to load wind grid:', err);
+        if (current.signal.aborted || mySeq !== seq) return; // a newer request owns the points
+        setPoints(next);
+        if (!options.preview) onLoaded?.({ validTime, points: next });
       } finally {
-        // A superseded request must not report the newer one as finished, and a torn-down
-        // effect must not report anything at all.
-        if (!disposed && controller === current) {
-          controller = null;
-          setLoading(false);
+        if (!disposed) {
+          if (options.preview) {
+            if (previewController === current) previewController = null;
+          } else if (settleController === current) {
+            settleController = null;
+            settleInFlight = false;
+          }
+          if (mySeq === seq) setLoading(false);
         }
       }
+    };
+
+    /** The fine grid, after the user lets go: a burst of pans collapses into one request. */
+    const scheduleSettle = () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        load(BARB_SPACING_PX, { preview: false, refresh: false });
+      }, SETTLE_DEBOUNCE_MS);
+    };
+
+    /** A gesture that lasts gets a coarse grid once; a flick is over before the timer fires. */
+    const startGesture = () => {
+      previewedThisGesture = false;
+      if (previewTimer) clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        previewTimer = null;
+        if (disposed || previewedThisGesture || settleInFlight) return;
+        previewedThisGesture = true;
+        load(PREVIEW_SPACING_PX, { preview: true, refresh: false });
+      }, PREVIEW_DELAY_MS);
+    };
+
+    const endGesture = () => {
+      if (previewTimer) {
+        clearTimeout(previewTimer);
+        previewTimer = null;
+      }
+      previewedThisGesture = false;
     };
 
     // Leaflet auto-pans a marker pop-up that would overflow the viewport. That pan fires
@@ -137,32 +242,48 @@ export function useWindGrid(
     const onDragStart = () => {
       autoPanning = false;
     };
+    const onMoveStart = () => {
+      startGesture();
+    };
     const onMoveEnd = () => {
+      // Before the auto-pan check: a pop-up's pan must cancel a pending preview too.
+      endGesture();
       if (autoPanning) {
         autoPanning = false;
         return;
       }
-      refresh();
+      scheduleSettle();
     };
     const onZoomEnd = () => {
+      endGesture();
       autoPanning = false;
-      refresh();
+      scheduleSettle();
     };
 
-    refresh();
+    // The first view is fetched at once; only gesture-driven settles are debounced. Only this
+    // request can carry the refresh click: a settle in the same effect must not repeat it.
+    load(BARB_SPACING_PX, { preview: false, refresh: refreshOnce });
+
     map.on('autopanstart', onAutoPanStart);
     map.on('dragstart', onDragStart);
+    map.on('movestart', onMoveStart);
+    map.on('zoomstart', onMoveStart);
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onZoomEnd);
     return () => {
       disposed = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      if (previewTimer) clearTimeout(previewTimer);
       map.off('autopanstart', onAutoPanStart);
       map.off('dragstart', onDragStart);
+      map.off('movestart', onMoveStart);
+      map.off('zoomstart', onMoveStart);
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onZoomEnd);
-      controller?.abort();
+      settleController?.abort();
+      previewController?.abort();
     };
-  }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted, refreshSeq]);
+  }, [map, model, enabled, validTime, onLoaded, onQuotaExhausted, refreshSeq, onError]);
 
   return points;
 }
