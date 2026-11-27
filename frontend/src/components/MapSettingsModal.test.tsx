@@ -206,12 +206,12 @@ describe('MapSettingsModal Seamap radio (SCRUM-206)', () => {
     ).toBe(true);
   });
 
-  it('selects Google Satellite (Hybrid) and displays the export restriction note (SCRUM-311)', () => {
+  it('selects Satellite and displays the export restriction note (SCRUM-311)', () => {
     const onChange = vi.fn();
     render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
 
     const option = screen.getByTestId('tile-layer-google-satellite');
-    expect(within(option).getByText(/Google Satellite \(Hybrid\)/)).toBeTruthy();
+    expect(within(option).getByText('Satellite', { selector: '.text-sm' })).toBeTruthy();
     expect(within(option).getByText(/Export unavailable on Google Maps/)).toBeTruthy();
 
     const radio = option.querySelector('input') as HTMLInputElement;
@@ -414,6 +414,38 @@ describe('isLightTileLayer (SCRUM-221)', () => {
   });
 });
 
+describe('MapSettingsModal base map names (SCRUM-322)', () => {
+  it.each([
+    ['osm_dark', 'OSM-Dark'],
+    ['carto_dark', 'CARTO'],
+    ['osm_standard', 'OSM-Light'],
+    ['paper_chart', 'NOAA'],
+    ['seamap', 'OpenWater'],
+    ['google_satellite', 'Satellite'],
+  ])('labels %s as %s', (layer, name) => {
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer={layer as MapTileLayer} />);
+
+    const option = screen.getByTestId(`tile-layer-${layer.replaceAll('_', '-')}`);
+    expect(within(option).getByText(name, { exact: true, selector: '.text-sm' })).toBeTruthy();
+  });
+
+  it('drops the long names from the visible titles', () => {
+    render(<MapSettingsModal {...BASE_PROPS} />);
+
+    const options = screen.getByTestId('map-settings-column-options');
+    for (const old of [
+      'OpenStreetMap Dark',
+      'OpenStreetMap Standard (Light)',
+      'CARTO Dark Matter',
+      'Nautical Paper Chart',
+      'Open Waters Seamap',
+      'Google Satellite (Hybrid)',
+    ]) {
+      expect(within(options).queryByText(old, { exact: true })).toBeNull();
+    }
+  });
+});
+
 describe('MapSettingsModal layout (SCRUM-183)', () => {
   it('puts the map options and key in one column and the layers in the other', () => {
     render(<MapSettingsModal {...BASE_PROPS} />);
@@ -421,7 +453,7 @@ describe('MapSettingsModal layout (SCRUM-183)', () => {
     const options = within(screen.getByTestId('map-settings-column-options'));
     const layers = within(screen.getByTestId('map-settings-column-layers'));
 
-    expect(options.getByRole('radio', { name: /OpenStreetMap Dark/ })).toBeTruthy();
+    expect(options.getByRole('radio', { name: /OSM-Dark/ })).toBeTruthy();
     expect(options.getByRole('button', { name: 'Save Key' })).toBeTruthy();
     expect(layers.getByTestId('wind-overlay-toggle')).toBeTruthy();
     expect(layers.getByTestId('wind-color-overlay-toggle')).toBeTruthy();
