@@ -11,7 +11,7 @@ import type {
 import { captureMapCanvas, saveMapImage } from '../utils/captureMap';
 import { waitForTiles } from '../utils/captureDom';
 import { buildSteps, floorToHour, formatStepLabel } from '../utils/forecastWindow';
-import { tilesForViewport } from '../utils/exportRange';
+import { RANGE_PACE_MS, tilesForViewport } from '../utils/exportRange';
 import {
   barbLegendEntries,
   buildExportBaseName,
@@ -257,6 +257,8 @@ export function useMapExport({
             ),
           labelHour: (hour) => formatStepLabel(hour, timezone),
           signal: controller.signal,
+          // SCRUM-332: the tile budget bounds the volume (SCRUM-299); this bounds the burst.
+          paceMs: RANGE_PACE_MS,
           onProgress: setRangeProgress,
         });
         setRangeFrames(result.frames);

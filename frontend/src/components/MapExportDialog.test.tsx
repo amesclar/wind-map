@@ -36,6 +36,9 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof MapExportDi
 
 const fileName = () => (screen.getByTestId('export-file-name') as HTMLInputElement).value;
 const openRange = () => fireEvent.click(screen.getByRole('radio', { name: /^Range/ }));
+/** The checkbox for one of the window's times (SCRUM-332). */
+const tickTime = (time: string) =>
+  fireEvent.click(screen.getByTestId(`export-time-${time}`).querySelector('input')!);
 
 describe('MapExportDialog (SCRUM-117, SCRUM-162)', () => {
   it('is titled "Download map image" with the download artwork in its header', () => {
@@ -175,8 +178,9 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
 
     openRange();
     expect(screen.getByTestId('range-summary').textContent).toBe(
-      '3 captures from Mon 14:00 to Mon 16:00 PST',
+      '3 captures: Mon 14:00, Mon 15:00, Mon 16:00 PST',
     );
+    expect(screen.getByTestId('export-times-count').textContent).toContain('3 of 5 chosen');
     expect(screen.queryByLabelText('File name')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
@@ -191,15 +195,15 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     });
   });
 
-  it('follows the interval and the end hour the user picks', () => {
+  it('captures exactly the times the user ticks, allowing a gap', () => {
     const props = renderDialog();
 
     openRange();
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: RANGE_HOURS[4] } });
-    fireEvent.change(screen.getByLabelText('Interval'), { target: { value: '2' } });
+    tickTime(RANGE_HOURS[1]); // untick the middle
+    tickTime(RANGE_HOURS[4]); // tick a later one
 
     expect(screen.getByTestId('range-summary').textContent).toBe(
-      '3 captures from Mon 14:00 to Mon 18:00 PST',
+      '3 captures: Mon 14:00, Mon 16:00, Mon 18:00 PST',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
@@ -208,23 +212,39 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     );
   });
 
-  it('uses a singular summary for one capture', () => {
+  it('selects every time and clears them again', () => {
+    const props = renderDialog();
+    openRange();
+
+    fireEvent.click(screen.getByTestId('export-times-all'));
+    expect(screen.getByTestId('export-times-count').textContent).toContain('5 of 5 chosen');
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(props.onExport).toHaveBeenCalledWith(
+      expect.objectContaining({ hours: RANGE_HOURS }),
+    );
+
+    fireEvent.click(screen.getByTestId('export-times-none'));
+    expect(screen.getByRole('alert').textContent).toBe('Choose at least one time to capture.');
+  });
+
+  it('uses a singular summary for one time', () => {
     renderDialog();
     openRange();
-    fireEvent.change(screen.getByLabelText('Interval'), { target: { value: '12' } });
+    fireEvent.click(screen.getByTestId('export-times-none'));
+    tickTime(RANGE_HOURS[0]);
 
     expect(screen.getByTestId('range-summary').textContent).toBe(
       '1 capture at Mon 14:00 PST',
     );
   });
 
-  it('rejects an end before the start and keeps Export disabled', () => {
+  it('refuses an empty selection and keeps Export disabled', () => {
     renderDialog();
     openRange();
 
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: RANGE_HOURS[0] } });
+    fireEvent.click(screen.getByTestId('export-times-none'));
 
-    expect(screen.getByRole('alert').textContent).toBe('The end hour must be after the start hour.');
+    expect(screen.getByRole('alert').textContent).toBe('Choose at least one time to capture.');
     const button = screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
@@ -236,7 +256,7 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     );
     renderDialog({ rangeHours: hours });
     openRange();
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: hours[29] } });
+    fireEvent.click(screen.getByTestId('export-times-all'));
 
     expect(screen.getByRole('alert').textContent).toContain('Too many captures (30)');
     expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(true);
@@ -330,7 +350,7 @@ describe('MapExportDialog tile budget (SCRUM-299)', () => {
   const exportButton = () => screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement;
   const chooseFullDay = () => {
     openRange();
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: HOURS_24[23] } });
+    fireEvent.click(screen.getByTestId('export-times-all'));
   };
 
   it('refuses a full-day range on a 4K window and says why', () => {

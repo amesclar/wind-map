@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RangeCaptureError, captureRange, type RangeCaptureDeps } from './rangeCapture';
 
 const HOURS = [
@@ -29,6 +29,46 @@ function harness(overrides: Partial<RangeCaptureDeps> = {}) {
   };
   return { deps, events, frames };
 }
+
+describe('captureRange pacing (SCRUM-332)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('waits the pace between frames and not after the last', async () => {
+    vi.useFakeTimers();
+    const { deps } = harness({ paceMs: 750 });
+
+    const run = captureRange(HOURS.slice(0, 2), deps);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.setHour).toHaveBeenCalledTimes(1);
+
+    // The provider is left alone for the gap, then the next frame starts.
+    await vi.advanceTimersByTimeAsync(749);
+    expect(deps.setHour).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await run;
+    expect(deps.setHour).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels during the gap rather than capturing the next frame', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const { deps } = harness({ paceMs: 750, signal: controller.signal });
+
+    const run = captureRange(HOURS, deps);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.setHour).toHaveBeenCalledTimes(1);
+
+    const result = await (async () => {
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(750);
+      return run;
+    })();
+
+    expect(result.status).toBe('cancelled');
+    expect(result.frames).toHaveLength(1);
+    expect(deps.setHour).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('captureRange (SCRUM-155)', () => {
   it('captures exactly one frame per hour, in order, after that hour is shown and ready', async () => {

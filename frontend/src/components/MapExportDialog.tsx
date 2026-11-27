@@ -3,12 +3,12 @@ import { X } from 'lucide-react';
 import downloadIcon from '../assets/download-icon.png';
 import { DEFAULT_JPEG_QUALITY } from '../utils/download';
 import { sanitizeExportFileName } from '../utils/mapExport';
-import { planExportRange, type RangeIntervalHours } from '../utils/exportRange';
+import { planExportTimes } from '../utils/exportRange';
 import type { PdfOrientation, PdfPageSize } from '../utils/pdfExport';
 import type { RangeProgress } from '../utils/rangeCapture';
 import { ExportFormatFields } from './ExportFormatFields';
 import { ExportModeField } from './ExportModeField';
-import { ExportRangeFields } from './ExportRangeFields';
+import { ExportTimesFields } from './ExportTimesFields';
 import { ExportRangeStatus } from './ExportRangeStatus';
 import {
   extensionFor,
@@ -76,9 +76,9 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   const [pageSize, setPageSize] = useState<PdfPageSize>('letter');
   // A map view is wide, so a PDF opens on landscape (SCRUM-243); Portrait stays one click away.
   const [orientation, setOrientation] = useState<PdfOrientation>('landscape');
-  const [start, setStart] = useState<string>(rangeHours[0] ?? '');
-  const [end, setEnd] = useState<string>(rangeHours[Math.min(2, Math.max(0, rangeHours.length - 1))] ?? '');
-  const [intervalHours, setIntervalHours] = useState<RangeIntervalHours>(1);
+  // The times the user ticked (SCRUM-332). A fresh dialog starts on the first three, which is what
+  // the old default three-hour range captured.
+  const [selectedTimes, setSelectedTimes] = useState<string[]>(() => rangeHours.slice(0, 3));
   const extension = extensionFor(format);
   const [fileName, setFileName] = useState(`${fileBaseName}.${extension}`);
   const [wasOpen, setWasOpen] = useState(false);
@@ -87,11 +87,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
   useEffect(() => {
     if (isOpen && !wasOpen) {
       setFileName(`${fileBaseName}.${extension}`);
-      if (rangeHours.length > 0) {
-        setStart(rangeHours[0]);
-        setEnd(rangeHours[Math.min(2, rangeHours.length - 1)]);
-        setIntervalHours(1);
-      }
+      if (rangeHours.length > 0) setSelectedTimes(rangeHours.slice(0, 3));
     }
     setWasOpen(isOpen);
   }, [isOpen, wasOpen, fileBaseName, extension, rangeHours]);
@@ -112,20 +108,25 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
     if (rangeBlocked && mode === 'range') setMode('view');
   }, [rangeBlocked, mode]);
 
+  // Times the window no longer offers are ignored rather than planned, so a window that shifts
+  // under an open dialog cannot ask for a frame outside it.
+  const chosenTimes = useMemo(
+    () => selectedTimes.filter((time) => rangeHours.includes(time)),
+    [selectedTimes, rangeHours],
+  );
+
   const plan = useMemo(
     () =>
-      planExportRange(
+      planExportTimes(
         {
-          start,
-          end,
-          intervalHours,
+          times: chosenTimes,
           windowStart: rangeHours[0] ?? '',
           windowEnd: rangeHours[rangeHours.length - 1] ?? '',
           tilesPerFrame: viewportTiles,
         },
         timezone,
       ),
-    [start, end, intervalHours, rangeHours, timezone, viewportTiles],
+    [chosenTimes, rangeHours, timezone, viewportTiles],
   );
 
   if (!isOpen) return null;
@@ -137,6 +138,11 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
 
   const rangeReady = mode === 'range' && plan.ok && !busy;
 
+  const toggleTime = (time: string) =>
+    setSelectedTimes((current) =>
+      current.includes(time) ? current.filter((t) => t !== time) : [...current, time],
+    );
+
   const exportNow = () => {
     if (mode === 'range') {
       if (plan.ok) {
@@ -146,7 +152,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
           jpegQuality,
           pageSize,
           orientation,
-          hours: plan.hours,
+          hours: plan.times,
         });
       }
       return;
@@ -203,17 +209,15 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
           />
 
           {mode === 'range' && (
-            <ExportRangeFields
+            <ExportTimesFields
               rangeHours={rangeHours}
               timezone={timezone}
-              start={start}
-              end={end}
-              intervalHours={intervalHours}
+              selected={chosenTimes}
               busy={busy}
               plan={plan}
-              onStart={setStart}
-              onEnd={setEnd}
-              onInterval={setIntervalHours}
+              onToggle={toggleTime}
+              onSelectAll={() => setSelectedTimes(rangeHours)}
+              onSelectNone={() => setSelectedTimes([])}
             />
           )}
 

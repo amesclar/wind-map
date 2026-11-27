@@ -44,6 +44,11 @@ export interface RangeCaptureDeps {
   labelHour: (iso: string) => string;
   /** Aborting stops after the frame in progress. */
   signal?: AbortSignal;
+  /**
+   * Minimum gap between two frames (SCRUM-332), from `RANGE_PACE_MS` in the real caller. The wait
+   * is skipped after the last frame and when a cancel lands during it.
+   */
+  paceMs?: number;
   onProgress?: (progress: RangeProgress) => void;
 }
 
@@ -75,6 +80,12 @@ export async function captureRange(
       const canvas = await deps.capture(hour);
       frames.push({ time: hour, canvas });
       deps.onProgress?.({ done: index + 1, total, time: hour });
+      // Pace the loop rather than bursting the provider with every frame's tiles at once.
+      const pace = deps.paceMs ?? 0;
+      if (pace > 0 && index < hours.length - 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, pace));
+        if (aborted(deps.signal)) return { status: 'cancelled', frames };
+      }
     } catch (err) {
       if (aborted(deps.signal)) return { status: 'cancelled', frames };
       const detail = err instanceof Error && err.message ? `: ${err.message}` : '';
