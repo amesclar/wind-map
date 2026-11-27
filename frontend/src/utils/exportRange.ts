@@ -11,6 +11,26 @@ export type RangeIntervalHours = (typeof RANGE_INTERVAL_HOURS)[number];
 /** The ticket's hard cap on one range export. */
 export const MAX_RANGE_CAPTURES = 24;
 
+/**
+ * The most base-map tiles one range export may ask a provider for (SCRUM-299). The range export is
+ * the one part of the app that fetches tiles nobody is looking at, so it is bounded by the traffic
+ * it causes rather than by its frame count: 3,000 is the smallest published per-download cap we
+ * priced (OpenFreeMap's), and at 1080p the 24-capture cap binds long before it does.
+ */
+export const EXPORT_TILE_BUDGET = 3_000;
+
+/** Base layers ask for 256 px tiles, so a viewport needs this many. */
+export const BASE_TILE_SIZE_PX = 256;
+
+/** Tiles one captured frame of this CSS size asks for; 0 when the size is not known yet. */
+export function tilesForViewport(width: number, height: number): number {
+  if (!(width > 0) || !(height > 0)) return 0;
+  return Math.ceil(width / BASE_TILE_SIZE_PX) * Math.ceil(height / BASE_TILE_SIZE_PX);
+}
+
+/** Thousands separators, so a tile count reads the same in every locale's test. */
+const thousands = (value: number) => value.toLocaleString('en-US');
+
 const MS_PER_HOUR = 3_600_000;
 
 /** True for a valid ISO instant on an exact UTC hour (the API steps are UTC hours). */
@@ -50,6 +70,8 @@ export interface ExportRangeInput {
   /** First and last selectable hours: now floored to the hour through now + the model horizon. */
   windowStart: string;
   windowEnd: string;
+  /** Tiles one frame asks for, from `tilesForViewport`; absent or 0 skips the tile budget. */
+  tilesPerFrame?: number;
 }
 
 export type ExportRangePlan =
@@ -124,6 +146,14 @@ export function planExportRange(input: ExportRangeInput, timezone: string): Expo
     return {
       ok: false,
       message: `Too many captures (${hours.length}). The maximum is ${MAX_RANGE_CAPTURES}; pick a longer interval or a shorter range.`,
+      hours,
+    };
+  }
+  const tiles = hours.length * (input.tilesPerFrame ?? 0);
+  if (tiles > EXPORT_TILE_BUDGET) {
+    return {
+      ok: false,
+      message: `Too many tiles (${thousands(tiles)}). One export captures at most ${thousands(EXPORT_TILE_BUDGET)}; pick a longer interval, a shorter range, or a smaller window.`,
       hours,
     };
   }

@@ -405,6 +405,7 @@ export const App: React.FC = () => {
         busy={mapExport.savingMap}
         timezone={timezone}
         rangeHours={mapExport.rangeHours}
+        viewportTiles={mapExport.viewportTiles}
         progress={mapExport.rangeProgress}
         error={mapExport.exportError}
         onCancelRange={mapExport.handleCancelRange}
