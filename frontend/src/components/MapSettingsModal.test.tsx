@@ -7,7 +7,7 @@ import type { MapTileLayer } from '../types';
 const BASE_PROPS = {
   isOpen: true,
   onClose: vi.fn(),
-  tileLayer: 'osm_dark' as const,
+  tileLayer: 'carto_dark' as const,
   onChangeTileLayer: vi.fn(),
   cartoApiKey: '',
   onSaveCartoApiKey: vi.fn(),
@@ -97,7 +97,7 @@ describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
   });
 
   it('stays usable on the other bases', () => {
-    render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_dark" seamarksVisible />);
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="carto_dark" seamarksVisible />);
     const toggle = screen.getByTestId('seamarks-toggle') as HTMLButtonElement;
     expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
@@ -157,12 +157,13 @@ describe('MapSettingsModal wave toggle (SCRUM-234)', () => {
 });
 
 describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
-  it('offers a fourth, non-default radio that reports its choice', () => {
+  it('offers a non-default radio that reports its choice', () => {
     const onChange = vi.fn();
     render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
 
     const options = within(screen.getByTestId('map-settings-column-options'));
-    expect(options.getAllByRole('radio')).toHaveLength(6);
+    // SCRUM-301 retired the two OpenStreetMap radios: CARTO, NOAA, OpenWater, Satellite.
+    expect(options.getAllByRole('radio')).toHaveLength(4);
 
     const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
     expect((radio as HTMLInputElement).checked).toBe(false);
@@ -349,10 +350,9 @@ describe('MapSettingsModal high contrast gradient (SCRUM-213)', () => {
 
 describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
   it.each([
-    ['osm_dark', 'dark'],
     ['carto_dark', 'dark'],
     ['seamap', 'dark'],
-    ['osm_standard', 'light'],
+    ['google_satellite', 'dark'],
     ['paper_chart', 'light'],
   ] as const)('themes %s as %s', (layer, expected) => {
     render(<MapSettingsModal {...BASE_PROPS} tileLayer={layer} />);
@@ -360,7 +360,7 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
   });
 
   it('restyles while open when the base changes', () => {
-    const { rerender } = render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_dark" />);
+    const { rerender } = render(<MapSettingsModal {...BASE_PROPS} tileLayer="carto_dark" />);
     expect(screen.getByTestId('map-settings-panel').getAttribute('data-theme')).toBe('dark');
 
     rerender(<MapSettingsModal {...BASE_PROPS} tileLayer="paper_chart" />);
@@ -371,14 +371,14 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
   });
 
   it('uses light surfaces and readable text on a light base', () => {
-    render(<MapSettingsModal {...BASE_PROPS} tileLayer="osm_standard" />);
+    render(<MapSettingsModal {...BASE_PROPS} tileLayer="paper_chart" />);
 
     const panel = screen.getByTestId('map-settings-panel');
     expect(panel.className).toContain('bg-slate-50');
     expect(panel.className).not.toContain('bg-dark-800');
-    fireEvent.click(screen.getByTestId('info-osm_dark'));
+    fireEvent.click(screen.getByTestId('info-paper_chart'));
     const description = within(screen.getByTestId('map-settings-body')).getByText(
-      /Clean, high-contrast dark theme/,
+      /Canadian border/,
     );
     expect(description.className).toContain('text-slate-600');
   });
@@ -396,8 +396,8 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
 
     const body = screen.getByTestId('map-settings-body');
     expect(body.innerHTML).not.toContain('text-[11px]');
-    fireEvent.click(screen.getByTestId('info-osm_dark'));
-    expect(within(body).getByText(/Clean, high-contrast dark theme/).className).toContain('text-xs');
+    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    expect(within(body).getByText(/CARTO requires an API key/).className).toContain('text-xs');
     fireEvent.click(screen.getByTestId('info-currents'));
     expect(screen.getByTestId('info-panel-currents').textContent).toContain('6 to 9 km');
     expect(screen.getByTestId('info-panel-currents').className).toContain('text-xs');
@@ -416,10 +416,9 @@ describe('MapSettingsModal base-map theme (SCRUM-221)', () => {
 
 describe('isLightTileLayer (SCRUM-221)', () => {
   it.each([
-    ['osm_dark', false],
     ['carto_dark', false],
     ['seamap', false],
-    ['osm_standard', true],
+    ['google_satellite', false],
     ['paper_chart', true],
   ] as const)('returns %s for %s', (layer, expected) => {
     expect(isLightTileLayer(layer as MapTileLayer)).toBe(expected);
@@ -428,9 +427,7 @@ describe('isLightTileLayer (SCRUM-221)', () => {
 
 describe('MapSettingsModal base map names (SCRUM-322)', () => {
   it.each([
-    ['osm_dark', 'OSM-Dark'],
     ['carto_dark', 'CARTO'],
-    ['osm_standard', 'OSM-Light'],
     ['paper_chart', 'NOAA'],
     ['seamap', 'OpenWater'],
     ['google_satellite', 'Satellite'],
@@ -446,8 +443,6 @@ describe('MapSettingsModal base map names (SCRUM-322)', () => {
 
     const options = screen.getByTestId('map-settings-column-options');
     for (const old of [
-      'OpenStreetMap Dark',
-      'OpenStreetMap Standard (Light)',
       'CARTO Dark Matter',
       'Nautical Paper Chart',
       'Open Waters Seamap',
@@ -460,9 +455,7 @@ describe('MapSettingsModal base map names (SCRUM-322)', () => {
 
 describe('MapSettingsModal info glyphs (SCRUM-323)', () => {
   const INFO_IDS = [
-    'osm_dark',
     'carto_dark',
-    'osm_standard',
     'paper_chart',
     'seamap',
     'google_satellite',
@@ -487,18 +480,18 @@ describe('MapSettingsModal info glyphs (SCRUM-323)', () => {
   it('opens one detail at a time and closes it on a second click', () => {
     render(<MapSettingsModal {...BASE_PROPS} />);
 
-    fireEvent.click(screen.getByTestId('info-osm_dark'));
-    expect(screen.getByTestId('info-panel-osm_dark').textContent).toContain(
-      'Clean, high-contrast dark theme',
+    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    expect(screen.getByTestId('info-panel-carto_dark').textContent).toContain(
+      'CARTO requires an API key',
     );
-    expect(screen.getByTestId('info-osm_dark').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('info-carto_dark').getAttribute('aria-expanded')).toBe('true');
 
-    fireEvent.click(screen.getByTestId('info-carto_dark'));
-    expect(screen.queryByTestId('info-panel-osm_dark')).toBeNull();
-    expect(screen.getByTestId('info-panel-carto_dark')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('info-carto_dark'));
+    fireEvent.click(screen.getByTestId('info-paper_chart'));
     expect(screen.queryByTestId('info-panel-carto_dark')).toBeNull();
+    expect(screen.getByTestId('info-panel-paper_chart')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('info-paper_chart'));
+    expect(screen.queryByTestId('info-panel-paper_chart')).toBeNull();
   });
 
   it('does not select a base map or flip a layer when the glyph is clicked', () => {
@@ -535,7 +528,7 @@ describe('MapSettingsModal layout (SCRUM-183)', () => {
     const options = within(screen.getByTestId('map-settings-column-options'));
     const layers = within(screen.getByTestId('map-settings-column-layers'));
 
-    expect(options.getByRole('radio', { name: /OSM-Dark/ })).toBeTruthy();
+    expect(options.getByRole('radio', { name: /CARTO/ })).toBeTruthy();
     expect(options.getByRole('button', { name: 'Save Key' })).toBeTruthy();
     expect(layers.getByTestId('wind-overlay-toggle')).toBeTruthy();
     expect(layers.getByTestId('wind-color-overlay-toggle')).toBeTruthy();

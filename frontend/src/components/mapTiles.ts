@@ -6,10 +6,7 @@ import type { MapTileLayer } from '../types';
  * Light bases (SCRUM-221): the Map Settings modal follows the tone of the selected base. Seamap
  * draws over the dark substrate, so it stays dark.
  */
-const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>([
-  'osm_standard',
-  'paper_chart',
-]);
+const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>(['paper_chart']);
 
 export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAYERS.has(layer);
 
@@ -18,9 +15,7 @@ export const isLightTileLayer = (layer: MapTileLayer): boolean => LIGHT_TILE_LAY
  * One table so the button cannot drift from the chosen layer's label.
  */
 export const TILE_LAYER_NAMES: Record<MapTileLayer, string> = {
-  osm_dark: 'OSM-Dark',
   carto_dark: 'CARTO',
-  osm_standard: 'OSM-Light',
   paper_chart: 'NOAA',
   seamap: 'OpenWater',
   google_satellite: 'Satellite',
@@ -30,7 +25,6 @@ export const tileLayerName = (layer: MapTileLayer): string => TILE_LAYER_NAMES[l
 
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
-const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /**
  * One layer from the table. `kind` lets the mount code tell a WMS from an XYZ template and from the
@@ -186,7 +180,8 @@ export function attributionText(layer: MapTileLayer): string {
   if (layer === 'paper_chart') return `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`;
   if (layer === 'seamap') return `${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`;
   if (layer === 'google_satellite') return GOOGLE_SATELLITE_ATTRIBUTION_TEXT;
-  return layer === 'carto_dark' ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors';
+  // CARTO's credit is ODbL on its data, so both names are required (SCRUM-301).
+  return '© OpenStreetMap contributors © CARTO';
 }
 
 /**
@@ -291,7 +286,8 @@ export function nonnaLayerConfig(): TileLayerConfig {
 }
 
 /**
- * URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set.
+ * URL and options for a tile layer. CARTO uses the key-authenticated URL when a key is set; without
+ * one it builds the unkeyed URL, which CARTO answers with its `API KEY REQUIRED` tile (SCRUM-301).
  * The overloads keep the shape for a known layer, so callers do not have to re-narrow the union.
  */
 export function tileLayerConfig(
@@ -303,7 +299,7 @@ export function tileLayerConfig(
   cartoApiKey?: string,
 ): Extract<TileLayerConfig, { kind: 'vector' }>;
 export function tileLayerConfig(
-  layer: 'carto_dark' | 'osm_dark' | 'osm_standard' | 'google_satellite',
+  layer: 'carto_dark' | 'google_satellite',
   cartoApiKey?: string,
   googleTileUrl?: string,
 ): Extract<TileLayerConfig, { kind: 'xyz' }>;
@@ -328,19 +324,6 @@ export function tileLayerConfig(
         options: { attribution: CARTO_ATTRIBUTION, subdomains: 'abcd', maxZoom: 19, crossOrigin: true },
       };
     }
-    case 'osm_dark':
-      // Same OSM tiles, darkened by the .osm-dark-tiles CSS filter.
-      return {
-        kind: 'xyz',
-        url: OSM_URL,
-        options: { attribution: OSM_ATTRIBUTION, className: 'osm-dark-tiles', maxZoom: 19, crossOrigin: true },
-      };
-    case 'osm_standard':
-      return {
-        kind: 'xyz',
-        url: OSM_URL,
-        options: { attribution: OSM_ATTRIBUTION, maxZoom: 19, crossOrigin: true },
-      };
     case 'paper_chart':
       return chartLayerConfig();
     case 'seamap':

@@ -65,8 +65,9 @@ export function useBaseLayers(
   }, []);
 
   // Swap the base tile layer when the layer or CARTO key changes. The paper chart is a pair
-  // (SCRUM-203): a keyless dark substrate plus the opaque chart in its own pane, clipped to the
-  // service's coverage, so the clip edge reveals a working map instead of a blank canvas.
+  // (SCRUM-203): a dark CARTO substrate plus the opaque chart in its own pane, clipped to the
+  // service's coverage, so the clip edge reveals a working map instead of a blank canvas. The
+  // substrate is CARTO rather than the retired OpenStreetMap tiles since SCRUM-301.
   // SCRUM-217: the chart layer's tile failures are counted here, and Retry remounts this effect.
   useEffect(() => {
     if (!mapInstance) return;
@@ -100,7 +101,7 @@ export function useBaseLayers(
     };
 
     if (tileLayerType === 'paper_chart') {
-      const substrate = tileLayerConfig('osm_dark');
+      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
       if (substrate.kind === 'xyz') {
         layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
       }
@@ -123,7 +124,7 @@ export function useBaseLayers(
     } else if (tileLayerType === 'seamap') {
       // SCRUM-206: a keyless dark substrate under a lazily loaded MapLibre style. The pane is the
       // chart's (205): above the base tiles, below the depth shading and the seamarks.
-      const substrate = tileLayerConfig('osm_dark');
+      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
       if (substrate.kind === 'xyz') {
         layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
       }
@@ -151,7 +152,7 @@ export function useBaseLayers(
         layers.forEach((layer) => layer.remove());
       };
     } else if (tileLayerType === 'google_satellite') {
-      const substrate = tileLayerConfig('osm_dark');
+      const substrate = tileLayerConfig('carto_dark', cartoApiKey);
       if (substrate.kind === 'xyz') {
         layers.push(L.tileLayer(substrate.url, substrate.options).addTo(mapInstance));
       }

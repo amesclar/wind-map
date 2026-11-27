@@ -26,7 +26,7 @@ describe('useLocalStorageState (SCRUM-92)', () => {
 describe('useMapSettings (SCRUM-92)', () => {
   it('defaults to OSM dark, no key, overlay on', () => {
     const { result } = renderHook(() => useMapSettings());
-    expect(result.current.tileLayer).toBe('osm_dark');
+    expect(result.current.tileLayer).toBe('carto_dark');
     expect(result.current.cartoApiKey).toBe('');
     expect(result.current.windOverlayVisible).toBe(true);
   });
@@ -34,7 +34,7 @@ describe('useMapSettings (SCRUM-92)', () => {
   it('ignores an unknown stored tile layer', () => {
     localStorage.setItem(STORAGE_KEYS.tileLayer, 'something_old');
     const { result } = renderHook(() => useMapSettings());
-    expect(result.current.tileLayer).toBe('osm_dark');
+    expect(result.current.tileLayer).toBe('carto_dark');
   });
 
   it('saving a CARTO key stores it and switches to the CARTO layer; clearing removes it', () => {
@@ -114,12 +114,21 @@ describe('useMapSettings (SCRUM-92)', () => {
 
   it("doesn't let a server key override the user's own", () => {
     localStorage.setItem(STORAGE_KEYS.cartoApiKey, 'mine');
-    localStorage.setItem(STORAGE_KEYS.tileLayer, 'osm_standard');
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'paper_chart');
     const { result } = renderHook(() => useMapSettings());
     act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
     expect(result.current.cartoApiKey).toBe('mine');
-    expect(result.current.tileLayer).toBe('osm_standard');
+    expect(result.current.tileLayer).toBe('paper_chart');
   });
+
+  it.each(['osm_dark', 'osm_standard'])(
+    'reads a stored retired base %s as the CARTO default (SCRUM-301)',
+    (retired) => {
+      localStorage.setItem(STORAGE_KEYS.tileLayer, retired);
+      const { result } = renderHook(() => useMapSettings());
+      expect(result.current.tileLayer).toBe('carto_dark');
+    },
+  );
 
   it('persists the overlay toggle', () => {
     const { result } = renderHook(() => useMapSettings());

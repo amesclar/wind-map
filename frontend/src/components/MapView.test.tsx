@@ -49,7 +49,7 @@ const baseProps = {
   selectedLocation: null,
   onSelectLocation: () => {},
   weatherMap: {},
-  tileLayerType: 'osm_dark' as const,
+  tileLayerType: 'carto_dark' as const,
   cartoApiKey: '',
   selectedModel: 'best_match',
   windOverlayVisible: false,
@@ -328,7 +328,7 @@ describe('MapView seamark overlay (SCRUM-175)', () => {
     expect(seamarkCalls()).toHaveLength(0);
 
     // Another base honours the stored preference without a reload.
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" seamarksVisible />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" seamarksVisible />);
     await waitFor(() => expect(seamarkCalls()).toHaveLength(1));
 
     // Back on the chart the layer goes again; the preference itself is untouched.
@@ -563,7 +563,7 @@ describe('MapView chart edge treatment (SCRUM-215)', () => {
     expect(currentMap().panes[CHART_EDGE_PANE].style.zIndex).toBe('206');
     expect(currentMap().panes[CHART_EDGE_PANE].style.pointerEvents).toBe('none');
 
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
     expect(boundary.remove).toHaveBeenCalled();
   });
 
@@ -603,12 +603,14 @@ describe('MapView chart edge treatment (SCRUM-215)', () => {
 describe('MapView paper chart base (SCRUM-203)', () => {
   const chartLayer = () => createdTileLayers.find((layer) => layer.kind === 'wms')!;
 
-  it('mounts a keyless substrate plus one clipped chart layer in its own pane', () => {
+  it('mounts a CARTO substrate plus one clipped chart layer in its own pane', () => {
     render(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
 
+    // SCRUM-301: the substrate is the CARTO base, never the OpenStreetMap volunteer tiles.
     const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
-    expect(substrate.url).toContain('tile.openstreetmap.org');
-    expect(substrate.options?.className).toBe('osm-dark-tiles');
+    expect(substrate.url).toContain('basemaps.cartocdn.com');
+    expect(substrate.url).not.toContain('tile.openstreetmap.org');
+    expect(substrate.options?.className).toBeUndefined();
 
     const chart = chartLayer();
     expect(chart.url).toContain('NOAAChartDisplay');
@@ -630,7 +632,7 @@ describe('MapView paper chart base (SCRUM-203)', () => {
     const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
     const chart = chartLayer();
 
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
 
     expect(substrate.remove).toHaveBeenCalled();
     expect(chart.remove).toHaveBeenCalled();
@@ -643,7 +645,7 @@ describe('MapView paper chart base (SCRUM-203)', () => {
   });
 
   it('zooms to the chart floor when the mode is selected below it, and leaves a deeper view alone', () => {
-    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
     const map = currentMap();
 
     // The app opens around z10, where the chart would not draw at all.
@@ -652,7 +654,7 @@ describe('MapView paper chart base (SCRUM-203)', () => {
     expect(map.setZoom).toHaveBeenCalledWith(CHART_MIN_ZOOM);
 
     map.setZoom.mockClear();
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
     map.zoom = CHART_MIN_ZOOM + 1;
     rerender(<MapView {...baseProps} locations={[]} tileLayerType="paper_chart" />);
     expect(map.setZoom).not.toHaveBeenCalled();
@@ -739,17 +741,17 @@ describe('MapView Seamap base (SCRUM-206)', () => {
     vi.mocked(api.fetchWindGrid).mockResolvedValue([]);
   });
 
-  it('mounts the keyless substrate and one GL layer in the chart pane, then removes both', async () => {
+  it('mounts the CARTO substrate and one GL layer in the chart pane, then removes both', async () => {
     const { rerender } = render(<MapView {...baseProps} locations={[]} tileLayerType="seamap" />);
 
     await waitFor(() => expect(seamap.mountSeamapLayer).toHaveBeenCalledTimes(1));
     const substrate = createdTileLayers.find((layer) => layer.kind === 'xyz')!;
-    expect(substrate.url).toContain('tile.openstreetmap.org');
-    expect(substrate.options?.className).toBe('osm-dark-tiles');
+    expect(substrate.url).toContain('basemaps.cartocdn.com');
+    expect(substrate.url).not.toContain('tile.openstreetmap.org');
     // The same pane as the chart: above the base tiles, below the depth shading and the aids.
     expect(currentMap().panes[CHART_PANE].style.zIndex).toBe('205');
 
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
 
     await waitFor(() => expect(glLayer.remove).toHaveBeenCalled());
     expect(unregister).toHaveBeenCalled();
@@ -757,7 +759,7 @@ describe('MapView Seamap base (SCRUM-206)', () => {
     // No GL layer is left behind and the plain base took its place.
     expect(
       createdTileLayers.filter(
-        (layer) => layer.options?.className === 'osm-dark-tiles' && layer.remove.mock.calls.length === 0,
+        (layer) => layer.options?.subdomains === 'abcd' && layer.remove.mock.calls.length === 0,
       ),
     ).toHaveLength(1);
   });
@@ -1032,7 +1034,7 @@ describe('MapView container ref (SCRUM-283)', () => {
     const badge = screen.getByTestId('google-maps-badge');
     expect(badge.querySelector('img')?.getAttribute('alt')).toBe('Google');
 
-    rerender(<MapView {...baseProps} locations={[]} tileLayerType="osm_dark" />);
+    rerender(<MapView {...baseProps} locations={[]} tileLayerType="carto_dark" />);
     expect(screen.queryByTestId('google-maps-badge')).toBeNull();
   });
 });
