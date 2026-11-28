@@ -6,7 +6,6 @@ import {
   FeedbackResult,
   GeocodeResult,
   GridWindPoint,
-  NewLocation,
   SavedLocation,
   TidePointResponse,
   WaveGridResponse,
@@ -98,12 +97,6 @@ async function request<T>(
 
 export function fetchLocations(): Promise<SavedLocation[]> {
   return request('/locations', 'Failed to load locations');
-}
-
-export function addLocation(data: NewLocation): Promise<SavedLocation> {
-  return request('/locations', 'Failed to add location', {
-    init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) },
-  });
 }
 
 export function deleteLocation(id: number): Promise<void> {
@@ -269,9 +262,10 @@ export function fetchPointWeather(
   lon: number,
   model: string = DEFAULT_MODEL,
   timezone: string = DEFAULT_TIMEZONE,
-  { signal, refresh = false }: ForecastRequestOptions = {},
+  { signal, time, refresh = false }: ForecastRequestOptions = {},
 ): Promise<WeatherForecastResponse> {
   const params: Params = { lat, lon, model, timezone };
+  if (time) params.time = time;
   if (refresh) params.refresh = true;
   return request('/weather/point', 'Failed to fetch point weather', { params, signal });
 }

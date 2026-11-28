@@ -15,7 +15,7 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     onSelectModel: vi.fn(),
     savedLocationsCount: 3,
     onOpenSavedLocations: vi.fn(),
-    onSelectAndAddLocation: vi.fn(),
+    onLookUpLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
     mapName: 'OSM-Dark',
     onOpenPreferences: vi.fn(),

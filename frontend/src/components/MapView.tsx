@@ -42,7 +42,7 @@ interface MapViewProps {
   locations: SavedLocation[];
   selectedLocation: SavedLocation | null;
   /** Where to look at startup without selecting it (SCRUM-248); flies, opens no pop-up. */
-  focusLocation?: SavedLocation | null;
+  focusLocation?: { latitude: number; longitude: number } | null;
   /** The live zoom, for the version copy and the feedback ticket (SCRUM-320). */
   onZoomLevelChange?: (zoom: number) => void;
   onSelectLocation: (loc: SavedLocation) => void;

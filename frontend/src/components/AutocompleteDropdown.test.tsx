@@ -17,7 +17,7 @@ const miami: GeocodeResult = {
   display_name: 'Miami, Florida, United States',
 };
 
-const input = () => screen.getByPlaceholderText('Add location (e.g. Seattle, Paris)...');
+const input = () => screen.getByPlaceholderText('Find location (e.g. Seattle, Paris)...');
 
 /** Advance past the debounce and let the search promise settle. */
 async function flushSearch() {
@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe('AutocompleteDropdown (SCRUM-92)', () => {
   it('debounces typing into a single search for the final query', async () => {
-    render(<AutocompleteDropdown onSelectAndAdd={vi.fn()} />);
+    render(<AutocompleteDropdown onSelect={vi.fn()} />);
     fireEvent.change(input(), { target: { value: 'Mi' } });
     fireEvent.change(input(), { target: { value: 'Mia' } });
     fireEvent.change(input(), { target: { value: 'Miami' } });
@@ -56,37 +56,37 @@ describe('AutocompleteDropdown (SCRUM-92)', () => {
   });
 
   it('does not search for queries shorter than 2 characters', async () => {
-    render(<AutocompleteDropdown onSelectAndAdd={vi.fn()} />);
+    render(<AutocompleteDropdown onSelect={vi.fn()} />);
     fireEvent.change(input(), { target: { value: 'M' } });
     await flushSearch();
     expect(api.searchGeocode).not.toHaveBeenCalled();
   });
 
   it('adds the clicked result and clears the box', async () => {
-    const onSelectAndAdd = vi.fn();
-    render(<AutocompleteDropdown onSelectAndAdd={onSelectAndAdd} />);
+    const onSelect = vi.fn();
+    render(<AutocompleteDropdown onSelect={onSelect} />);
     fireEvent.change(input(), { target: { value: 'Miami' } });
     await flushSearch();
 
     fireEvent.click(screen.getByText('Miami'));
-    expect(onSelectAndAdd).toHaveBeenCalledWith(miami);
+    expect(onSelect).toHaveBeenCalledWith(miami);
     expect((input() as HTMLInputElement).value).toBe('');
     expect(screen.queryByText('Florida, United States')).toBeNull();
   });
 
   it('adds the first result when Enter is pressed', async () => {
-    const onSelectAndAdd = vi.fn();
-    render(<AutocompleteDropdown onSelectAndAdd={onSelectAndAdd} />);
+    const onSelect = vi.fn();
+    render(<AutocompleteDropdown onSelect={onSelect} />);
     fireEvent.change(input(), { target: { value: 'Miami' } });
     await flushSearch();
 
     fireEvent.keyDown(input(), { key: 'Enter' });
-    expect(onSelectAndAdd).toHaveBeenCalledWith(miami);
+    expect(onSelect).toHaveBeenCalledWith(miami);
   });
 
   it('shows no dropdown when the search fails', async () => {
     vi.mocked(api.searchGeocode).mockRejectedValue(new Error('down'));
-    render(<AutocompleteDropdown onSelectAndAdd={vi.fn()} />);
+    render(<AutocompleteDropdown onSelect={vi.fn()} />);
     fireEvent.change(input(), { target: { value: 'Miami' } });
     await flushSearch();
     expect(screen.queryByText('Florida, United States')).toBeNull();
@@ -95,7 +95,7 @@ describe('AutocompleteDropdown (SCRUM-92)', () => {
   it('closes the dropdown on a click outside', async () => {
     render(
       <div>
-        <AutocompleteDropdown onSelectAndAdd={vi.fn()} />
+        <AutocompleteDropdown onSelect={vi.fn()} />
         <p>outside</p>
       </div>,
     );

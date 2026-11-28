@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ApiError,
-  addLocation,
   deleteLocation,
   fetchAppConfig,
   fetchPointWeather,
@@ -223,6 +222,16 @@ describe('fetchPointWeather', () => {
     expect(url).toContain('model=best_match');
   });
 
+  it('forwards the forecast hour so a looked-up place follows the selector (SCRUM-344)', async () => {
+    const spy = mockFetch(MOCK_POINT_FORECAST);
+    vi.stubGlobal('fetch', spy);
+
+    await fetchPointWeather(48.29, -122.60, 'best_match', 'America/Los_Angeles', { time: '2026-11-23T12:00:00Z' });
+
+    const url: string = spy.mock.calls[0][0];
+    expect(url).toContain('time=2026-11-23T12%3A00%3A00Z');
+  });
+
   it('forwards custom model and timezone', async () => {
     const spy = mockFetch(MOCK_POINT_FORECAST);
     vi.stubGlobal('fetch', spy);
@@ -270,17 +279,6 @@ describe('API client errors and search (SCRUM-92)', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(404);
     expect(err.message).toBe('Failed to load weather data');
-  });
-
-  it('sends JSON when adding a location', async () => {
-    const spy = mockFetch({ id: 3 });
-    vi.stubGlobal('fetch', spy);
-    await addLocation({ name: 'Miami', latitude: 25.76, longitude: -80.19 });
-    const [url, init] = spy.mock.calls[0];
-    expect(url).toBe('/api/locations');
-    expect(init.method).toBe('POST');
-    expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
-    expect(JSON.parse(init.body)).toEqual({ name: 'Miami', latitude: 25.76, longitude: -80.19 });
   });
 
   it('does not parse a body for a 204 delete', async () => {

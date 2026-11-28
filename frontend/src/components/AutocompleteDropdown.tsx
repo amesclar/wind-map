@@ -4,12 +4,11 @@ import { GeocodeResult } from '../types';
 import { searchGeocode } from '../api/client';
 
 interface AutocompleteDropdownProps {
-  onSelectAndAdd: (result: GeocodeResult) => void;
+  /** Reports the chosen place (SCRUM-344): the caller looks it up, and nothing is saved here. */
+  onSelect: (result: GeocodeResult) => void;
 }
 
-export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
-  onSelectAndAdd,
-}) => {
+export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({ onSelect }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,7 +51,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
   }, []);
 
   const handleSelect = (item: GeocodeResult) => {
-    onSelectAndAdd(item);
+    onSelect(item);
     setQuery('');
     setIsOpen(false);
     setResults([]);
@@ -75,7 +74,7 @@ export const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setIsOpen(true)}
-          placeholder="Add location (e.g. Seattle, Paris)..."
+          placeholder="Find location (e.g. Seattle, Paris)..."
           className="w-full pl-9 pr-9 py-1.5 bg-dark-800 text-gray-100 text-xs placeholder:text-gray-400 rounded-lg border border-dark-600 focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
         />
         {isLoading && (

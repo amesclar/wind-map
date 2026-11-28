@@ -101,7 +101,6 @@ export type MapTileLayer =
   | 'google_satellite';
 
 /** Body of POST /api/locations. */
-export type NewLocation = Pick<SavedLocation, 'name' | 'latitude' | 'longitude' | 'admin1' | 'country'>;
 
 /** GET /api/config. */
 export interface AppConfig {
