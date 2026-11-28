@@ -1,15 +1,25 @@
 """The AI tool rule files must be generated from the shared rule sources.
 
-Covers SCRUM-119, SCRUM-111, SCRUM-128, SCRUM-139 and the tiering in SCRUM-160: AGENTS.md carries
-only the always-on rules inside a 14,000-byte budget, the situational rules live in generated
-`.devin/rules/*.md` files, and the full body still reaches Gemini, Antigravity and Freebuff.
+Covers SCRUM-119, SCRUM-111, SCRUM-128, SCRUM-139 and SCRUM-337: every generated target carries the
+complete rule body, there is no always-on/situational tier and no byte budget on `AGENTS.md`, and the
+Freebuff file still lists the skills and the Kiro hook.
 """
 
 import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DEVIN_INJECTION_LIMIT_BYTES = 16 * 1024
+
+# The tiering SCRUM-160 introduced and SCRUM-337 removed; none of it may come back by accident.
+REMOVED_TIERING = (
+    "ALWAYS_ON",
+    "SITUATIONAL",
+    "DEVIN_RULES_DIR",
+    "DEVIN_HOOKS",
+    "AGENTS_MD_BUDGET_BYTES",
+    "DEVIN_RULE_LIMIT_CHARS",
+    "DEVIN_INJECTION_LIMIT_BYTES",
+)
 
 
 def _load_script():
@@ -26,48 +36,24 @@ def test_generated_rule_files_are_up_to_date():
         assert committed == expected, f"{sync._label(target)} is stale. Run: python scripts/sync-ai-rules.py"
 
 
-def test_agents_md_fits_the_budget_with_headroom_under_devin_injection():
+def test_agents_md_carries_the_complete_rule_body():
     sync = _load_script()
-    assert sync.AGENTS_MD_BUDGET_BYTES == 14_000
-    assert sync.AGENTS_MD_BUDGET_BYTES < DEVIN_INJECTION_LIMIT_BYTES
-    assert sync.DEVIN_INJECTION_LIMIT_BYTES == DEVIN_INJECTION_LIMIT_BYTES
-    size = len((ROOT / "AGENTS.md").read_bytes())
-    assert size <= sync.AGENTS_MD_BUDGET_BYTES, (
-        f"AGENTS.md is {size} bytes; budget is {sync.AGENTS_MD_BUDGET_BYTES}. "
-        "Move a section to .devin/rules or a skill."
-    )
+    agents = ROOT / "AGENTS.md"
+    assert agents in sync.build_outputs()
+    assert agents.read_text(encoding="utf-8") == sync.build_rules()
+    assert agents.read_text(encoding="utf-8") == sync.build_agents()
 
 
-def test_agents_md_carries_the_always_on_rules_and_points_at_the_rest():
+def test_no_always_on_tier_or_agents_budget_remains():
     sync = _load_script()
-    content = sync.build_agents()
-    for name in sync.ALWAYS_ON:
-        assert (sync.STEERING_DIR / name).read_text(encoding="utf-8").strip() in content
-    for name in sync.SITUATIONAL:
-        assert (sync.STEERING_DIR / name).read_text(encoding="utf-8").strip() not in content
-        assert f".devin/rules/{Path(name).stem}.md" in content
+    for name in REMOVED_TIERING:
+        assert not hasattr(sync, name), f"{name} belongs to the removed Devin tiering (SCRUM-337)"
 
 
-def test_devin_rules_hold_the_situational_rules_with_glob_triggers():
+def test_no_devin_rule_files_are_generated():
     sync = _load_script()
-    assert sorted(sync.SITUATIONAL) == sorted(set(sync.SOURCES) - set(sync.ALWAYS_ON))
-    for name, config in sync.SITUATIONAL.items():
-        path = sync.DEVIN_RULES_DIR / f"{Path(name).stem}.md"
-        assert path.is_file()
-        text = path.read_text(encoding="utf-8")
-        assert len(text) <= sync.DEVIN_RULE_LIMIT_CHARS
-        assert text.startswith("---\ntrigger: glob\n")
-        assert f"globs: {', '.join(config['globs'])}" in text
-        assert f"description: {config['description']}" in text
-        assert (sync.STEERING_DIR / name).read_text(encoding="utf-8").strip() in text
-
-
-def test_gemini_md_keeps_the_complete_rule_body():
-    sync = _load_script()
-    gemini = ROOT / "GEMINI.md"
-    assert gemini in sync.TARGETS
-    assert gemini.read_text(encoding="utf-8") == sync.build_rules()
-    assert (ROOT / ".config" / "antigravity" / "instructions.md").read_text(encoding="utf-8") == sync.build_rules()
+    assert not any(".devin" in sync._label(path) for path in sync.build_outputs())
+    assert not (ROOT / ".devin").exists(), "SCRUM-337 removed the Devin rules and hook"
 
 
 def test_full_rules_contain_every_steering_file():
@@ -79,6 +65,14 @@ def test_full_rules_contain_every_steering_file():
         assert (sync.STEERING_DIR / name).read_text(encoding="utf-8").strip() in content
 
 
+def test_gemini_md_and_antigravity_keep_the_complete_rule_body():
+    sync = _load_script()
+    gemini = ROOT / "GEMINI.md"
+    assert gemini in sync.TARGETS
+    assert gemini.read_text(encoding="utf-8") == sync.build_rules()
+    assert (ROOT / ".config" / "antigravity" / "instructions.md").read_text(encoding="utf-8") == sync.build_rules()
+
+
 def test_freebuff_rules_exist_and_fit_the_freebuff_limit():
     sync = _load_script()
     target = ROOT / ".freebuff" / "rules.md"
@@ -87,7 +81,7 @@ def test_freebuff_rules_exist_and_fit_the_freebuff_limit():
     assert len(target.read_text(encoding="utf-8")) <= sync.FREEBUFF_CHARACTER_LIMIT
 
 
-def test_freebuff_rules_contain_every_rule_source():
+def test_freebuff_rules_contain_every_rule_source_and_the_kiro_hook():
     sync = _load_script()
     content = sync.build_freebuff()
     for name in sync.SOURCES:
@@ -96,11 +90,8 @@ def test_freebuff_rules_contain_every_rule_source():
         fields = sync.read_skill(path)
         assert fields["name"] in content
         assert fields["description"] in content
-    for name in sync.SITUATIONAL:
-        assert f".devin/rules/{Path(name).stem}.md" in content
-    assert "scripts/rebuild-container.sh" in content
     assert ".kiro/hooks/rebuild-wind-map.json" in content
-    assert ".devin/hooks.v1.json" in content
+    assert ".devin" not in content
 
 
 def test_freebuff_rules_follow_a_skill_change(tmp_path, monkeypatch):
@@ -118,20 +109,18 @@ def test_freebuff_rules_follow_a_skill_change(tmp_path, monkeypatch):
     assert "A skill added after the last sync." in after
 
 
-def test_budget_problems_flag_an_oversized_agents_file(monkeypatch):
+def test_budget_problems_flag_an_oversized_freebuff_file(monkeypatch):
     sync = _load_script()
-    monkeypatch.setattr(sync, "AGENTS_MD_BUDGET_BYTES", 10)
-    problems = sync.budget_problems({sync.AGENTS_TARGET: "x" * 11})
-    assert len(problems) == 1
-    assert "budget is 10" in problems[0]
-
-
-def test_budget_problems_flag_an_oversized_devin_rule(monkeypatch):
-    sync = _load_script()
-    monkeypatch.setattr(sync, "DEVIN_RULE_LIMIT_CHARS", 5)
-    problems = sync.budget_problems({sync.DEVIN_RULES_DIR / "quality-gates.md": "x" * 6})
+    monkeypatch.setattr(sync, "FREEBUFF_CHARACTER_LIMIT", 5)
+    target = sync.FREEBUFF_TARGETS[0]
+    problems = sync.budget_problems({target: "x" * 6})
     assert len(problems) == 1
     assert "limit is 5" in problems[0]
+
+
+def test_budget_problems_leave_agents_md_uncapped():
+    sync = _load_script()
+    assert sync.budget_problems({sync.AGENTS_TARGET: "x" * 100_000}) == []
 
 
 def test_check_mode_reports_every_stale_file(tmp_path, monkeypatch, capsys):
@@ -158,10 +147,10 @@ def test_check_mode_reports_a_missing_file(tmp_path, monkeypatch, capsys):
 
 def test_main_fails_on_a_budget_break(tmp_path, monkeypatch, capsys):
     sync = _load_script()
-    target = tmp_path / "AGENTS.md"
-    monkeypatch.setattr(sync, "AGENTS_TARGET", target)
-    monkeypatch.setattr(sync, "AGENTS_MD_BUDGET_BYTES", 10)
+    target = tmp_path / "rules.md"
+    monkeypatch.setattr(sync, "FREEBUFF_TARGETS", [target])
+    monkeypatch.setattr(sync, "FREEBUFF_CHARACTER_LIMIT", 10)
     monkeypatch.setattr(sync, "build_outputs", lambda: {target: "x" * 11})
     assert sync.main([]) == 1
-    assert "budget is 10" in capsys.readouterr().err
+    assert "limit is 10" in capsys.readouterr().err
     assert target.read_text(encoding="utf-8") == "x" * 11

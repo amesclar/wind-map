@@ -4,16 +4,16 @@
 # Project rules for AI coding tools
 
 You must follow every rule below for every task, without waiting to be asked. These are the same rules
-Kiro follows; they come from the files in `.kiro/steering/`.
+Kiro reads from `.kiro/steering/`.
 
 ---
 <!-- from .kiro/steering/commit-rules.md -->
 
 # Git and PR Requirements
-- **Ticket Enforcement:** You are strictly required to include a project ticket number (e.g., `PROJ-123`) in all Git branch names, commit messages, and PR titles.
-- **Branch Naming:** Format branches as `feature/PROJ-123-description` or `fix/PROJ-123-description`.
-- **Commit Messages:** Prefix every commit message with the ticket number, followed by a colon (e.g., `PROJ-123: Add user authentication`).
-- **PR Titles:** Prefix all PR titles with the ticket number in brackets (e.g., `[PROJ-123] Implement secure login flow`).
+- **Ticket Enforcement:** You are strictly required to include a project ticket number (e.g., `SCRUM-123`) in all Git branch names, commit messages, and PR titles.
+- **Branch Naming:** Format branches as `feature/SCRUM-123-description` or `fix/SCRUM-123-description`.
+- **Commit Messages:** Prefix every commit message with the ticket number, followed by a colon (e.g., `SCRUM-123: Add user authentication`).
+- **PR Titles:** Prefix all PR titles with the ticket number in brackets (e.g., `[SCRUM-123] Implement secure login flow`).
 
 ## Ticket-First Workflow (SCRUM-111)
 - **A ticket first:** every repository change — code, documentation, configuration and steering rules — has a Jira ticket. If it has none, create one with a story point estimate before creating the branch.
@@ -30,13 +30,13 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 - **Report** the deleted branches in the summary of the merge.
 
 ## Mark the Ticket Done When the PR Succeeds (SCRUM-129, SCRUM-141)
-- **When:** As soon as `gh pr checks <n>` shows every required check passing (Backend, Frontend, Docker image and both CodeQL analyses) and the PR is mergeable, transition the ticket in the PR title to Done with `transitionJiraIssue` (find the Done transition ID with `getTransitionsForJiraIssue`). Don't wait for the merge.
+- **When:** As soon as `gh pr checks <n>` shows every required check passing (Backend, Frontend, Docker image and both CodeQL analyses) and the PR is mergeable, transition the ticket in the PR title to Done with `python scripts/jira_agent.py transition SCRUM-123 --to Done --resolution Done`. Don't wait for the merge.
 - **Exceptions:** Skip tickets that are already Done. Don't mark a ticket Done when the PR only partly delivers it (e.g. follow-up work remains); comment why instead.
 - **If it stops succeeding:** If a check fails or the PR is closed unmerged afterwards, move the ticket back to In Progress and say why.
 - **Record the merge hash after merging:** right after the PR is merged into `develop` or `master`, comment on the ticket with the merge commit hash. This completes the merge; don't wait to be asked.
 - **Which hash:** the merge commit on the target branch, not the feature branch commit: `gh pr view <n> --json mergeCommit -q '.mergeCommit.oid'` after `git fetch origin`, then the 7-character short hash (e.g., `95cf243`).
 - **Comment format:** `Merged PR #<n> into <target> as <short-hash>` followed by the PR URL.
-- **Which tool:** `addOrEditJiraIssueComment`; the transition comment field can be dropped silently.
+- **Which tool:** `python scripts/jira_agent.py comment SCRUM-123 --body "Merged PR #42 into develop as 95cf243"`; the transition comment field can be dropped silently.
 - **Merging `develop` into `master`:** Comment on each ticket included in the merge, or on the release ticket if one exists, using the merge hash on `master`, and mark any of them that are not yet Done as Done.
 - **Report** the checks result, the ticket's status, the hash and the Jira comment.
 
@@ -74,13 +74,9 @@ Kiro follows; they come from the files in `.kiro/steering/`.
 
 ## Rebuild Container After Merge for User Verification (SCRUM-132)
 - **When:** Right after a PR is merged into `develop` or `master` (and the branch is deleted, merge hash commented, and ticket transitioned), rebuild and restart the local Docker container so the user can verify changes on http://localhost:5005.
-- **How:** `zsh -ic './scripts/rebuild-container.sh'`. A non-interactive agent shell (bash, an IDE task, a Kiro or Devin hook) never reads `~/.zshrc`, so the script must run through the user's interactive shell to see `CARTO_API_KEY`, the Jira variables and the feedback limits (SCRUM-262). Never write those values or a profile path into these rules. Build details: `rebuild-container` skill.
+- **How:** `zsh -ic './scripts/rebuild-container.sh'`. A non-interactive agent shell (bash, an IDE task, a Kiro hook) never reads `~/.zshrc`, so the script must run through the user's interactive shell to see `CARTO_API_KEY`, the Jira variables and the feedback limits (SCRUM-262). Never write those values or a profile path into these rules. Build details: `rebuild-container` skill.
 - **Verify the environment survived (SCRUM-262):** after the rebuild, `GET /api/config` must still report `feedback_enabled: true` and a CARTO key when the user has them configured. A rebuild that answers `{"carto_api_key":"","feedback_enabled":false}` has lost them: restart the container with the variables and report that, instead of calling the build verified.
 - **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
-
-## Deploying to Google Cloud (SCRUM-223)
-- **Only for a release:** Google Cloud is touched when `develop` is merged into `master` for a version bump; a `develop` or feature-branch merge rebuilds the local container and stops there.
-- **Exception — user testing:** deploy from the branch the user names, through Actions → Deploy to Cloud Run. Never add an automatic deploy trigger for `develop` or a feature branch, and report every deploy with its branch and image tag. Mechanics: `release-versioning.md`.
 
 ---
 <!-- from .kiro/steering/documentation.md -->
@@ -137,11 +133,12 @@ You must automatically create or update unit tests for every functional code cha
 - `requirements.txt` and `requirements-dev.txt` are generated and pinned with `==`. Never edit them by hand.
 - To add or upgrade a package, edit `requirements.in` (runtime) or `requirements-dev.in` (tests and tools), then regenerate both files with `pip-compile` in a `python:3.14-alpine` container, as described in the README ("Updating Python dependencies"). Run the tests and commit all changed files together.
 
-## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139)
-- `.kiro/steering/*.md` is the single source of truth for the project rules.
-- `.config/antigravity/instructions.md`, `GEMINI.md`, `AGENTS.md` and `.devin/rules/*.md` are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. The rules are tiered (SCRUM-160): `AGENTS.md` holds only the always-on guardrails under a 14,000-byte budget, the situational files become `.devin/rules/*.md` with `trigger: glob` front matter (12,000 characters each), and `GEMINI.md`, the Antigravity file and `.freebuff/rules.md` keep the complete body. A pytest test fails when a generated file is out of date or a budget is exceeded.
-- Freebuff (SCRUM-139): Freebuff Desktop reads the root `AGENTS.md` and the skills in `.agents/skills/`. `.freebuff/rules.md` is generated from the same steering files plus a workflow inventory (the skills and the post-task hooks), so changing a steering file, a skill in `.agents/skills/` or a hook in `.kiro/hooks/` or `.devin/hooks.v1.json` requires running `python scripts/sync-ai-rules.py` and committing the regenerated files. Do not copy skills into `.freebuff/skills/`, because Freebuff already loads `.agents/skills/`. Freebuff has no project hooks, so the post-task container rebuild follows `release-versioning.md`.
-- Reusable workflows live as Devin skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files; they explain how, the steering files say what is required.
+## 6. Shared Rules for All AI Tools (SCRUM-119, SCRUM-139, SCRUM-337)
+- `.kiro/steering/*.md` is the single source of truth for the project rules, and Kiro reads it directly.
+- `AGENTS.md` (Freebuff and Codebuff), `GEMINI.md` and `.config/antigravity/instructions.md` (Antigravity) are generated from these files. Do not edit them by hand: change a steering file, then run `python scripts/sync-ai-rules.py` and commit all of them. A pytest test fails when a generated file is out of date.
+- Every generated file carries the complete rule body. There is no always-on/situational split and no byte budget on `AGENTS.md`: the tools in use do not truncate it, and Freebuff reads up to 64,000 characters. The only size check is Freebuff's own limit.
+- Freebuff (SCRUM-139): Freebuff Desktop reads the root `AGENTS.md` and the skills in `.agents/skills/`. `.freebuff/rules.md` is generated from the same steering files plus a workflow inventory (the skills and the Kiro post-task hook), so changing a steering file, a skill in `.agents/skills/` or the hook in `.kiro/hooks/` requires running `python scripts/sync-ai-rules.py` and committing the regenerated files. Do not copy skills into `.freebuff/skills/`, because Freebuff already loads `.agents/skills/`. Freebuff has no project hooks, so the post-task container rebuild follows `release-versioning.md`.
+- Reusable workflows live as skills in `.agents/skills/<name>/SKILL.md` (specs, CI checks, releases, container rebuild). Keep them consistent with the steering files and tool-neutral; they explain how, the steering files say what is required.
 
 ---
 <!-- from .kiro/steering/release-versioning.md -->

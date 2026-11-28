@@ -1,4 +1,4 @@
-"""scripts/rebuild-container.sh, run by the Devin Stop hook, must never block the agent (SCRUM-128)."""
+"""scripts/rebuild-container.sh, run by the Kiro post-task hook, must never block the agent (SCRUM-128)."""
 
 import json
 import os
@@ -12,7 +12,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "rebuild-container.sh"
 KIRO_HOOK = ROOT / ".kiro" / "hooks" / "rebuild-wind-map.json"
-DEVIN_HOOK = ROOT / ".devin" / "hooks.v1.json"
 BASH = shutil.which("bash") or "/bin/bash"
 
 FAKE_DOCKER = """#!/usr/bin/env bash
@@ -99,24 +98,20 @@ def test_jira_settings_are_forwarded_by_name_without_their_values(fake_env):
 
 
 def _hook_commands(path: Path) -> list[str]:
-    """Return every shell command declared in a Kiro standalone hook file or a Devin hooks file."""
+    """Return every shell command declared in the Kiro standalone hook file."""
     data = json.loads(path.read_text(encoding="utf-8"))
-    if "hooks" in data:  # Kiro standalone hook file
-        return [hook["action"]["command"] for hook in data["hooks"]]
-    return [hook["command"] for entries in data.values() for entry in entries for hook in entry.get("hooks", [])]
+    return [hook["action"]["command"] for hook in data["hooks"]]
 
 
-def test_both_hooks_run_the_rebuild_script_with_the_same_invocation():
-    assert _hook_commands(KIRO_HOOK) == _hook_commands(DEVIN_HOOK)
+def test_the_kiro_hook_runs_the_rebuild_script():
     for command in _hook_commands(KIRO_HOOK):
         assert "scripts/rebuild-container.sh" in command
 
 
 def test_hook_commands_have_no_machine_specific_paths():
-    for path in (KIRO_HOOK, DEVIN_HOOK):
-        for command in _hook_commands(path):
-            assert "/Users/" not in command, f"{path.name} hardcodes a user path: {command}"
-            assert not command.strip('"').startswith("/"), f"{path.name} uses an absolute path: {command}"
+    for command in _hook_commands(KIRO_HOOK):
+        assert "/Users/" not in command, f"{KIRO_HOOK.name} hardcodes a user path: {command}"
+        assert not command.strip('"').startswith("/"), f"{KIRO_HOOK.name} uses an absolute path: {command}"
 
 
 def test_kiro_hook_keeps_its_trigger_and_timeout():
