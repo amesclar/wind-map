@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import L from 'leaflet';
 import {
   attributionText,
+  chartCoverageNotice,
+  CHS_ATTRIBUTION_TEXT,
+  CHS_BOUNDS,
+  CHS_CHART_LAYERS,
+  CHS_CHART_URL,
+  CHS_COVERAGE_NOTICE,
+  CHS_NOTICE,
+  CHS_TILE_CLASS,
   CHART_BOUNDS,
   CHART_COVERAGE_MAX_LAT,
   CHART_EDGE_NOTICE,
@@ -29,6 +37,7 @@ import {
   NONNA_OPACITY,
   NONNA_PANE,
   nonnaLayerConfig,
+  isChartBase,
   isLightBase,
   SEAMAP_ATTRIBUTION_TEXT,
   SEAMAP_MAX_NATIVE_ZOOM,
@@ -81,6 +90,7 @@ describe('TILE_LAYER_NAMES (SCRUM-322, SCRUM-326)', () => {
       osm_dark: 'OSM Dark',
       osm_standard: 'OSM Light',
       paper_chart: 'NOAA',
+      chs_chart: 'CHS',
       seamap: 'OpenWater',
       google_satellite: 'Satellite',
     });
@@ -93,6 +103,7 @@ describe('TILE_LAYER_NAMES (SCRUM-322, SCRUM-326)', () => {
 describe('isLightBase (SCRUM-206)', () => {
   it('marks both light sheets, and no dark base', () => {
     expect(isLightBase('paper_chart')).toBe(true);
+    expect(isLightBase('chs_chart')).toBe(true);
     expect(isLightBase('seamap')).toBe(true);
     for (const layer of ['carto_dark', 'google_satellite'] as const) {
       expect(isLightBase(layer)).toBe(false);
@@ -290,6 +301,51 @@ describe('paper chart tile config (SCRUM-203)', () => {
     }
     // Seamap is a vector style, so a CSS tile filter cannot reach it at all.
     expect(seamapLayerConfig().kind).toBe('vector');
+  });
+});
+
+describe('CHS chart tile config (SCRUM-342)', () => {
+  it('asks for the CHS ENC service as WMS 1.3.0 in EPSG:4326', () => {
+    const chart = tileLayerConfig('chs_chart');
+    if (chart.kind !== 'wms') throw new Error('the CHS chart must be a WMS layer');
+
+    expect(chart.url).toBe(CHS_CHART_URL);
+    expect(chart.url).toContain('ENC_MaritimeChartService');
+    expect(chart.options.layers).toBe(CHS_CHART_LAYERS);
+    expect(chart.options.format).toBe('image/png');
+    expect(chart.options.transparent).toBe(true);
+    expect(chart.options.version).toBe('1.3.0');
+    // Leaflet orders the BBOX lat,lon only for this exact CRS object, and the service needs it:
+    // the same box in lon,lat order came back blank in the 2026-11-28 probes.
+    expect(chart.options.crs).toBe(L.CRS.EPSG4326);
+    expect(chart.options.crossOrigin).toBe(true);
+    expect(chart.options.className).toBe(CHS_TILE_CLASS);
+  });
+
+  it('clips to Canadian Pacific waters, south of the NOAA clip so B.C. is covered', () => {
+    expect(CHS_BOUNDS.south).toBe(47.9);
+    expect(CHS_BOUNDS.north).toBe(56);
+    expect(CHS_BOUNDS.west).toBe(-141);
+    expect(CHS_BOUNDS.east).toBe(-122);
+    expect(CHS_BOUNDS.south).toBeLessThan(CHART_COVERAGE_MAX_LAT);
+  });
+
+  it('carries the Open Government Licence credit and the navigation notice', () => {
+    expect(CHS_ATTRIBUTION_TEXT).toContain('Open Government Licence');
+    expect(attributionText('chs_chart')).toBe(`${CHS_ATTRIBUTION_TEXT} · ${CHS_NOTICE}`);
+    expect(CHS_COVERAGE_NOTICE).toContain('Not for navigation');
+    expect(chartCoverageNotice('chs_chart')).toBe(CHS_COVERAGE_NOTICE);
+    expect(chartCoverageNotice('paper_chart')).toContain('Canadian border');
+    const chart = tileLayerConfig('chs_chart');
+    expect(chart.kind === 'wms' && chart.options.attribution).toContain('Open Government Licence');
+  });
+
+  it('treats both charts alike: light sheet, chart base, seamarks suppressed', () => {
+    expect(isChartBase('paper_chart')).toBe(true);
+    expect(isChartBase('chs_chart')).toBe(true);
+    expect(isChartBase('seamap')).toBe(false);
+    expect(seamarksShownFor('chs_chart', true)).toBe(false);
+    expect(seamarksShownFor('carto_dark', true)).toBe(true);
   });
 });
 

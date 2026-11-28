@@ -89,7 +89,9 @@ describe('MapSettingsModal seamark toggle (SCRUM-175)', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(screen.getByTestId('info-seamarks'));
     expect(
-      within(screen.getByTestId('map-settings-body')).getByText(/already draws NOAA's aids/),
+      within(screen.getByTestId('map-settings-body')).getByText(
+        /already draw the hydrographic office's aids/,
+      ),
     ).toBeTruthy();
 
     fireEvent.click(toggle);
@@ -163,8 +165,8 @@ describe('MapSettingsModal paper chart radio (SCRUM-203)', () => {
 
     const options = within(screen.getByTestId('map-settings-column-options'));
     // SCRUM-301 retired the OpenStreetMap radios and SCRUM-333 restored them: CARTO, OSM Dark,
-    // OSM Light, NOAA, OpenWater, Satellite.
-    expect(options.getAllByRole('radio')).toHaveLength(6);
+    // OSM Light, NOAA, CHS, OpenWater, Satellite (SCRUM-342 added the CHS chart).
+    expect(options.getAllByRole('radio')).toHaveLength(7);
 
     const radio = screen.getByTestId('tile-layer-paper-chart').querySelector('input')!;
     expect((radio as HTMLInputElement).checked).toBe(false);
@@ -421,6 +423,7 @@ describe('isLightTileLayer (SCRUM-221)', () => {
     ['seamap', false],
     ['google_satellite', false],
     ['paper_chart', true],
+    ['chs_chart', true],
   ] as const)('returns %s for %s', (layer, expected) => {
     expect(isLightTileLayer(layer as MapTileLayer)).toBe(expected);
   });
@@ -430,6 +433,7 @@ describe('MapSettingsModal base map names (SCRUM-322)', () => {
   it.each([
     ['carto_dark', 'CARTO'],
     ['paper_chart', 'NOAA'],
+    ['chs_chart', 'CHS'],
     ['seamap', 'OpenWater'],
     ['google_satellite', 'Satellite'],
   ])('labels %s as %s', (layer, name) => {
@@ -437,6 +441,23 @@ describe('MapSettingsModal base map names (SCRUM-322)', () => {
 
     const option = screen.getByTestId(`tile-layer-${layer.replaceAll('_', '-')}`);
     expect(within(option).getByText(name, { exact: true, selector: '.text-sm' })).toBeTruthy();
+  });
+
+  it('offers the CHS chart with its licence and navigation notice (SCRUM-342)', () => {
+    const onChange = vi.fn();
+    render(<MapSettingsModal {...BASE_PROPS} onChangeTileLayer={onChange} />);
+
+    const option = screen.getByTestId('tile-layer-chs-chart');
+    expect(within(option).getByText(/Open Government Licence – Canada/)).toBeTruthy();
+    expect(within(option).getByText(/Not for navigation/)).toBeTruthy();
+
+    fireEvent.click(within(option).getByRole('radio'));
+    expect(onChange).toHaveBeenCalledWith('chs_chart');
+
+    fireEvent.click(screen.getByTestId('info-chs_chart'));
+    expect(screen.getByTestId('info-panel-chs_chart').textContent).toContain(
+      'Canadian Hydrographic Service',
+    );
   });
 
   it('drops the long names from the visible titles', () => {
@@ -458,6 +479,7 @@ describe('MapSettingsModal info glyphs (SCRUM-323)', () => {
   const INFO_IDS = [
     'carto_dark',
     'paper_chart',
+    'chs_chart',
     'seamap',
     'google_satellite',
     'wind',

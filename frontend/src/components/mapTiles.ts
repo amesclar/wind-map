@@ -8,6 +8,7 @@ import type { MapTileLayer } from '../types';
  */
 const LIGHT_TILE_LAYERS: ReadonlySet<MapTileLayer> = new Set<MapTileLayer>([
   'paper_chart',
+  'chs_chart',
   'osm_standard',
 ]);
 
@@ -22,6 +23,7 @@ export const TILE_LAYER_NAMES: Record<MapTileLayer, string> = {
   osm_dark: 'OSM Dark',
   osm_standard: 'OSM Light',
   paper_chart: 'NOAA',
+  chs_chart: 'CHS',
   seamap: 'OpenWater',
   google_satellite: 'Satellite',
 };
@@ -118,6 +120,33 @@ export const baseTileFailureNotice = (layer: MapTileLayer): string =>
 export const CHART_BOUNDS = { south: -85, west: -180, north: CHART_COVERAGE_MAX_LAT, east: -60 };
 
 /**
+ * CHS ENC chart (SCRUM-342): the Canadian counterpart to the NOAA paper chart.
+ *
+ * DFO publishes its ENC compilation as WMS under the Open Government Licence - Canada, updated
+ * weekly, so B.C. waters - which the NOAA chart stops short of at 49.6 N - get real chart ink for
+ * the first time. Measured 2026-11-28: Victoria, Nanaimo, Vancouver and Johnstone Strait all return
+ * chart tiles (143-227 KB), the response is a transparent PNG, and it carries CORS headers, so the
+ * canvas export can read it. Only EPSG:4326 answers: EPSG:3857 returns a blank tile.
+ */
+export const CHS_CHART_URL =
+  'https://egisp.dfo-mpo.gc.ca/arcgis/rest/services/chs/ENC_MaritimeChartService/MapServer/exts/MaritimeChartService/WMSServer';
+/** Chart information, features, soundings, obstructions and aids: every layer the service offers. */
+export const CHS_CHART_LAYERS = '0,1,2,3,4,5,6,7,8,9,10,11,12';
+export const CHS_ATTRIBUTION =
+  '&copy; <a href="https://www.chs-shc.ca/">CHS</a> — contains information licensed under the <a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence – Canada</a>';
+/** Plain-text credit for the export footer and the settings note (licence condition). */
+export const CHS_ATTRIBUTION_TEXT = '© CHS — Open Government Licence – Canada';
+export const CHS_NOTICE = 'Not for navigation';
+export const CHS_COVERAGE_NOTICE =
+  'CHS coverage follows Canadian waters: where it ends, the base map shows instead. Not for navigation.';
+/**
+ * The service answers outside its extent with a blank tile near the border and with a non-PNG error
+ * further away, so requests are clipped to Canadian Pacific waters rather than left to the service.
+ */
+export const CHS_BOUNDS = { south: 47.9, west: -141, north: 56, east: -122 };
+export const CHS_TILE_CLASS = 'chs-chart-tiles';
+
+/**
  * Open Waters: Seamap as a base style (SCRUM-206). Kept as an option rather than the chart
  * substitute (SCRUM-200): vector navigation aids and depth shading, no soundings, and tiles that
  * stop at z14. MapLibre overzooms them past that, which keeps vector labels crisp where a raster
@@ -155,6 +184,27 @@ export function chartLayerConfig(): TileLayerConfig {
       maxZoom: 19,
       crossOrigin: true,
       // No `transparent: true`: the service ignores it, and the tiles carry no alpha to give back.
+    },
+  };
+}
+
+/** WMS request for the CHS chart, clipped by the caller to `CHS_BOUNDS`. */
+export function chsChartLayerConfig(): TileLayerConfig {
+  return {
+    kind: 'wms',
+    url: CHS_CHART_URL,
+    options: {
+      layers: CHS_CHART_LAYERS,
+      format: 'image/png',
+      transparent: true,
+      version: '1.3.0',
+      // The service wants the BBOX in lat,lon order. Leaflet swaps the axes only for this exact CRS
+      // object (`this._crs === EPSG4326` in TileLayer.WMS), so the singleton must not be copied.
+      crs: L.CRS.EPSG4326,
+      attribution: CHS_ATTRIBUTION,
+      className: CHS_TILE_CLASS,
+      maxZoom: 19,
+      crossOrigin: true,
     },
   };
 }
@@ -209,12 +259,23 @@ export function resetGoogleSessionCache(): void {
  * the gradient is attenuated so their own symbols stay readable (SCRUM-203, SCRUM-206).
  */
 export function isLightBase(layer: MapTileLayer): boolean {
-  return layer === 'paper_chart' || layer === 'seamap' || layer === 'osm_standard';
+  return layer === 'paper_chart' || layer === 'chs_chart' || layer === 'seamap' || layer === 'osm_standard';
+}
+
+/** Both paper charts: the NOAA one and its Canadian counterpart (SCRUM-342). */
+export function isChartBase(layer: MapTileLayer): boolean {
+  return layer === 'paper_chart' || layer === 'chs_chart';
+}
+
+/** Why the selected chart has no data here, in that chart's own terms. */
+export function chartCoverageNotice(layer: MapTileLayer): string {
+  return layer === 'chs_chart' ? CHS_COVERAGE_NOTICE : NOAA_COVERAGE_NOTICE;
 }
 
 /** Plain-text attribution for the exported image (SCRUM-116); every provider requires it. */
 export function attributionText(layer: MapTileLayer): string {
   if (layer === 'paper_chart') return `${NOAA_ATTRIBUTION_TEXT} · ${NOAA_NOTICE}`;
+  if (layer === 'chs_chart') return `${CHS_ATTRIBUTION_TEXT} · ${CHS_NOTICE}`;
   if (layer === 'seamap') return `${SEAMAP_ATTRIBUTION_TEXT} · ${SEAMAP_NOTICE}`;
   if (layer === 'google_satellite') return GOOGLE_SATELLITE_ATTRIBUTION_TEXT;
   if (isOsmLayer(layer)) return OSM_ATTRIBUTION_TEXT;
@@ -240,12 +301,12 @@ export const SEAMARK_NOTICE = 'Not for navigation';
  * changed: the overlay comes back as soon as another base map is chosen.
  */
 export function seamarksShownFor(layer: MapTileLayer, seamarksVisible: boolean): boolean {
-  return seamarksVisible && layer !== 'paper_chart';
+  return seamarksVisible && !isChartBase(layer);
 }
 
 /** Why the seamark toggle is inert on the chart; shown in Map Settings and nowhere else. */
 export const SEAMARK_HIDDEN_ON_CHART =
-  "Hidden on the paper chart, which already draws NOAA's aids to navigation. Your seamark setting applies on the other base maps.";
+  "Hidden on the paper charts, which already draw the hydrographic office's aids to navigation. Your seamark setting applies on the other base maps.";
 
 /**
  * URL and options for the OpenSeaMap seamark overlay (SCRUM-175). It is an overlay, so it stays
@@ -329,7 +390,7 @@ export function nonnaLayerConfig(): TileLayerConfig {
  * The overloads keep the shape for a known layer, so callers do not have to re-narrow the union.
  */
 export function tileLayerConfig(
-  layer: 'paper_chart',
+  layer: 'paper_chart' | 'chs_chart',
   cartoApiKey?: string,
 ): Extract<TileLayerConfig, { kind: 'wms' }>;
 export function tileLayerConfig(
@@ -383,6 +444,8 @@ export function tileLayerConfig(
       };
     case 'paper_chart':
       return chartLayerConfig();
+    case 'chs_chart':
+      return chsChartLayerConfig();
     case 'seamap':
       return seamapLayerConfig();
     case 'google_satellite':

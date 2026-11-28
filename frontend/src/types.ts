@@ -87,15 +87,16 @@ export type WindSpeedUnit = 'knots' | 'kmh' | 'mph' | 'ms';
 export type WindDirDisplay = 'barb' | 'cardinal' | 'deg';
 
 /**
- * Base maps; `carto_dark` is the default (SCRUM-301), `paper_chart` the NOAA chart (SCRUM-203) and
- * `seamap` the Open Waters vector style (SCRUM-206). The last two are light sheets and must not be
- * darkened.
+ * Base maps; `carto_dark` is the default (SCRUM-301), `paper_chart` the NOAA chart (SCRUM-203),
+ * `chs_chart` the Canadian CHS chart (SCRUM-342) and `seamap` the Open Waters vector style
+ * (SCRUM-206). The charts and Seamap are light sheets and must not be darkened.
  */
 export type MapTileLayer =
   | 'carto_dark'
   | 'osm_dark'
   | 'osm_standard'
   | 'paper_chart'
+  | 'chs_chart'
   | 'seamap'
   | 'google_satellite';
 

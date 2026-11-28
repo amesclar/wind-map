@@ -21,6 +21,9 @@ import {
   CHART_EDGE_PANE,
   CHART_MIN_ZOOM,
   CHART_PANE,
+  CHS_BOUNDS,
+  CHS_COVERAGE_NOTICE,
+  CHS_TILE_CLASS,
   NONNA_PANE,
 } from './mapTiles';
 import * as api from '../api/client';
@@ -540,6 +543,42 @@ describe('MapView chart declutter (SCRUM-211)', () => {
     render(<MapView {...baseProps} locations={[location]} windOverlayVisible />);
 
     await waitFor(() => expect(barbs()).toHaveLength(2));
+  });
+});
+
+describe('MapView CHS chart base (SCRUM-342)', () => {
+  const chsLayer = () => createdTileLayers.find((layer) => layer.kind === 'wms')!;
+
+  it('mounts the CHS chart over its Canadian coverage box, in EPSG:4326', () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="chs_chart" />);
+
+    const chart = chsLayer();
+    expect(chart.url).toContain('ENC_MaritimeChartService');
+    expect(chart.options?.pane).toBe(CHART_PANE);
+    expect(chart.options?.minZoom).toBe(CHART_MIN_ZOOM);
+    // The identity of the CRS object is what makes Leaflet send a lat,lon BBOX.
+    expect(chart.options?.crs).toBe(leaflet.CRS.EPSG4326);
+    expect(chart.options?.className).toBe(CHS_TILE_CLASS);
+    const bounds = chart.options?.bounds as { getSouth: () => number; getNorth: () => number };
+    expect(bounds.getSouth()).toBe(CHS_BOUNDS.south);
+    expect(bounds.getNorth()).toBe(CHS_BOUNDS.north);
+  });
+
+  it('draws no 49.6 N rule and names Canadian coverage when the view leaves it', async () => {
+    render(<MapView {...baseProps} locations={[]} tileLayerType="chs_chart" />);
+    const map = currentMap();
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(createdPolylines.filter((line) => line.remove.mock.calls.length === 0)).toHaveLength(0);
+    // The mock view (47-49 N, 123-121 W) sits inside the CHS box, so nothing is said.
+    expect(screen.queryByTestId('chart-coverage-notice')).toBeNull();
+
+    act(() => {
+      map.bounds = { south: 37, north: 39, west: -123, east: -121 };
+      map.fire('moveend');
+    });
+    expect(screen.getByTestId('chart-coverage-notice').textContent).toBe(CHS_COVERAGE_NOTICE);
+    expect(screen.queryByTestId('chart-edge-notice')).toBeNull();
   });
 });
 

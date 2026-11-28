@@ -21,7 +21,9 @@ import {
   CHART_PANE,
   CHART_TILE_FAILURE_THRESHOLD,
   CHART_TILE_FAILURE_WINDOW_MS,
+  CHS_BOUNDS,
   fetchGoogleSession,
+  isChartBase,
   nonnaLayerConfig,
   NONNA_PANE,
   seamarkLayerConfig,
@@ -29,6 +31,9 @@ import {
   tileLayerConfig,
 } from '../components/mapTiles';
 import { createSeamapLayer, mountSeamapLayer, type SeamapLayer } from '../components/seamapLayer';
+
+/** The coverage box of the paper chart that is selected (SCRUM-342). */
+const chartBox = (layer: MapTileLayer) => (layer === 'chs_chart' ? CHS_BOUNDS : CHART_BOUNDS);
 
 export interface BaseLayerOptions {
   tileLayerType: MapTileLayer;
@@ -59,7 +64,7 @@ export function useBaseLayers(
   mapInstance: L.Map | null,
   { tileLayerType, cartoApiKey, seamarksShown, bcDepthVisible }: BaseLayerOptions,
 ): BaseLayers {
-  const chartBase = tileLayerType === 'paper_chart';
+  const chartBase = isChartBase(tileLayerType);
   const [chartOutsideCoverage, setChartOutsideCoverage] = useState(false);
   const [chartStraddlesEdge, setChartStraddlesEdge] = useState(false);
   const [chartTilesFailed, setChartTilesFailed] = useState(false);
@@ -147,19 +152,17 @@ export function useBaseLayers(
       }
     };
 
-    if (tileLayerType === 'paper_chart') {
+    if (isChartBase(tileLayerType)) {
       mountSubstrate(false);
       ensureChartPane();
-      const chart = tileLayerConfig('paper_chart');
+      const chart = tileLayerConfig(tileLayerType);
       if (chart.kind === 'wms') {
+        const box = chartBox(tileLayerType);
         const chartLayer = L.tileLayer.wms(chart.url, {
           ...chart.options,
           pane: CHART_PANE,
           minZoom: CHART_MIN_ZOOM,
-          bounds: L.latLngBounds(
-            [CHART_BOUNDS.south, CHART_BOUNDS.west],
-            [CHART_BOUNDS.north, CHART_BOUNDS.east],
-          ),
+          bounds: L.latLngBounds([box.south, box.west], [box.north, box.east]),
         });
         chartLayer.on('tileerror', chartWatch.error);
         chartLayer.on('load', chartWatch.loaded);
@@ -243,12 +246,24 @@ export function useBaseLayers(
     // The app opens below the chart's zoom floor, so selecting the mode would otherwise show a
     // notice and no chart at all; zoom to the floor once, which the user can undo.
     if (mapInstance.getZoom() < CHART_MIN_ZOOM) mapInstance.setZoom(CHART_MIN_ZOOM);
+    // Each chart has its own box: NOAA stops at 49.6 N, the CHS chart follows Canadian waters.
+    const box = chartBox(tileLayerType);
     const update = () => {
       const bounds = mapInstance.getBounds();
       const belowFloor = mapInstance.getZoom() < CHART_MIN_ZOOM;
-      setChartOutsideCoverage(bounds.getSouth() > CHART_BOUNDS.north || belowFloor);
+      setChartOutsideCoverage(
+        belowFloor ||
+          bounds.getSouth() > box.north ||
+          bounds.getNorth() < box.south ||
+          bounds.getWest() > box.east ||
+          bounds.getEast() < box.west,
+      );
+      // Only the NOAA chart has a straight clip edge to explain; CHS coverage ends with the water.
       setChartStraddlesEdge(
-        !belowFloor && bounds.getSouth() <= CHART_BOUNDS.north && bounds.getNorth() > CHART_BOUNDS.north,
+        tileLayerType === 'paper_chart' &&
+          !belowFloor &&
+          bounds.getSouth() <= box.north &&
+          bounds.getNorth() > box.north,
       );
     };
     update();
@@ -258,12 +273,13 @@ export function useBaseLayers(
       mapInstance.off('moveend', update);
       mapInstance.off('zoomend', update);
     };
-  }, [chartBase, mapInstance]);
+  }, [chartBase, mapInstance, tileLayerType]);
 
   // SCRUM-215: draw the 49.6 N clip as a rule, so the chart does not simply stop in the middle of
   // the water. It spans the chart's own coverage box and only paints while the chart base is on.
   useEffect(() => {
-    if (!mapInstance || !chartBase) return;
+    // The CHS chart has no straight clip edge: its coverage ends at the water, not at a latitude.
+    if (!mapInstance || tileLayerType !== 'paper_chart') return;
     if (!mapInstance.getPane(CHART_EDGE_PANE)) {
       const pane = mapInstance.createPane(CHART_EDGE_PANE);
       pane.style.zIndex = '206';
@@ -286,7 +302,7 @@ export function useBaseLayers(
     return () => {
       boundary.remove();
     };
-  }, [chartBase, mapInstance, chartRetryCount]);
+  }, [tileLayerType, mapInstance, chartRetryCount]);
 
   // Nautical seamark overlay (SCRUM-175): its own pane, so the base map, the seamarks and the
   // wind layers stack in a fixed order however they are toggled.
