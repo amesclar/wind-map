@@ -585,6 +585,7 @@ Backend test suite coverage includes:
 - Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
 - Ocean waves — the grid and point endpoints, the snapped-cell land filter, the 240-hour limit, the schema 10 `grid_waves_cache` table and the shared retry/quota path
 - Tides — the point endpoint, the 240-hour limit, land and water points, and the shared quota path
+- Documentation — every production module, API route and architecture-tree path named in the README, and every `# ` section of `requirements.md` listed in the documentation rule (`backend/tests/test_docs.py`), plus the generated AI rule files (`test_ai_rules_sync.py`)
 - Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:
