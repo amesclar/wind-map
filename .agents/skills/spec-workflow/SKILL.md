@@ -5,7 +5,7 @@ description: Plan and implement a SCRUM ticket as a Kiro-style spec in .kiro/spe
 
 # Spec workflow (Kiro-compatible)
 
-Specs live in `.kiro/specs/<ticket-lowercase>/` (e.g. `.kiro/specs/scrum-88/`) so Kiro and Devin share them. `.kiro/specs/scrum-88/` is the reference example.
+Specs live in `.kiro/specs/<ticket-lowercase>/` (e.g. `.kiro/specs/scrum-88/`) so Kiro and Freebuff share them. `.kiro/specs/scrum-88/` is the reference example.
 
 ## 1. Requirements (`requirements.md` for features, `bugfix.md` for bugs)
 - Feature: user stories with numbered acceptance criteria in EARS form: `WHEN <condition> THEN the system shall <behavior>`.

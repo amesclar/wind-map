@@ -1,8 +1,8 @@
 # Git and PR Requirements
-- **Ticket Enforcement:** You are strictly required to include a project ticket number (e.g., `PROJ-123`) in all Git branch names, commit messages, and PR titles.
-- **Branch Naming:** Format branches as `feature/PROJ-123-description` or `fix/PROJ-123-description`.
-- **Commit Messages:** Prefix every commit message with the ticket number, followed by a colon (e.g., `PROJ-123: Add user authentication`).
-- **PR Titles:** Prefix all PR titles with the ticket number in brackets (e.g., `[PROJ-123] Implement secure login flow`).
+- **Ticket Enforcement:** You are strictly required to include a project ticket number (e.g., `SCRUM-123`) in all Git branch names, commit messages, and PR titles.
+- **Branch Naming:** Format branches as `feature/SCRUM-123-description` or `fix/SCRUM-123-description`.
+- **Commit Messages:** Prefix every commit message with the ticket number, followed by a colon (e.g., `SCRUM-123: Add user authentication`).
+- **PR Titles:** Prefix all PR titles with the ticket number in brackets (e.g., `[SCRUM-123] Implement secure login flow`).
 
 ## Ticket-First Workflow (SCRUM-111)
 - **A ticket first:** every repository change — code, documentation, configuration and steering rules — has a Jira ticket. If it has none, create one with a story point estimate before creating the branch.
@@ -19,13 +19,13 @@
 - **Report** the deleted branches in the summary of the merge.
 
 ## Mark the Ticket Done When the PR Succeeds (SCRUM-129, SCRUM-141)
-- **When:** As soon as `gh pr checks <n>` shows every required check passing (Backend, Frontend, Docker image and both CodeQL analyses) and the PR is mergeable, transition the ticket in the PR title to Done with `transitionJiraIssue` (find the Done transition ID with `getTransitionsForJiraIssue`). Don't wait for the merge.
+- **When:** As soon as `gh pr checks <n>` shows every required check passing (Backend, Frontend, Docker image and both CodeQL analyses) and the PR is mergeable, transition the ticket in the PR title to Done with `python scripts/jira_agent.py transition SCRUM-123 --to Done --resolution Done`. Don't wait for the merge.
 - **Exceptions:** Skip tickets that are already Done. Don't mark a ticket Done when the PR only partly delivers it (e.g. follow-up work remains); comment why instead.
 - **If it stops succeeding:** If a check fails or the PR is closed unmerged afterwards, move the ticket back to In Progress and say why.
 - **Record the merge hash after merging:** right after the PR is merged into `develop` or `master`, comment on the ticket with the merge commit hash. This completes the merge; don't wait to be asked.
 - **Which hash:** the merge commit on the target branch, not the feature branch commit: `gh pr view <n> --json mergeCommit -q '.mergeCommit.oid'` after `git fetch origin`, then the 7-character short hash (e.g., `95cf243`).
 - **Comment format:** `Merged PR #<n> into <target> as <short-hash>` followed by the PR URL.
-- **Which tool:** `addOrEditJiraIssueComment`; the transition comment field can be dropped silently.
+- **Which tool:** `python scripts/jira_agent.py comment SCRUM-123 --body "Merged PR #42 into develop as 95cf243"`; the transition comment field can be dropped silently.
 - **Merging `develop` into `master`:** Comment on each ticket included in the merge, or on the release ticket if one exists, using the merge hash on `master`, and mark any of them that are not yet Done as Done.
 - **Report** the checks result, the ticket's status, the hash and the Jira comment.
 
@@ -63,10 +63,6 @@
 
 ## Rebuild Container After Merge for User Verification (SCRUM-132)
 - **When:** Right after a PR is merged into `develop` or `master` (and the branch is deleted, merge hash commented, and ticket transitioned), rebuild and restart the local Docker container so the user can verify changes on http://localhost:5005.
-- **How:** `zsh -ic './scripts/rebuild-container.sh'`. A non-interactive agent shell (bash, an IDE task, a Kiro or Devin hook) never reads `~/.zshrc`, so the script must run through the user's interactive shell to see `CARTO_API_KEY`, the Jira variables and the feedback limits (SCRUM-262). Never write those values or a profile path into these rules. Build details: `rebuild-container` skill.
+- **How:** `zsh -ic './scripts/rebuild-container.sh'`. A non-interactive agent shell (bash, an IDE task, a Kiro hook) never reads `~/.zshrc`, so the script must run through the user's interactive shell to see `CARTO_API_KEY`, the Jira variables and the feedback limits (SCRUM-262). Never write those values or a profile path into these rules. Build details: `rebuild-container` skill.
 - **Verify the environment survived (SCRUM-262):** after the rebuild, `GET /api/config` must still report `feedback_enabled: true` and a CARTO key when the user has them configured. A rebuild that answers `{"carto_api_key":"","feedback_enabled":false}` has lost them: restart the container with the variables and report that, instead of calling the build verified.
 - **Report:** Confirm in the summary that the container was rebuilt and is running on http://localhost:5005.
-
-## Deploying to Google Cloud (SCRUM-223)
-- **Only for a release:** Google Cloud is touched when `develop` is merged into `master` for a version bump; a `develop` or feature-branch merge rebuilds the local container and stops there.
-- **Exception — user testing:** deploy from the branch the user names, through Actions → Deploy to Cloud Run. Never add an automatic deploy trigger for `develop` or a feature branch, and report every deploy with its branch and image tag. Mechanics: `release-versioning.md`.
