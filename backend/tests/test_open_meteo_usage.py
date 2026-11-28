@@ -229,7 +229,10 @@ def test_summary_is_empty_before_any_call():
     assert result["latest"] is None
 
 
-def test_the_eighty_percent_warning_is_logged_once(caplog):
+def test_the_eighty_percent_warning_is_logged_once(caplog, monkeypatch):
+    # `record` stamps its row with the wall clock (SCRUM-335), so pin it: the seeded total and the
+    # recorded rows must share the day the assertions talk about, at any hour CI happens to run.
+    monkeypatch.setattr(usage.time, "time", lambda: NOW)
     _seed(NOW - 60, 8000.0, remaining=2000.0)
     caplog.set_level(logging.WARNING)
 
