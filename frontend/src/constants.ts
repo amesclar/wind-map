@@ -17,7 +17,8 @@ export const TIMEZONES: ReadonlyArray<{ id: string; label: string }> = [
 
 /** Default map view when no location is selected yet (Oak Harbor, WA). */
 export const DEFAULT_MAP_CENTER: [number, number] = [48.2939, -122.6064];
-export const DEFAULT_MAP_ZOOM = 8;
+/** Zoom 10 opens on the coast at harbour scale, and the startup fly-to keeps it (SCRUM-343). */
+export const DEFAULT_MAP_ZOOM = 10;
 
 /** localStorage keys. */
 export const STORAGE_KEYS = {

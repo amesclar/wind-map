@@ -39,7 +39,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
 - **Quota Warning:** when Open-Meteo's daily request limit is reached (a persistent 429 after the retries), the grid endpoint answers `503` with the reset instant, and the app shows a dismissible warning naming when wind data should return in your timezone (e.g. `4:00 PM PST`). It appears once per reset window, so panning does not reopen a dismissed warning, and later pan or view changes recover on their own once the quota is back.
-- **Default / Fallback Location:** Automatically attempts browser geolocation; defaults to Oak Harbor, Washington (`48.2939° N, 122.6064° W`) if permission is denied or on fresh launch.
+- **Default / Fallback Location:** Opens centred on you at zoom 10, the harbour scale the barbs and currents read at. It attempts browser geolocation first; if permission is denied, or on a fresh launch, it opens on Oak Harbor, Washington (`48.2939° N, 122.6064° W`) at the same zoom. Picking a location afterwards keeps whatever zoom you are at.
 
 ---
 
