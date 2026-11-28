@@ -250,16 +250,50 @@ describe('MapExportDialog range mode (SCRUM-155)', () => {
     fireEvent.click(button);
   });
 
-  it('explains the 24-capture cap instead of capturing', () => {
-    const hours = Array.from({ length: 30 }, (_, i) =>
+  // SCRUM-334: the shortcut selects what one export may capture, and says so on a longer window.
+  describe('All shortcut on a window longer than the cap (SCRUM-334)', () => {
+    /** 30 hourly times: more than the 24-capture cap, so All cannot select everything. */
+    const LONG_HOURS = Array.from({ length: 30 }, (_, i) =>
       new Date(Date.UTC(2026, 10, 23, 22 + i)).toISOString(),
     );
-    renderDialog({ rangeHours: hours });
-    openRange();
-    fireEvent.click(screen.getByTestId('export-times-all'));
+    const exportButton = () => screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement;
 
-    expect(screen.getByRole('alert').textContent).toContain('Too many captures (30)');
-    expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(true);
+    it('selects only the first 24 times and leaves them exportable', () => {
+      const props = renderDialog({ rangeHours: LONG_HOURS });
+      openRange();
+
+      const all = screen.getByTestId('export-times-all');
+      expect(all.textContent).toBe('First 24');
+      fireEvent.click(all);
+
+      const count = screen.getByTestId('export-times-count').textContent ?? '';
+      expect(count).toContain('24 of 30 chosen');
+      expect(count).toContain('up to 24 per export');
+      expect(screen.getByTestId('range-summary').textContent).toContain('24 captures');
+      expect(exportButton().disabled).toBe(false);
+
+      fireEvent.click(exportButton());
+      expect(props.onExport).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'range', hours: LONG_HOURS.slice(0, 24) }),
+      );
+    });
+
+    it('still explains the cap when a 25th time is ticked by hand', () => {
+      renderDialog({ rangeHours: LONG_HOURS });
+      openRange();
+      fireEvent.click(screen.getByTestId('export-times-all'));
+      tickTime(LONG_HOURS[24]);
+
+      expect(screen.getByRole('alert').textContent).toContain('Too many captures (25)');
+      expect(exportButton().disabled).toBe(true);
+    });
+
+    it('keeps the plain All label on a window within the cap', () => {
+      renderDialog();
+      openRange();
+
+      expect(screen.getByTestId('export-times-all').textContent).toBe('All');
+    });
   });
 
   it('shows progress with the hour being captured and stops through Cancel', () => {

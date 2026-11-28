@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import downloadIcon from '../assets/download-icon.png';
 import { DEFAULT_JPEG_QUALITY } from '../utils/download';
 import { sanitizeExportFileName } from '../utils/mapExport';
-import { planExportTimes } from '../utils/exportRange';
+import { MAX_RANGE_CAPTURES, planExportTimes } from '../utils/exportRange';
 import type { PdfOrientation, PdfPageSize } from '../utils/pdfExport';
 import type { RangeProgress } from '../utils/rangeCapture';
 import { ExportFormatFields } from './ExportFormatFields';
@@ -216,7 +216,7 @@ export const MapExportDialog: React.FC<MapExportDialogProps> = ({
               busy={busy}
               plan={plan}
               onToggle={toggleTime}
-              onSelectAll={() => setSelectedTimes(rangeHours)}
+              onSelectAll={() => setSelectedTimes(rangeHours.slice(0, MAX_RANGE_CAPTURES))}
               onSelectNone={() => setSelectedTimes([])}
             />
           )}
