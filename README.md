@@ -12,7 +12,8 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 
 ## Features
 
-- **Interactive Map:** Powered by Leaflet.js with CartoDB Dark Matter tiles.
+- **Six Base Maps:** Leaflet draws over CARTO Dark Matter by default, and Map Settings offers six bases: CARTO (`carto_dark`, the default), OSM Dark, OSM Light, NOAA's vector paper chart (`paper_chart`, above zoom 12 and south of 49.6° N), Open Waters Seamap (vector aids and depth shading through MapLibre, loaded only when chosen) and Google Satellite hybrid (offered only when the server has `GCP_MAP_KEY`). The navbar's Map button shows the selected base's short name, and each row's circle-i explains its coverage, credits and export limits. The two OpenStreetMap bases are an opt-in because their terms allow current-view viewing only, so the time-lapsed (Range) export is disabled on them; Google's terms forbid exporting its imagery at all, so the export control is disabled on Satellite.
+- **Nautical Overlays:** an OpenSeaMap seamark layer (buoys, beacons, lights, harbour marks) above the base tiles and under the wind layers, hidden on the paper chart where NOAA already draws its own aids; and CHS NONNA depth shading at 0.7 over British Columbia, where the NOAA chart has no coverage. Both are off by default, both say *Not for navigation*, and an export credits them only while they are on.
 - **Meteorological Wind Barbs:** Custom SVG markers displaying wind direction and speed feathers (calm circles, 5kt half-barbs, 10kt full-barbs, 50kt pennants) with temperature-based color coding.
 - **Wind Grid Overlay:** A continuous grid of wind barbs covering the entire visible viewport, drawn and temperature-colored the same way as the saved-location barbs. Speed is shown by the number of barbs (5 kt half barb, 10 kt full barb, 50 kt pennant; calm is a circle). Grid density targets one barb per ~80px and auto-adjusts on pan/zoom. Toggled via Map Settings (default: on).
 - **Wind Color Gradient:** A smooth color field for wind speed drawn under the barbs, from the same grid fetch the barbs use, with bilinear interpolation and the legend's exact color stops (0 kt purple → 5 blue → 10 green → 15 yellow → 20 orange → 25 red → 40/45 dark red → 50+ gray). A full-width legend above the map attribution labels the scale in your speed unit, and barbs gain a dark halo so their temperature colors stay readable. Toggled separately from the barbs in Map Settings (default: off).
@@ -47,55 +48,71 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
 ```
 wind-map/
 ├── Dockerfile                   # Multi-stage build (Node build -> Python deps -> Alpine runtime)
-├── docker-compose.yml           # Optional compose configuration
+├── cloudbuild.yaml              # Native amd64 image for the manual Cloud Run deploy
+├── litestream.yml               # One GCS replica of /app/data/wind_map.db
 ├── requirements.in / .txt       # Pinned runtime dependencies (pip-compile)
 ├── requirements-dev.in / .txt   # Pinned test tools
 ├── VERSION                      # Release version, shown in the navbar and /api/health
 ├── docs/screenshot.png          # Screenshot shown above
 ├── release-notes/               # One notes file per release (x-x-x.md)
-├── scripts/                     # rebuild-container.sh, sync-ai-rules.py
+├── scripts/                     # rebuild-container.sh (local container), sync-ai-rules.py (renders the
+│                                # generated AI rule files), jira_agent.py (agent Jira writes),
+│                                # gcp-provision.sh, open-meteo-fallback.sh & open-meteo-fallback-startup.sh
+│                                # (self-hosted fallback VM), build-land-mask.py (the bundled mask asset),
+│                                # docker-entrypoint.sh (Litestream restore, then the app)
 ├── .kiro/steering/              # AI coding rules (source of truth)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI application, /api/health, /api/config & static asset server
 │   │   ├── config.py            # Settings & named constants (models, horizons, forecast shape, limits, timeouts)
+│   │   ├── auth.py              # Optional Basic Auth and its failed-attempt cooldown
 │   │   ├── database.py          # All table definitions, versioned migrations (PRAGMA user_version) & seed
 │   │   ├── locations_repo.py    # Data access for saved locations
 │   │   ├── dependencies.py      # Shared query params (model validation, timezone)
+│   │   ├── net.py               # The real client address behind the Cloud Run proxy
 │   │   ├── units.py             # Unit conversions & cache-key rounding
 │   │   ├── models.py            # Pydantic data schemas
-│   │   ├── routers/             # API endpoints (locations, weather, grid, currents, tides, geocode, feedback)
-│   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset); weather_service.py
-│   │                            # (cache → fetch → parse → store), forecast_parser.py (pure parsing),
-│   │                            # forecast_cache.py (saved-location, point & grid-day caches),
-│       │                            # grid_weather_service.py, currents_service.py (marine grid & point),
-    │                            # waves_service.py (marine waves), land_mask.py (GLOBE 1 km land mask),
-│   │                            # tide_service.py (sea level, high & low),
-│   │                            # geocode_service.py, jira_service.py & feedback_limiter.py (in-app feedback), model_info.py (run times,
-│   │                            # horizons), time_window.py (forecast-hour validation)
+│   │   ├── data/                # land_mask_1km.bin.z, the bundled GLOBE land mask
+│   │   ├── routers/             # API endpoints (locations, weather, grid, quota, currents, waves, tides,
+│   │   │                        # geocode, feedback, map) plus errors.py, the shared failure helpers
+│   │   └── services/            # open_meteo.py (shared HTTP client, retries, quota reset),
+│   │                            # weather_service.py (cache → fetch → parse → store), forecast_parser.py
+│   │                            # (pure parsing), forecast_cache.py (saved-location, point & grid-day
+│   │                            # caches), grid_weather_service.py & grid_box.py (bbox maths),
+│   │                            # currents_service.py, waves_service.py & marine_grid.py (marine grid &
+│   │                            # point series), land_mask.py (GLOBE 1 km mask), tide_service.py,
+│   │                            # geocode_service.py, nws.py & nws_parser.py (NOAA NDFD), model_info.py &
+│   │                            # model_availability.py (run times, horizons, published runs),
+│   │                            # time_window.py (forecast-hour validation), open_meteo_usage.py (spent
+│   │                            # calls), jira_service.py, feedback_limiter.py & feedback_attachments.py
+│   │                            # (in-app feedback), google_maps.py (Map Tiles sessions)
 │   └── tests/                   # Backend pytest suite (conftest.py fixtures, factories.py builders)
 └── frontend/
     ├── src/
     │   ├── components/          # Navbar, MapView, WindOverlay, WindColorOverlay, WindColorLegend, WindBarb,
     │   │                        # CurrentOverlay, MapLegend, WaterCurrentChevron, WaveOverlay, WaveArrow,
-    │   │                        # ForecastTimeSelector, MapExportControl, MapExportDialog and its fields
-    │   │                        # (ExportModeField, ExportRangeFields, ExportFormatFields, ExportRangeStatus,
-    │   │                        # mapExportOptions.ts), MapSettingsModal, PreferencesModal,
-    │   │                        # SavedLocationsModal, QuotaWarningDialog, FeedbackModal, mapTiles.ts
+    │   │                        # ForecastTimeSelector, AutocompleteDropdown, MapExportControl, MapExportDialog
+    │   │                        # and its fields (ExportModeField, ExportRangeFields, ExportFormatFields,
+    │   │                        # ExportRangeStatus, ExportTimesFields, mapExportOptions.ts),
+    │   │                        # MapSettingsModal, PreferencesModal, SavedLocationsModal, QuotaWarningDialog,
+    │   │                        # FeedbackModal, mapTiles.ts (base, chart, seamark & NONNA configs) and
+    │   │                        # seamapLayer.ts (the lazily imported MapLibre style)
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
-    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h guard,
-    │   │                        # abort, silent failure), useMapExport.ts (capture & ranges),
-    │   │                        # useLocalStorageState.ts, useLatest.ts
+    │   │                        # useForecast.ts (useAllWeather), useWindGrid.ts, useCurrentGrid.ts (240 h
+    │   │                        # guard, abort, silent failure), useWaveGrid.ts, useMapExport.ts (capture &
+    │   │                        # ranges), useBaseLayers.ts (bases, chart, seamarks & depth), useDataRefresh.ts,
+    │   │                        # useModelAvailability.ts, useLocalStorageState.ts, useLatest.ts
     │   ├── api/                 # Typed API client (one request() helper, ApiError, quota parsing)
     │   ├── utils/               # units.ts (display formatting), forecastWindow.ts (selector maths),
     │   │                        # mapExport.ts (image header/legend/name), captureMap.ts (composition),
     │   │                        # captureDom.ts (tiles & capture filter), captureChrome.ts (header/legend/footer),
-    │   │                        # download.ts (encode & save), pdfExport.ts (PDF page fitting),
-    │   │                        # exportRange.ts (range planning),
+    │   │                        # captureReadiness.ts (what an export waits for), download.ts (encode & save),
+    │   │                        # pdfExport.ts (PDF page fitting), exportRange.ts (range planning),
     │   │                        # rangeCapture.ts (per-hour capture), rangeOutput.ts (ZIP & multi-page PDF),
     │   │                        # windColorScale.ts (shared gradient stops), windBarb.ts (feather maths),
-    │   │                        # currentTiers.ts (tier table behind chevrons and legend),
-    │   │                        # html.ts (escaping)
+    │   │                        # currentTiers.ts & waveTiers.ts (tier tables behind glyphs and legends),
+    │   │                        # tideBlock.ts, popupPlacement.ts, refreshHint.ts, preloadReload.ts,
+    │   │                        # screenshotPaste.ts, feedbackAttachments.ts, clientInfo.ts, html.ts
     │   ├── test/                # Shared Leaflet mock, fixtures, test setup
     │   ├── assets/              # icon artwork
     │   ├── constants.ts         # Defaults, timezone list, storage keys
@@ -103,7 +120,7 @@ wind-map/
     │   ├── version.ts           # Injected __APP_VERSION__
     │   └── App.tsx              # Wires the hooks to the components
     ├── appVersion.ts            # Reads VERSION and GIT_SHA for the build
-    ├── package.json             # React, Leaflet, TailwindCSS, Vite
+    ├── package.json             # React, Leaflet, MapLibre, TailwindCSS, Vite
     └── vite.config.ts           # Dev proxy configuration
 ```
 
@@ -143,13 +160,19 @@ Open your browser at **[http://localhost:5005](http://localhost:5005)**.
 
 ---
 
-### Map Layers & CARTO API Key
+### Map Layers, the CARTO Key and Google Satellite
 
-- **OpenStreetMap Dark (Default):** the same OpenStreetMap tiles, darkened in CSS, so it needs **no API key** and has no watermarks.
-- **OpenStreetMap Standard:** the plain OSM style, for when the dark base map hides a feature.
-- **CARTO Dark Matter:** CARTO requires a free API key to remove their *"API KEY REQUIRED"* watermark.
+Map Settings has one radio group for the base map and the overlay toggles beside it; the base table itself lives in
+`frontend/src/components/mapTiles.ts`, so the radios, the navbar button and the export credits cannot drift apart.
+
+- **CARTO Dark Matter (`carto_dark`, default):** the general substrate every other base is drawn over. It works without a key but carries CARTO's *"API KEY REQUIRED"* watermark until you add one.
   1. Visit **[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)** to get an instant free key (up to 5 million requests/month).
   2. Click the **Map** button in the app's top bar to paste and save your key directly in the UI, or pass it via `CARTO_API_KEY` environment variable.
+- **OSM Dark / OSM Light (`osm_dark`, `osm_standard`):** keyless OpenStreetMap tiles, the dark one drawn through a CSS filter. They are an opt-in and never the default, and because OSM's policy forbids the pre-emptive tile fetching a range export does, the export dialog disables its **Range** mode on them and says `Time-lapsed exports not supported`.
+- **NOAA (`paper_chart`):** NOAA's Chart Display WMS as the map itself — opaque, so it replaces the base rather than overlaying it — from zoom 12 and clipped at 49.6° N, with the edge drawn and the coverage explained on screen.
+- **OpenWater (`seamap`):** Open Waters' vector nautical style through MapLibre, fetched on the first selection only. The renderer registers with the export readiness, so a capture right after the switch waits for its first paint.
+- **Satellite (`google_satellite`):** Google Map Tiles hybrid imagery over the dark substrate, offered only when the server has `GCP_MAP_KEY` (`/api/map/google-session` proxies the session token and never sends the key to the browser). Export is disabled with the reason, because Google's terms forbid it.
+- **Overlays:** the OpenSeaMap seamarks toggle and the CHS NONNA depth toggle are layers, not bases, so they never appear in the radio group. Both are off by default.
 
 To stop the container:
 ```bash
@@ -482,20 +505,24 @@ Cross-origin API access is off by default. If you call the API from another orig
 | Method   | Endpoint              | Description                                          |
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Health check endpoint                                |
-| `GET`    | `/api/config`         | Public frontend config (a server-side CARTO key, when set, and `feedback_enabled`) |
+| `GET`    | `/api/config`         | Public frontend config: a server-side CARTO key when set, `feedback_enabled` and `google_satellite_enabled` |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
 | `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
 | `GET`    | `/api/weather/models` | List models with update cadence, horizon and run times |
+| `GET`    | `/api/weather/models/{model}/availability` | When that model's newest run was published, and when the next is due (nulls when it publishes no metadata) |
 | `GET`    | `/api/weather`        | Get 48h forecast & current conditions for a location |
 | `GET`    | `/api/weather/all`    | Get current conditions (or one forecast hour) for all saved locations |
 | `GET`    | `/api/weather/point`  | Get 48h forecast for an arbitrary lat/lon point (no saved location needed) |
 | `GET`    | `/api/weather/grid`   | Get wind for a lat/lon bounding box grid, now or at a forecast hour (powers the barb overlay) |
+| `GET`    | `/api/weather/quota`  | Open-Meteo calls charged today, the last 14 days, and the latest quota headers |
 | `GET`    | `/api/currents/grid`  | Get surface current for a lat/lon bounding box grid, now or at a forecast hour (powers the currents overlay) |
 | `GET`    | `/api/currents/point` | Get the 240-hour surface-current series for an arbitrary lat/lon point |
 | `GET`    | `/api/waves/grid`     | Get wave height, direction and period for a lat/lon bounding box grid, now or at a forecast hour |
 | `GET`    | `/api/waves/point`    | Get the 48-hour wave series for an arbitrary lat/lon point |
+| `GET`    | `/api/tides/point`    | Get sea level at a point for the selected hour, with the nearest high and low |
 | `GET`    | `/api/geocode?q=...`  | Autocomplete search for cities & coordinates         |
+| `GET`    | `/api/map/google-session` | Get a Google Map Tiles session token and tile URL (needs `GCP_MAP_KEY`; 503 without it) |
 | `POST`   | `/api/feedback`       | File in-app feedback as a Jira issue, with up to 3 attachments (needs the Jira variables below; 503 otherwise) |
 | `GET`    | `/docs`               | Interactive Swagger / OpenAPI documentation          |
 
@@ -555,9 +582,9 @@ Backend test suite coverage includes:
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
 - Point weather endpoint — arbitrary lat/lon forecast with correct N/S/E/W name formatting and coordinate validation
 - Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
-- Wind grid endpoint — bounding box grid generation, per-point caching, batch Open-Meteo fetch, bbox/dimension validation, and one upstream call per UTC day for an hour range
 - Ocean currents — marine grid and point endpoints, the 240-hour limit, land points dropped and cached, the schema v4 `grid_currents_cache` table, and the shared retry/quota path
 - Ocean waves — the grid and point endpoints, the snapped-cell land filter, the 240-hour limit, the schema 10 `grid_waves_cache` table and the shared retry/quota path
+- Tides — the point endpoint, the 240-hour limit, land and water points, and the shared quota path
 - Open-Meteo retries, `Retry-After` handling and the quota 503 with its reset time
 
 Frontend test suite coverage includes:
@@ -574,6 +601,9 @@ Frontend test suite coverage includes:
 - Full App integration: initial load, location selection via modal, map marker click, autocomplete add
 - Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window
 - Wind colour legend stacking above the Leaflet panes
+- Base maps — the six bases and how each is mounted, the paper chart's coverage clip and tile-failure notices, the OpenStreetMap range-export restriction, and the Seamap layer's lazy load and export readiness
+- Model availability: the published-run times behind the refresh button, nulls for composites included
+- Export ranges — planning, pacing, the ZIP and multi-page PDF output, and the capture-readiness wait
 - Current chevrons (tier by speed, rotation, land filtering), the currents overlay and its pop-up, the shared tier range formatter, the top-left currents key, and the Water Currents toggle's aria state and independence from both wind layers
 
 
