@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react';
-import { addLocation, deleteLocation, fetchLocations } from '../api/client';
-import type { NewLocation, SavedLocation } from '../types';
+import { deleteLocation, fetchLocations } from '../api/client';
+import type { SavedLocation } from '../types';
 
-/** Saved locations: load, add (the backend may return an existing nearby one) and delete. */
+/**
+ * Saved locations: load and delete. Nothing is added any more (SCRUM-344): the search box looks a
+ * place up for the session instead, so this hook only reads and removes the rows that already exist.
+ */
 export function useLocations() {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
 
@@ -10,17 +13,6 @@ export function useLocations() {
     const saved = await fetchLocations();
     setLocations(saved);
     return saved;
-  }, []);
-
-  /** Adds a location. `position` controls where a newly created one is listed. */
-  const add = useCallback(async (data: NewLocation, position: 'first' | 'last' = 'last') => {
-    const created = await addLocation(data);
-    setLocations((prev) => {
-      const others = prev.filter((l) => l.id !== created.id);
-      if (others.length !== prev.length && position === 'first') return prev; // already listed
-      return position === 'first' ? [created, ...others] : [...others, created];
-    });
-    return created;
   }, []);
 
   /** Deletes a location and returns the list without it. */
@@ -34,5 +26,5 @@ export function useLocations() {
     [locations],
   );
 
-  return { locations, load, add, remove };
+  return { locations, load, remove };
 }

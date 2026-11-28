@@ -21,7 +21,8 @@ interface NavbarProps {
   onSelectModel: (model: string) => void;
   savedLocationsCount: number;
   onOpenSavedLocations: () => void;
-  onSelectAndAddLocation: (result: GeocodeResult) => void;
+  /** Looks the chosen place up for the session; nothing is saved (SCRUM-344). */
+  onLookUpLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
   /** The selected base map's short name, shown instead of the generic "Map" (SCRUM-326). */
   mapName: string;
@@ -56,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectModel,
   savedLocationsCount,
   onOpenSavedLocations,
-  onSelectAndAddLocation,
+  onLookUpLocation,
   onOpenMapSettings,
   mapName,
   onOpenPreferences,
@@ -136,7 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Center: Search & Add Location Box */}
       <div className="flex items-center gap-2 flex-1 min-w-0 justify-center max-w-md">
-        <AutocompleteDropdown onSelectAndAdd={onSelectAndAddLocation} />
+        <AutocompleteDropdown onSelect={onLookUpLocation} />
 
         {/* Saved locations list button */}
         <button

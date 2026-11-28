@@ -47,11 +47,11 @@ const RANGE_EXPORT_WAIT_MS = 15_000;
 const RANGE_TIMEOUT_MS = 20_000;
 const itRange = (name: string, fn: () => Promise<void>) => it(name, fn, RANGE_TIMEOUT_MS);
 
-// The drawer's per-selection forecast calls are gone (SCRUM-126), so the app must not need
-// fetchWeather/fetchPointWeather at all.
+// Only the looked-up place needs a per-point forecast (SCRUM-344); the saved markers come from
+// fetchAllWeather, so fetchWeather stays unused.
 vi.mock('./api/client', () => ({
   fetchLocations: vi.fn(),
-  addLocation: vi.fn(),
+  fetchPointWeather: vi.fn(),
   deleteLocation: vi.fn(),
   fetchModels: vi.fn(),
   fetchModelAvailability: vi.fn(),
@@ -204,7 +204,7 @@ describe('App map integration (SCRUM-126)', () => {
     expect(mapWrapper.className.split(/\s+/)).toContain('isolate');
   });
 
-  it('centres on the current location without selecting it (SCRUM-248)', async () => {
+  it('centres on the current location without selecting or saving it (SCRUM-248, SCRUM-344)', async () => {
     Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         getCurrentPosition: (ok: (position: unknown) => void) =>
@@ -213,14 +213,6 @@ describe('App map integration (SCRUM-126)', () => {
       configurable: true,
       writable: true,
     });
-    const here = makeLocation({
-      id: 3,
-      name: 'My Current Location',
-      latitude: 48.1,
-      longitude: -122.4,
-      is_default: false,
-    });
-    vi.mocked(api.addLocation).mockResolvedValue(here);
 
     render(<App />);
 
@@ -231,10 +223,10 @@ describe('App map integration (SCRUM-126)', () => {
         expect.any(Object),
       ),
     );
-    await waitFor(() => expect(markerAt(48.1, -122.4)).toBeDefined());
-    expect(markerAt(48.1, -122.4)!.openPopup).not.toHaveBeenCalled();
-    expect(iconHtml(markerAt(48.1, -122.4))).not.toContain('scale-110');
+    // Startup frames the map only: no marker is drawn there and nothing is written (SCRUM-344).
+    expect(markerAt(48.1, -122.4)).toBeUndefined();
     expect(markerAt(oak.latitude, oak.longitude)!.openPopup).not.toHaveBeenCalled();
+    expect('addLocation' in api).toBe(false);
   });
 
   it('shows the feedback button only when the server enables it, and opens the form (SCRUM-179)', async () => {
@@ -647,7 +639,7 @@ describe('App map integration (SCRUM-126)', () => {
     expect(api.deleteLocation).toHaveBeenCalledWith(1);
   });
 
-  it('adds a location from the search box and selects it (SCRUM-92)', async () => {
+  it('looks a searched place up and selects it without saving it (SCRUM-344)', async () => {
     const geocode = {
       name: 'Miami',
       latitude: 25.7617,
@@ -656,29 +648,36 @@ describe('App map integration (SCRUM-126)', () => {
       country: 'United States',
       display_name: 'Miami, Florida, United States',
     };
-    const savedMiami = makeLocation({
-      id: 3,
-      name: 'Miami',
-      latitude: geocode.latitude,
-      longitude: geocode.longitude,
-      admin1: 'Florida',
-      is_default: false,
-    });
     vi.mocked(api.searchGeocode).mockResolvedValue([geocode]);
-    vi.mocked(api.addLocation).mockResolvedValue(savedMiami);
+    vi.mocked(api.fetchPointWeather).mockResolvedValue(
+      makeForecast({
+        location_id: -1,
+        location_name: 'Miami',
+        latitude: geocode.latitude,
+        longitude: geocode.longitude,
+      }),
+    );
 
     render(<App />);
     await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
 
-    const input = screen.getByPlaceholderText('Add location (e.g. Seattle, Paris)...');
+    const input = screen.getByPlaceholderText('Find location (e.g. Seattle, Paris)...');
     fireEvent.change(input, { target: { value: 'Miami' } });
     fireEvent.click(await screen.findByText('Miami'));
 
     await waitFor(() => expect(iconHtml(markerAt(geocode.latitude, geocode.longitude))).toContain('scale-110'));
     expect(markerAt(geocode.latitude, geocode.longitude)!.openPopup).toHaveBeenCalledTimes(1);
-    expect(api.addLocation).toHaveBeenCalledTimes(1);
-    // Selecting a location no longer triggers a per-location forecast request (SCRUM-126).
+    // Its pop-up comes from the point endpoint, and the saved rows are still the only ones listed.
+    expect(api.fetchPointWeather).toHaveBeenCalledWith(
+      geocode.latitude,
+      geocode.longitude,
+      'best_match',
+      'America/Los_Angeles',
+      expect.objectContaining({ time: null }),
+    );
     expect(api.fetchAllWeather).toHaveBeenCalledTimes(1);
+    // Saving is not merely unused: it is gone from the client (SCRUM-344).
+    expect('addLocation' in api).toBe(false);
   });
 
   it('shows saved-location popups in the selected units (SCRUM-92)', async () => {

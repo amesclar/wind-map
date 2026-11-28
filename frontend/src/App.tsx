@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GeocodeResult, GridWindPoint, SavedLocation, SelectedGridPoint, WeatherModelInfo } from './types';
-import { fetchAppConfig, fetchModels } from './api/client';
+import type {
+  GeocodeResult,
+  GridWindPoint,
+  SavedLocation,
+  SelectedGridPoint,
+  WeatherForecastResponse,
+  WeatherModelInfo,
+} from './types';
+import { fetchAppConfig, fetchModels, fetchPointWeather } from './api/client';
 import { DEFAULT_MODEL } from './constants';
 import { useMapSettings, useTimezone, useUnitPreferences } from './hooks/useSettings';
 import { useLocations } from './hooks/useLocations';
@@ -27,6 +34,13 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { QuotaWarningDialog } from './components/QuotaWarningDialog';
 
 const GEOLOCATION_TIMEOUT_MS = 4000;
+/**
+ * Session-only id for the place the search box found (SCRUM-344). Saved rows are positive, so it
+ * cannot collide with one, and it never reaches the database.
+ */
+const LOOKED_UP_LOCATION_ID = -1;
+/** A place to look at without selecting it (SCRUM-248); the map only needs its coordinates. */
+type FocusPoint = { latitude: number; longitude: number };
 /** Longest a refresh click keeps the button busy waiting for its responses (SCRUM-113). */
 const REFRESH_TIMEOUT_MS = 20_000;
 
@@ -46,7 +60,7 @@ export const App: React.FC = () => {
   const { timezone, setTimezone } = useTimezone();
   const mapSettings = useMapSettings();
   const units = useUnitPreferences();
-  const { locations, load: loadLocations, add: addLocation, remove: removeLocation } = useLocations();
+  const { locations, load: loadLocations, remove: removeLocation } = useLocations();
 
   // Selected saved location or clicked map point (never both): it drives the marker highlight
   // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
@@ -54,7 +68,12 @@ export const App: React.FC = () => {
 
   // Where the map looks at startup, separate from what is selected (SCRUM-248): the app opens
   // centred on the current location, but no marker is highlighted and no pop-up opens.
-  const [focus, setFocus] = useState<SavedLocation | null>(null);
+  const [focus, setFocus] = useState<FocusPoint | null>(null);
+
+  // The place the search box found (SCRUM-344). Memory only, like the forecast hour: it is drawn
+  // and selected exactly like a saved location, but nothing is written, so a reload forgets it.
+  const [lookedUp, setLookedUp] = useState<SavedLocation | null>(null);
+  const [lookedUpWeather, setLookedUpWeather] = useState<WeatherForecastResponse | null>(null);
 
   // Selected forecast hour (null = now). Memory only: the app opens at "now" (SCRUM-127).
   const [forecastTime, setForecastTime] = useState<string | null>(null);
@@ -162,6 +181,20 @@ export const App: React.FC = () => {
     [selection],
   );
 
+  // The markers are the saved rows plus the looked-up place, whose forecast lives under its own id
+  // (SCRUM-344), so MapView needs no notion of which locations are saved.
+  const markerLocations = useMemo(() => (lookedUp ? [...locations, lookedUp] : locations), [locations, lookedUp]);
+  const markerWeather = useMemo(
+    () =>
+      lookedUp && lookedUpWeather
+        ? {
+            ...allWeather.weatherMap,
+            [LOOKED_UP_LOCATION_ID]: { ...lookedUpWeather, location_id: LOOKED_UP_LOCATION_ID },
+          }
+        : allWeather.weatherMap,
+    [allWeather.weatherMap, lookedUp, lookedUpWeather],
+  );
+
   const selectSaved = useCallback((location: SavedLocation) => {
     // A user selection owns the map from now on, so the startup focus is no longer needed.
     setFocus(null);
@@ -200,15 +233,8 @@ export const App: React.FC = () => {
           if (fallback) setFocus(fallback);
           return;
         }
-        try {
-          const here = await addLocation(
-            { name: 'My Current Location', latitude: position.coords.latitude, longitude: position.coords.longitude },
-            'first',
-          );
-          if (!cancelled) setFocus(here);
-        } catch {
-          if (!cancelled && fallback) setFocus(fallback);
-        }
+        // No row is written for the current position (SCRUM-344): startup only frames the map.
+        if (!cancelled) setFocus({ latitude: position.coords.latitude, longitude: position.coords.longitude });
       } catch (err) {
         console.error('Initialization error:', err);
       }
@@ -222,23 +248,42 @@ export const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSelectAndAddLocation = useCallback(
-    async (result: GeocodeResult) => {
-      try {
-        const created = await addLocation({
-          name: result.name,
-          latitude: result.latitude,
-          longitude: result.longitude,
-          admin1: result.admin1,
-          country: result.country,
-        });
-        selectSaved(created);
-      } catch (err) {
-        console.error('Failed to add location:', err);
-      }
+  /** Find a place and show it (SCRUM-344): it is selected and drawn, never saved. */
+  const handleLookUpLocation = useCallback(
+    (result: GeocodeResult) => {
+      const place: SavedLocation = {
+        id: LOOKED_UP_LOCATION_ID,
+        name: result.name,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        admin1: result.admin1 ?? null,
+        country: result.country ?? null,
+        is_default: false,
+      };
+      setLookedUp(place);
+      setLookedUpWeather(null);
+      selectSaved(place);
     },
-    [addLocation, selectSaved],
+    [selectSaved],
   );
+
+  // The looked-up place has no saved row, so its marker's forecast comes from the point endpoint
+  // (SCRUM-344); it follows the model, timezone and forecast hour like every other marker.
+  useEffect(() => {
+    if (!lookedUp) return;
+    const controller = new AbortController();
+    fetchPointWeather(lookedUp.latitude, lookedUp.longitude, selectedModel, timezone, {
+      signal: controller.signal,
+      time: forecastTime,
+    })
+      .then((weather) => {
+        if (!controller.signal.aborted) setLookedUpWeather(weather);
+      })
+      .catch(() => {
+        // The marker keeps its placeholder barb, as a saved location's does when its load fails.
+      });
+    return () => controller.abort();
+  }, [lookedUp, selectedModel, timezone, forecastTime]);
 
   const handleDeleteLocation = useCallback(
     async (id: number) => {
@@ -248,12 +293,12 @@ export const App: React.FC = () => {
         // Deleting is a removal, never a selection: the highlight goes and no other
         // location's pop-up opens (SCRUM-248).
         if (selectedLocation?.id === id) setSelection(null);
-        if (focus?.id === id) setFocus(null);
+        if (lookedUp?.id === id) setLookedUp(null);
       } catch (err) {
         console.error('Failed to delete location:', err);
       }
     },
-    [removeLocation, allWeather, selectedLocation?.id, focus?.id],
+    [removeLocation, allWeather, selectedLocation?.id, lookedUp?.id],
   );
 
   const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
@@ -277,7 +322,7 @@ export const App: React.FC = () => {
         onSelectModel={setSelectedModel}
         savedLocationsCount={locations.length}
         onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
-        onSelectAndAddLocation={handleSelectAndAddLocation}
+        onLookUpLocation={handleLookUpLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
         mapName={tileLayerName(mapSettings.tileLayer)}
         onOpenPreferences={() => setIsPreferencesOpen(true)}
@@ -299,12 +344,12 @@ export const App: React.FC = () => {
       <main className="flex-1 flex flex-col min-h-0 w-full">
         <div className="relative flex-1 min-h-0">
           <MapView
-            locations={locations}
+            locations={markerLocations}
             selectedLocation={selectedLocation}
             focusLocation={focus}
             onZoomLevelChange={setMapZoom}
             onSelectLocation={selectSaved}
-            weatherMap={allWeather.weatherMap}
+            weatherMap={markerWeather}
             tileLayerType={mapSettings.tileLayer}
             cartoApiKey={mapSettings.cartoApiKey}
             selectedModel={selectedModel}

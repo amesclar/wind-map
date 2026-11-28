@@ -39,7 +39,9 @@ get and use api key for map library
 # location
 the user should be able to select a location and see the weather predictions for that location
 
-Typing in the search box queries https://geocoding-api.open-meteo.com/v1/search?name=... and displays a dropdown matching name, admin1 (state/region), country, allowing one-click addition with exact coordinates.
+Typing in the search box queries https://geocoding-api.open-meteo.com/v1/search?name=... and displays a dropdown matching name, admin1 (state/region), country, allowing one-click selection with exact coordinates.
+
+Location entry is lookup-only (SCRUM-344): the search box and the startup position never write to the locations table. A chosen place is selected and drawn exactly like a saved location — a session-only id of `-1`, its forecast from `GET /api/weather/point` so its pop-up carries wind, temperature and tide, following the model, timezone and forecast-hour selectors — and it is forgotten on reload. `POST /api/locations` stays for API clients, but `useLocations` and the API client no longer expose an add, and startup geolocation only frames the map (no marker, no row).
 
 # data presentation
 show 16 data points for each location starting from now and every 3 hours after that for the next 48 hours based on the user selected timezone with a default of Pacific
