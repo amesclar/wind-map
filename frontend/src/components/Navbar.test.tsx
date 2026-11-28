@@ -13,8 +13,6 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
     ],
     selectedModel: 'best_match',
     onSelectModel: vi.fn(),
-    savedLocationsCount: 3,
-    onOpenSavedLocations: vi.fn(),
     onLookUpLocation: vi.fn(),
     onOpenMapSettings: vi.fn(),
     mapName: 'OSM-Dark',
@@ -36,14 +34,6 @@ function renderNavbar(overrides: Partial<React.ComponentProps<typeof Navbar>> = 
 }
 
 describe('Navbar (SCRUM-92)', () => {
-  it('shows the saved-location count and opens the list', () => {
-    const { props } = renderNavbar();
-    const button = screen.getByTitle('List saved locations');
-    expect(button.textContent).toContain('3');
-    fireEvent.click(button);
-    expect(props.onOpenSavedLocations).toHaveBeenCalled();
-  });
-
   it('names the selected base map on the map-settings button (SCRUM-326)', () => {
     const { props, rerender } = renderNavbar();
     const button = screen.getByTitle('Map Layers & CARTO API Key');

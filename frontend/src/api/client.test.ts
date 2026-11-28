@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ApiError,
-  deleteLocation,
   fetchAppConfig,
   fetchPointWeather,
   fetchWeather,
@@ -279,13 +278,6 @@ describe('API client errors and search (SCRUM-92)', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(404);
     expect(err.message).toBe('Failed to load weather data');
-  });
-
-  it('does not parse a body for a 204 delete', async () => {
-    const json = vi.fn();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 204, json }));
-    await expect(deleteLocation(3)).resolves.toBeUndefined();
-    expect(json).not.toHaveBeenCalled();
   });
 
   it('searchGeocode returns [] without a request for short queries', async () => {

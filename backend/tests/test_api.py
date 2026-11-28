@@ -28,7 +28,7 @@ def test_default_seeded_location(client):
     assert abs(default_loc["longitude"] - (-122.6064)) < 0.01
 
 
-def test_create_and_delete_location(client):
+def test_create_location_and_list_it(client):
     # Add new location
     new_loc = {
         "name": "Seattle, WA",
@@ -47,15 +47,6 @@ def test_create_and_delete_location(client):
     list_resp = client.get("/api/locations")
     ids = [loc["id"] for loc in list_resp.json()]
     assert loc_id in ids
-
-    # Delete location
-    del_resp = client.delete(f"/api/locations/{loc_id}")
-    assert del_resp.status_code == 204
-
-    # Verify removed
-    list_resp_after = client.get("/api/locations")
-    ids_after = [loc["id"] for loc in list_resp_after.json()]
-    assert loc_id not in ids_after
 
 
 def test_weather_models_list(client):
@@ -150,28 +141,11 @@ def test_cross_origin_requests_get_no_cors_headers_by_default(client):
 # ---------------------------------------------------------------------------
 
 
-def test_deleting_a_location_cascades_to_its_cached_forecasts(client, open_meteo):
-    from backend.app.database import db_connection
-    from factories import forecast_payload
-
-    loc = client.post("/api/locations", json={"name": "Tmp", "latitude": 10.0, "longitude": 20.0}).json()
-    open_meteo.respond(forecast_payload())
-    assert client.get(f"/api/weather?location_id={loc['id']}").status_code == 200
-
-    def cached_rows() -> int:
-        with db_connection() as conn:
-            return conn.execute(
-                "SELECT COUNT(*) AS n FROM weather_cache WHERE location_id = ?;", (loc["id"],)
-            ).fetchone()["n"]
-
-    assert cached_rows() == 1
-    assert client.delete(f"/api/locations/{loc['id']}").status_code == 204
-    assert cached_rows() == 0  # removed by ON DELETE CASCADE, not by router code
-
-
-def test_delete_unknown_location_is_404(client):
-    resp = client.delete("/api/locations/9999")
-    assert resp.status_code == 404
+def test_deleting_a_location_is_no_longer_offered(client):
+    # SCRUM-345 retired the write: the row is still listed, and the route that removed it is gone,
+    # so the request falls through to the SPA path and is refused as a method it does not serve.
+    assert [loc["id"] for loc in client.get("/api/locations").json()] != []
+    assert client.delete("/api/locations/1").status_code == 405
 
 
 def test_nearby_location_returns_the_existing_one(client):

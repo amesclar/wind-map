@@ -5,7 +5,6 @@ import type { RefreshHint } from '../utils/refreshHint';
 import {
   Wind,
   Layers,
-  MapPin,
   Map,
   Settings,
   MessageSquareText,
@@ -19,8 +18,6 @@ interface NavbarProps {
   models: WeatherModel[];
   selectedModel: string;
   onSelectModel: (model: string) => void;
-  savedLocationsCount: number;
-  onOpenSavedLocations: () => void;
   /** Looks the chosen place up for the session; nothing is saved (SCRUM-344). */
   onLookUpLocation: (result: GeocodeResult) => void;
   onOpenMapSettings: () => void;
@@ -55,8 +52,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   models,
   selectedModel,
   onSelectModel,
-  savedLocationsCount,
-  onOpenSavedLocations,
   onLookUpLocation,
   onOpenMapSettings,
   mapName,
@@ -139,18 +134,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="flex items-center gap-2 flex-1 min-w-0 justify-center max-w-md">
         <AutocompleteDropdown onSelect={onLookUpLocation} />
 
-        {/* Saved locations list button */}
-        <button
-          onClick={onOpenSavedLocations}
-          title="List saved locations"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-200 border border-dark-600 text-xs font-medium transition shrink-0"
-        >
-          <MapPin className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden md:inline">Locations</span>
-          <span className="px-1.5 py-0.2 rounded-full bg-dark-600 text-[10px] text-gray-300">
-            {savedLocationsCount}
-          </span>
-        </button>
 
         {/* Map Layers & API Key Settings */}
         <button

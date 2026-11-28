@@ -34,7 +34,7 @@ Built with **FastAPI (Python 3.14)** on the backend and **React + Vite + Leaflet
   - *NOAA NWS NDFD* (US only; the forecaster-edited grids from `api.weather.gov`)
 - **Tide Pop-ups:** clicking a saved location or a wind barb also shows the tide there — height above mean sea level for the selected hour, plus the nearest low and high with their times. Tides come from Open-Meteo's Marine model, independent of the weather model, and the block is labelled *Not for navigation* because mean sea level is not a chart datum.
 - **Location Lookup, No Saving:** typing in the search box runs a verified geocoding lookup through Open-Meteo's Geocoding API, with state/region and country disambiguation, and does not write anything: the chosen place is drawn on the map and opened exactly like a saved location — its wind, temperature and tide come from `/api/weather/point` — and it follows the model, timezone and forecast-hour selectors. It lives for the session only, searching again replaces it, and a reload forgets it. Startup geolocation likewise just frames the map.
-- **Saved Locations:** the list holds the rows earlier versions saved, with instant selection and minus (`-`) buttons for removal. The app never adds to it.
+- **Saved-location Markers:** the rows already in the database - the seeded Oak Harbor one, plus anything an earlier version saved - still draw on the map with their forecast and pop-up, and are the fallback view when geolocation is denied. There is no list, count or delete action (SCRUM-345): the app neither adds nor removes rows, and `GET /api/locations` is the read behind those markers.
 - **Preferences Pop-up:** A gear icon in the top bar opens Preferences: timezone, temperature (°F / °C), wind speed (knots, km/h, mph, m/s) and wind direction display (barbs, cardinal directions, degrees), the last shown only in a barb's details pop-up. Each setting is independent (°F/°C changes only the temperature unit) and is saved in the browser, so it survives a reload.
 - **Timezone Support:** Pacific Time by default, with quick switching across major world timezones from Preferences.
 - **SQLite Persistence & Caching:** Forecast data is cached locally for 30 minutes (TTL) to ensure rapid response times (<3s SLA) and minimize external API calls. A forecast-hour grid request also stores every hour of that UTC day, so range exports reuse one upstream call per day, and transient Open-Meteo 429/5xx responses are retried with `Retry-After` or a short backoff instead of failing the request.
@@ -94,7 +94,7 @@ wind-map/
     │   │                        # ForecastTimeSelector, AutocompleteDropdown, MapExportControl, MapExportDialog
     │   │                        # and its fields (ExportModeField, ExportRangeFields, ExportFormatFields,
     │   │                        # ExportRangeStatus, ExportTimesFields, mapExportOptions.ts),
-    │   │                        # MapSettingsModal, PreferencesModal, SavedLocationsModal, QuotaWarningDialog,
+    │   │                        # MapSettingsModal, PreferencesModal, QuotaWarningDialog,
     │   │                        # FeedbackModal, mapTiles.ts (base, chart, seamark & NONNA configs) and
     │   │                        # seamapLayer.ts (the lazily imported MapLibre style)
     │   ├── hooks/               # useSettings.ts (map settings, unit preferences, timezone), useLocations.ts,
@@ -508,7 +508,6 @@ Cross-origin API access is off by default. If you call the API from another orig
 | `GET`    | `/api/config`         | Public frontend config: a server-side CARTO key when set, `feedback_enabled` and `google_satellite_enabled` |
 | `GET`    | `/api/locations`      | List all saved locations                             |
 | `POST`   | `/api/locations`      | Save a new verified location                         |
-| `DELETE` | `/api/locations/{id}` | Delete a saved location                              |
 | `GET`    | `/api/weather/models` | List models with update cadence, horizon and run times |
 | `GET`    | `/api/weather/models/{model}/availability` | When that model's newest run was published, and when the next is due (nulls when it publishes no metadata) |
 | `GET`    | `/api/weather`        | Get 48h forecast & current conditions for a location |
@@ -576,7 +575,7 @@ To change a rule, edit `.kiro/steering/`, run `python scripts/sync-ai-rules.py`,
 Backend test suite coverage includes:
 - Health check verification
 - Database seeding with default location (Oak Harbor, WA)
-- Location CRUD lifecycle (create, duplicate detection, delete)
+- Location reads and creation (duplicate detection included), and that the delete route is gone
 - Open-Meteo weather forecast retrieval (16 data points over 48 hours)
 - 30-minute SQLite caching verification (<0.5s response time on cache hit)
 - Mathematical conversion helpers (wind speed units, temperature, cardinal degrees)
@@ -599,7 +598,7 @@ Frontend test suite coverage includes:
 - `MapSettingsModal` wind overlay toggle (aria-pressed state, callback direction)
 - `PreferencesModal` controls, close buttons, and saved preferences restored on reload
 - Map stacking context isolation, selected-marker highlight and pop-ups in the chosen units
-- Full App integration: initial load, location selection via modal, map marker click, autocomplete add
+- Full App integration: initial load, map marker click and selection, and a lookup from the search box
 - Quota warning: reset-time formatting, the 503 parsed into a warning, and one dialog per reset window
 - Wind colour legend stacking above the Leaflet panes
 - Base maps — the six bases and how each is mounted, the paper chart's coverage clip and tile-failure notices, the OpenStreetMap range-export restriction, and the Seamap layer's lazy load and export readiness
