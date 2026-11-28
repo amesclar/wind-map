@@ -27,7 +27,6 @@ import {
   tileLayerName,
 } from './components/mapTiles';
 import { MapExportDialog } from './components/MapExportDialog';
-import { SavedLocationsModal } from './components/SavedLocationsModal';
 import { MapSettingsModal } from './components/MapSettingsModal';
 import { PreferencesModal } from './components/PreferencesModal';
 import { FeedbackModal } from './components/FeedbackModal';
@@ -60,7 +59,7 @@ export const App: React.FC = () => {
   const { timezone, setTimezone } = useTimezone();
   const mapSettings = useMapSettings();
   const units = useUnitPreferences();
-  const { locations, load: loadLocations, remove: removeLocation } = useLocations();
+  const { locations, load: loadLocations } = useLocations();
 
   // Selected saved location or clicked map point (never both): it drives the marker highlight
   // and the map's fly-to, and the barb pop-up carries the point's own values (SCRUM-126).
@@ -162,7 +161,6 @@ export const App: React.FC = () => {
     weatherLoading: allWeather.loading,
   });
 
-  const [isLocationsModalOpen, setIsLocationsModalOpen] = useState(false);
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -285,22 +283,6 @@ export const App: React.FC = () => {
     return () => controller.abort();
   }, [lookedUp, selectedModel, timezone, forecastTime]);
 
-  const handleDeleteLocation = useCallback(
-    async (id: number) => {
-      try {
-        await removeLocation(id);
-        allWeather.remove(id);
-        // Deleting is a removal, never a selection: the highlight goes and no other
-        // location's pop-up opens (SCRUM-248).
-        if (selectedLocation?.id === id) setSelection(null);
-        if (lookedUp?.id === id) setLookedUp(null);
-      } catch (err) {
-        console.error('Failed to delete location:', err);
-      }
-    },
-    [removeLocation, allWeather, selectedLocation?.id, lookedUp?.id],
-  );
-
   const handleGridPointSelect = useCallback((pt: GridWindPoint) => {
     setFocus(null);
     setSelection({ kind: 'point', latitude: pt.latitude, longitude: pt.longitude });
@@ -320,8 +302,6 @@ export const App: React.FC = () => {
         models={models}
         selectedModel={selectedModel}
         onSelectModel={setSelectedModel}
-        savedLocationsCount={locations.length}
-        onOpenSavedLocations={() => setIsLocationsModalOpen(true)}
         onLookUpLocation={handleLookUpLocation}
         onOpenMapSettings={() => setIsMapSettingsOpen(true)}
         mapName={tileLayerName(mapSettings.tileLayer)}
@@ -386,14 +366,6 @@ export const App: React.FC = () => {
         />
       </main>
 
-      <SavedLocationsModal
-        isOpen={isLocationsModalOpen}
-        onClose={() => setIsLocationsModalOpen(false)}
-        locations={locations}
-        selectedLocationId={selectedLocation?.id ?? null}
-        onSelectLocation={selectSaved}
-        onDeleteLocation={handleDeleteLocation}
-      />
 
       <MapSettingsModal
         isOpen={isMapSettingsOpen}

@@ -99,10 +99,6 @@ export function fetchLocations(): Promise<SavedLocation[]> {
   return request('/locations', 'Failed to load locations');
 }
 
-export function deleteLocation(id: number): Promise<void> {
-  return request(`/locations/${id}`, 'Failed to delete location', { init: { method: 'DELETE' } });
-}
-
 /** Sea level and the nearest high/low at one point (SCRUM-195). `time` is an ISO hour or null. */
 export function fetchPointTide(
   latitude: number,

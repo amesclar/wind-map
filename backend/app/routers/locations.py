@@ -1,6 +1,6 @@
-"""Locations API router: CRUD operations for saved locations."""
+"""Locations API router: the saved rows, readable and (for API clients) creatable."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from backend.app import locations_repo
 from backend.app.models import LocationCreate, LocationResponse
@@ -17,13 +17,3 @@ def list_locations() -> list[LocationResponse]:
 def create_location(location: LocationCreate) -> LocationResponse:
     # A location within ~500 m of a saved one returns the saved one (still 201, unchanged API).
     return locations_repo.create_or_get_location(location)
-
-
-@router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_location(location_id: int):
-    if not locations_repo.delete_location(location_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Location with id {location_id} not found",
-        )
-    return None

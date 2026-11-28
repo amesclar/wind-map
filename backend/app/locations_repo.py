@@ -64,11 +64,3 @@ def create_or_get_location(location: LocationCreate) -> LocationResponse:
         )
         row = conn.execute(f"SELECT {_COLUMNS} FROM locations WHERE id = ?;", (cursor.lastrowid,)).fetchone()
     return _to_location(row)
-
-
-def delete_location(location_id: int) -> bool:
-    """Delete a location; its cached forecasts go with it (ON DELETE CASCADE).
-    Returns False if it didn't exist."""
-    with db_connection() as conn:
-        cursor = conn.execute("DELETE FROM locations WHERE id = ?;", (location_id,))
-    return cursor.rowcount > 0

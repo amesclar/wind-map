@@ -52,7 +52,6 @@ const itRange = (name: string, fn: () => Promise<void>) => it(name, fn, RANGE_TI
 vi.mock('./api/client', () => ({
   fetchLocations: vi.fn(),
   fetchPointWeather: vi.fn(),
-  deleteLocation: vi.fn(),
   fetchModels: vi.fn(),
   fetchModelAvailability: vi.fn(),
   fetchAllWeather: vi.fn(),
@@ -267,18 +266,6 @@ describe('App map integration (SCRUM-126)', () => {
     expect(screen.queryByTestId('quota-warning')).toBeNull();
   });
 
-  it('selects a location from the saved-locations modal', async () => {
-    render(<App />);
-    await waitFor(() => expect(markerAt(seattle.latitude, seattle.longitude)).toBeDefined());
-
-    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
-    fireEvent.click(await screen.findByText('Seattle, WA'));
-
-    await waitFor(() => expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).toContain('scale-110'));
-    expect(iconHtml(markerAt(oak.latitude, oak.longitude))).not.toContain('scale-110');
-    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).toHaveBeenCalledTimes(1);
-  });
-
   it('selects a saved location when its map marker is clicked', async () => {
     render(<App />);
     await waitFor(() => expect(markerAt(seattle.latitude, seattle.longitude)).toBeDefined());
@@ -316,8 +303,7 @@ describe('App map integration (SCRUM-126)', () => {
     const marker = await clickGridPoint(gridPoint);
     await waitFor(() => expect(iconHtml(marker)).toContain('data-selected="true"'));
 
-    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
-    fireEvent.click(await screen.findByText('Seattle, WA'));
+    markerAt(seattle.latitude, seattle.longitude)!.fire('click');
 
     await waitFor(() => expect(iconHtml(marker)).toContain('data-selected="false"'));
     expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).toContain('scale-110');
@@ -619,24 +605,6 @@ describe('App map integration (SCRUM-126)', () => {
     );
 
     expect(L.marker.mock.calls.length).toBe(markerCalls);
-  });
-
-  it('clears the selection when the selected location is deleted (SCRUM-248)', async () => {
-    vi.mocked(api.deleteLocation).mockResolvedValue(undefined);
-    render(<App />);
-    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)).toBeDefined());
-
-    markerAt(oak.latitude, oak.longitude)!.fire('click');
-    await waitFor(() => expect(iconHtml(markerAt(oak.latitude, oak.longitude))).toContain('scale-110'));
-
-    fireEvent.click(screen.getAllByTitle('List saved locations')[0]);
-    fireEvent.click(await screen.findByLabelText('Remove Oak Harbor, WA'));
-
-    await waitFor(() => expect(markerAt(oak.latitude, oak.longitude)!.remove).toHaveBeenCalled());
-    // Deleting never selects the location that becomes first.
-    expect(iconHtml(markerAt(seattle.latitude, seattle.longitude))).not.toContain('scale-110');
-    expect(markerAt(seattle.latitude, seattle.longitude)!.openPopup).not.toHaveBeenCalled();
-    expect(api.deleteLocation).toHaveBeenCalledWith(1);
   });
 
   it('looks a searched place up and selects it without saving it (SCRUM-344)', async () => {

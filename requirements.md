@@ -8,13 +8,14 @@ provide dropdown for weather model options with Open-Meteo as the default option
 
 the default location should be the user's current location. if not able to determine current location, default to Oak Harbor, Washington, are 48.2939° N, 122.6064° W
 
-The app opens centred on the current location, or on the first saved location when geolocation is unavailable, with **no** details pop-up and no highlighted marker: a location pop-up appears only when the user clicks a barb, clicks a saved-location marker, chooses a location in the saved-locations list or adds one from the search box (SCRUM-248). Deleting the selected location clears the selection instead of selecting the first remaining one.
+The app opens centred on the current location, or on the first saved location when geolocation is unavailable, with **no** details pop-up and no highlighted marker: a location pop-up appears only when the user clicks a barb, clicks a saved-location marker or looks a place up in the search box (SCRUM-248, SCRUM-344). The saved-locations list and its delete action are retired (SCRUM-345): its rows still draw as markers, but nothing lists or removes them.
 
 the application should be able to show multiple locations at once, each marked with an icon, and the user should be able to click on an icon to see the weather predictions for that location
 
 the web ui should have a text box allowing users to add locations - the locations should be verified and converted to lat/long before adding to location database
 
 provide a button to list saved locations with minus sign buttons for removal
++ Retired (SCRUM-345): the navbar count, the list modal and the delete action are gone, because nothing has saved a location since SCRUM-344. The rows already in the database are kept and still draw as map markers with their forecasts, `/api/locations` still lists them and still provides the fallback view, and `POST /api/locations` stays for API clients. `DELETE /api/locations/{id}` and `locations_repo.delete_location` are removed, so the table is read-only from the app (its `ON DELETE CASCADE` foreign key is unchanged but unreachable over HTTP).
 
 wind data should include wind speed, wind gust, and wind direction
 
@@ -225,7 +226,7 @@ use a local SQLite database to store the locations and weather data
 
 data should persist across docker container restarts
 
-Backend: FastAPI (Python 3.14) with SQLite caching (30min TTL), geocoding proxy, and location CRUD endpoints (GET/POST/DELETE).
+Backend: FastAPI (Python 3.14) with SQLite caching (30min TTL), geocoding proxy, and the saved-location endpoints (GET/POST).
 + Expired rows in all cache tables (`weather_cache`, `point_weather_cache`, `grid_weather_cache`) are deleted at startup (SCRUM-92).
 + Schema (SCRUM-92): all tables are created in `backend/app/database.py` at startup, versioned with SQLite `PRAGMA user_version`. On a version upgrade the cache tables are recreated (they only hold refetchable data); saved locations are kept. Schema v4 adds `grid_currents_cache`, keyed by hour and grid point, storing land points too so they are not refetched; schema v6 adds the Marine model cell (`cell_lat`/`cell_lon`) so cached chevrons sit where the value came from, and v7 recreates the caches so land cells are re-checked against elevation (SCRUM-238); v8 adds `tide_point_cache` for the tide pop-ups (SCRUM-195). Foreign keys are enforced, so deleting a location deletes its cached forecasts.
 + Write concurrency (SCRUM-274): `get_db_connection` opens every connection in WAL mode (`PRAGMA journal_mode=WAL`) and waits up to 5 s for a lock (`PRAGMA busy_timeout=5000`) instead of failing at once, and a day's grid is written in one transaction (`_store_series`) rather than one commit per hour, so a refresh no longer collides with a reader or leaves a day half-written. The database file gains `-wal` and `-shm` companions while the app runs; Litestream still replicates it.
