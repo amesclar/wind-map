@@ -9,6 +9,7 @@ const TILE_LAYER_IDS: readonly MapTileLayer[] = [
   'osm_dark',
   'osm_standard',
   'paper_chart',
+  'chs_chart',
   'seamap',
 ];
 

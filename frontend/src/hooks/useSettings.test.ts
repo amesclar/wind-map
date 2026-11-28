@@ -103,6 +103,16 @@ describe('useMapSettings (SCRUM-92)', () => {
     expect(result.current.cartoApiKey).toBe('server-key');
   });
 
+  it('restores the CHS chart, and a server CARTO key does not take it away (SCRUM-342)', () => {
+    localStorage.setItem(STORAGE_KEYS.tileLayer, 'chs_chart');
+    const { result } = renderHook(() => useMapSettings());
+    expect(result.current.tileLayer).toBe('chs_chart');
+
+    act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));
+    expect(result.current.tileLayer).toBe('chs_chart');
+    expect(result.current.cartoApiKey).toBe('server-key');
+  });
+
   it('uses a server CARTO key for the session only', () => {
     const { result } = renderHook(() => useMapSettings());
     act(() => result.current.applyServerConfig({ carto_api_key: 'server-key' }));

@@ -30,7 +30,7 @@ import {
   CHART_MIN_ZOOM,
   CHART_TILE_FAILURE_NOTICE,
   isLightBase,
-  NOAA_COVERAGE_NOTICE,
+  chartCoverageNotice,
   seamarksShownFor,
 } from './mapTiles';
 import { registerCaptureMap } from '../utils/captureReadiness';
@@ -545,7 +545,7 @@ export const MapView: React.FC<MapViewProps> = ({
               role="note"
               className="rounded-lg border border-dark-600 bg-dark-800/95 px-3 py-2 text-[11px] leading-snug text-gray-300 shadow-lg pointer-events-none"
             >
-              {NOAA_COVERAGE_NOTICE}
+              {chartCoverageNotice(tileLayerType)}
             </div>
           )}
         </div>

@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { X, Key, Map, ExternalLink, Check, AlertCircle, Wind, Palette, Waves, MoveRight, Anchor, Layers, Info } from 'lucide-react';
 import { MapTileLayer } from '../types';
 import {
+  CHS_ATTRIBUTION_TEXT,
+  CHS_COVERAGE_NOTICE,
+  CHS_NOTICE,
+  isChartBase,
   isLightTileLayer,
   OSM_RANGE_EXPORT_NOTE,
   TILE_LAYER_NAMES,
@@ -191,7 +195,7 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
   const [inputKey, setInputKey] = useState(cartoApiKey);
   const [isSaved, setIsSaved] = useState(false);
   // The chart carries NOAA's own aids, so the seamark overlay is suppressed there (SCRUM-214).
-  const chartBase = tileLayer === 'paper_chart';
+  const chartBase = isChartBase(tileLayer);
   const light = isLightTileLayer(tileLayer);
   const theme = light ? LIGHT_THEME : DARK_THEME;
   // One explanation open at a time keeps the modal short even while it is being read.
@@ -361,6 +365,52 @@ export const MapSettingsModal: React.FC<MapSettingsModalProps> = ({
                       theme={theme}
                       open={openInfo === 'paper_chart'}
                       onToggle={() => toggleInfo('paper_chart')}
+                      className="absolute right-2 top-2"
+                    />
+                  </div>
+
+                  {/* SCRUM-342: the Canadian counterpart, for the waters the NOAA chart has none of. */}
+                  <div className="relative">
+                    <label
+                      data-testid="tile-layer-chs-chart"
+                      className={`flex items-start gap-3 p-2.5 pr-9 rounded-lg border cursor-pointer transition ${theme.option}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tileLayer"
+                        checked={tileLayer === 'chs_chart'}
+                        onChange={() => onChangeTileLayer('chs_chart')}
+                        className="mt-0.5 text-sky-500 focus:ring-sky-500"
+                      />
+                      <div>
+                        <div
+                          className={`text-sm font-medium ${theme.optionTitle} flex items-center gap-2`}
+                        >
+                          {TILE_LAYER_NAMES.chs_chart}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded border ${theme.badgeFree}`}
+                          >
+                            Free • No Key Needed
+                          </span>
+                        </div>
+                        <div className={`text-xs ${theme.note} mt-0.5`}>
+                          {CHS_ATTRIBUTION_TEXT} · {CHS_NOTICE}
+                        </div>
+                        {openInfo === 'chs_chart' && (
+                          <InfoPanel id="chs_chart" theme={theme}>
+                            The Canadian Hydrographic Service chart for B.C. waters, where the NOAA
+                            chart has none: soundings, aids to navigation and channels, updated
+                            weekly. {CHS_COVERAGE_NOTICE}
+                          </InfoPanel>
+                        )}
+                      </div>
+                    </label>
+                    <InfoToggle
+                      id="chs_chart"
+                      label="CHS"
+                      theme={theme}
+                      open={openInfo === 'chs_chart'}
+                      onToggle={() => toggleInfo('chs_chart')}
                       className="absolute right-2 top-2"
                     />
                   </div>
